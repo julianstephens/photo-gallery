@@ -23,8 +23,8 @@ const mockGalleryAPI = {
   uploadToGallery: vi.fn(),
 };
 
-// Mock the GalleryAPI
-vi.mock("./api/index.ts", () => ({
+// Mock the route handlers used by the router
+vi.mock("./handlers/index.ts", () => ({
   GalleryAPI: class {
     createGallery = mockGalleryAPI.createGallery;
     uploadToGallery = mockGalleryAPI.uploadToGallery;
