@@ -8,7 +8,10 @@ export class UploadService {
   isImageMime = (m: string) => m.startsWith("image/");
 
   isZipMime = (m: string) =>
-    m === "application/zip" || m === "application/x-zip-compressed" || m === "multipart/x-zip";
+    m === "application/zip" ||
+    m === "application/x-zip-compressed" ||
+    m === "multipart/x-zip" ||
+    m === "application/octet-stream"; // many clients send generic octet-stream for zip uploads
 
   // Magic bytes check for ZIP: "PK\x03\x04" (normal), "PK\x05\x06" (empty archive), "PK\x07\x08" (spanned)
   looksLikeZip = (buf: Buffer) => {
