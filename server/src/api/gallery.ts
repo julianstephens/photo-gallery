@@ -27,6 +27,8 @@ class UnsupportedMimeTypeError extends Error {
 }
 
 const GalleryNameError = "Gallery name cannot be empty";
+const MAX_ZIP_ENTRIES = 1000; // guardrail
+const MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024; // 500 MB guardrail
 
 export class GalleryAPI {
   _bucketService: BucketService;
@@ -49,11 +51,11 @@ export class GalleryAPI {
   };
 
   uploadToGallery = async (file: Express.Multer.File, bucket: string, nowPrefix: string) => {
+    // Single image upload
     if (
       this._uploadService.isImageMime(file.mimetype) ||
       this._uploadService.allowedImageExts.has(extname(file.originalname).toLowerCase())
     ) {
-      // Single image upload
       const ext = extname(file.originalname).toLowerCase();
       const base = file.originalname.replace(ext, "");
       const objectName = this._uploadService.buildObjectName(
@@ -71,12 +73,16 @@ export class GalleryAPI {
       };
     }
 
-    if (
-      this._uploadService.isZipMime(file.mimetype) ||
-      file.originalname.toLowerCase().endsWith(".zip")
-    ) {
-      // ZIP: stream entries and upload images
+    // ZIP upload
+    const isZipByExt = file.originalname.toLowerCase().endsWith(".zip");
+    const isZipByMagic = this._uploadService.looksLikeZip(file.buffer);
+    const isZipByMime = this._uploadService.isZipMime(file.mimetype);
+
+    if (isZipByExt || isZipByMagic || isZipByMime) {
       const uploaded: Array<{ key: string; contentType: string | false | null }> = [];
+      let totalBytes = 0;
+      let count = 0;
+
       const zipStream = unzipper.Parse();
 
       // Create a stream from the in-memory buffer
@@ -84,10 +90,10 @@ export class GalleryAPI {
       const src = Readable.from(file.buffer);
       src.pipe(zipStream);
 
-      // Consume entries sequentially to avoid ballooning memory
+      // Consume entries sequentially
       for await (const entry of zipStream as AsyncIterable<ZipEntry>) {
         const entryPath: string = entry.path || "";
-        const type: string = entry.type || "File"; // "File" or "Directory"
+        const type: string = entry.type || "File";
         if (type !== "File") {
           entry.autodrain();
           continue;
@@ -95,9 +101,23 @@ export class GalleryAPI {
 
         const ext = extname(entryPath).toLowerCase();
         if (!this._uploadService.allowedImageExts.has(ext)) {
-          // Not an image we accept; drain to continue
           entry.autodrain();
           continue;
+        }
+
+        const size = entry.vars?.uncompressedSize ?? 0;
+        totalBytes += size;
+        count += 1;
+        if (count > MAX_ZIP_ENTRIES || totalBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
+          // Drain remaining entries, then bail
+          entry.autodrain();
+
+          for await (const rest of zipStream as AsyncIterable<ZipEntry>) {
+            rest.autodrain();
+          }
+          throw new InvalidInputError(
+            "ZIP limits exceeded (too many files or total size too large).",
+          );
         }
 
         const contentType = mimeFromExt(ext) || "application/octet-stream";
@@ -107,15 +127,24 @@ export class GalleryAPI {
           `${Date.now()}-${filename}`,
         );
 
-        // entry has uncompressed size available via vars; use it if present
-        const size: number | undefined = entry.vars?.uncompressedSize;
-
-        await this._bucketService.uploadStreamToBucket(bucket, objectName, entry, size, {
-          "Content-Type": String(contentType),
-        });
+        await this._bucketService.uploadStreamToBucket(
+          bucket,
+          objectName,
+          entry,
+          size || undefined,
+          {
+            "Content-Type": String(contentType),
+          },
+        );
 
         uploaded.push({ key: objectName, contentType });
       }
+
+      if (uploaded.length === 0) {
+        throw new InvalidInputError("ZIP contained no supported image files.");
+      }
+
+      return { uploaded };
     }
 
     throw new UnsupportedMimeTypeError();
