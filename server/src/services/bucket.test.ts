@@ -48,18 +48,20 @@ describe("BucketService", () => {
   });
 
   describe("createBucket", () => {
-    it("should create a bucket when it does not exist", async () => {
+    it("should throw error when bucket does not exist (per ensureBucket check)", async () => {
       mockMinioClient.bucketExists.mockResolvedValue(false);
       mockMinioClient.makeBucket.mockResolvedValue(undefined);
 
+      // The implementation calls ensureBucket which throws if bucket doesn't exist
       await expect(service.createBucket("test-bucket")).rejects.toThrow();
       expect(mockMinioClient.bucketExists).toHaveBeenCalledWith("test-bucket");
     });
 
-    it("should create bucket when it exists", async () => {
+    it("should call makeBucket when bucket already exists", async () => {
       mockMinioClient.bucketExists.mockResolvedValue(true);
       mockMinioClient.makeBucket.mockResolvedValue(undefined);
 
+      // The implementation proceeds to makeBucket if ensureBucket passes
       await service.createBucket("test-bucket");
       expect(mockMinioClient.bucketExists).toHaveBeenCalledWith("test-bucket");
       expect(mockMinioClient.makeBucket).toHaveBeenCalledWith("test-bucket");
