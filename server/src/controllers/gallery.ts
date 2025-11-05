@@ -30,7 +30,7 @@ const GalleryNameError = "Gallery name cannot be empty";
 const MAX_ZIP_ENTRIES = 1000; // guardrail
 const MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024; // 500 MB guardrail
 
-export class GalleryAPI {
+export class GalleryController {
   _bucketService: BucketService;
   _uploadService: UploadService;
 
