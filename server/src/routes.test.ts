@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -44,6 +44,15 @@ describe("Routes Integration Tests", () => {
     app = express();
     app.use(express.json());
     app.use("/api", router);
+  });
+
+  // Silence expected error logs during negative-path tests to keep output clean
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("GET /api/checkhealth", () => {
