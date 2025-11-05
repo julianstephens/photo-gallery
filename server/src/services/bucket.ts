@@ -14,8 +14,6 @@ export class BucketService {
   constructor() {
     this._minio = new Minio.Client({
       endPoint: env.MINIO_ENDPOINT,
-      port: env.MINIO_PORT,
-      useSSL: true,
       accessKey: env.MINIO_ACCESS_KEY,
       secretKey: env.MINIO_SECRET_KEY,
     });
