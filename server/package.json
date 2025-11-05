@@ -5,7 +5,10 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "dev": "pnpm dlx tsx watch ./src/index.ts",
     "build": "pnpm tsup",
     "server": "pnpm --filter server"
@@ -30,9 +33,13 @@
     "@types/mime-types": "^3.0.1",
     "@types/multer": "^2.0.0",
     "@types/node": "^24.10.0",
+    "@types/supertest": "^6.0.3",
     "@types/unzipper": "^0.10.11",
+    "@vitest/ui": "^4.0.7",
     "dotenv": "^17.2.3",
+    "supertest": "^7.1.4",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.7"
   }
 }
