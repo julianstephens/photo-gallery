@@ -6,6 +6,7 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import { resolve } from "node:path";
 import tseslint from "typescript-eslint";
+import importPlugin from "eslint-plugin-import";
 
 export default [
   { files: ["**/*.{js,mjs,cjs,ts}"] },
@@ -17,7 +18,18 @@ export default [
   },
   {
     files: ["client/**/*.{ts,tsx}"],
-    settings: { react: { version: "19.1" } },
+    settings: {
+      react: { version: "19.1" },
+      "import/resolver": {
+        typescript: {
+          project: [
+            "client/tsconfig.node.json",
+            "client/tsconfig.app.json",
+            "server/tsconfig.json",
+          ],
+        },
+      },
+    },
     languageOptions: {
       parserOptions: {
         project: ["./tsconfig.node.json", "./tsconfig.app.json"],
@@ -28,6 +40,7 @@ export default [
       react,
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      import: importPlugin,
     },
     rules: {
       ...react.configs.recommended.rules,

@@ -2,9 +2,12 @@
   "name": "server",
   "version": "1.0.0",
   "description": "",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "pnpm dlx tsx watch ./src/index.ts",
+    "build": "pnpm tsup",
     "server": "pnpm --filter server"
   },
   "keywords": [],
@@ -12,10 +15,24 @@
   "license": "ISC",
   "packageManager": "pnpm@10.18.3",
   "dependencies": {
-    "express": "^5.1.0"
+    "axios": "^1.13.2",
+    "express": "^5.1.0",
+    "mime-types": "^3.0.1",
+    "minio": "^8.0.6",
+    "multer": "^2.0.2",
+    "unzipper": "^0.12.3",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@tsconfig/node-ts": "^23.6.1",
-    "@tsconfig/node24": "^24.0.1"
+    "@tsconfig/node24": "^24.0.1",
+    "@types/express": "^5.0.5",
+    "@types/mime-types": "^3.0.1",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.10.0",
+    "@types/unzipper": "^0.10.11",
+    "dotenv": "^17.2.3",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3"
   }
 }
