@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CreateGalleryRequest } from "./schemas/gallery.ts";
 
 // Mock the env module first
 vi.mock("./schemas/env.ts", () => ({
@@ -31,6 +32,40 @@ vi.mock("./api/index.ts", () => ({
   discordCallback: vi.fn((req: express.Request, res: express.Response) =>
     res.json({ user: "test" }),
   ),
+  createGallery: vi.fn(async (req: express.Request, res: express.Response) => {
+    const name = String((req.body as CreateGalleryRequest)?.name || "");
+    await mockGalleryAPI.createGallery(name);
+    return res.status(201).json({ name });
+  }),
+  uploadToGallery: vi.fn(async (req: express.Request, res: express.Response) => {
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) return res.status(400).json({ error: "Missing 'file' form field" });
+
+    const bucket = req.query.bucket as string | undefined;
+    if (!bucket) return res.status(400).json({ error: "Missing bucket (query param ?bucket=...)" });
+
+    const prefix = (req.query.prefix as string) || "uploads";
+    const nowPrefix = `${prefix}/${new Date().toISOString().slice(0, 10)}`;
+
+    try {
+      const uploaded = await mockGalleryAPI.uploadToGallery(file, bucket, nowPrefix);
+      return res.status(201).json(uploaded);
+    } catch (err: unknown) {
+      if (
+        (err as Error)?.name === "UnsupportedMimeTypeError" ||
+        (err as Error)?.name === "InvalidInputError"
+      ) {
+        return res.status(400).json({ error: (err as Error).message || (err as Error).name });
+      }
+      if ((err as Error)?.name === "BucketMissingError") {
+        return res.status(404).json({ error: "Bucket does not exist" });
+      }
+      // mimic real handler logging
+
+      console.error("[upload] error:", err);
+      return res.status(500).json({ error: "Upload failed" });
+    }
+  }),
 }));
 
 // Import after mocks are set up

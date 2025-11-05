@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import z from "zod";
+import { CreateGalleryRequestSchema } from "../schemas/gallery.ts";
 
 const galleryController = await import("../controllers/index.ts").then(
   (m) => new m.GalleryController(),
@@ -6,12 +8,15 @@ const galleryController = await import("../controllers/index.ts").then(
 
 export const createGallery = async (req: Request, res: Response) => {
   try {
-    const name = String(req.body?.name || "");
-    await galleryController.createGallery(name);
-    res.status(201).json({ name });
+    const body = CreateGalleryRequestSchema.parse(req.body);
+    await galleryController.createGallery(body.name);
+    res.status(201).json({ name: body.name });
   } catch (err: unknown) {
     if ((err as Error)?.name === "InvalidInputError") {
       return res.status(400).json({ error: (err as Error).message });
+    }
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
     }
     if ((err as Error)?.name === "Error" && /already exists/i.test((err as Error).message)) {
       return res.status(409).json({ error: (err as Error).message });
