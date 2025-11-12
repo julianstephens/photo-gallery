@@ -1,3 +1,4 @@
+import { Loader } from "@/components/Loader";
 import { useEffect, useState } from "react";
 import { useGalleryData } from "../hooks";
 
@@ -16,9 +17,9 @@ const GalleryPage = () => {
       {errored ? (
         <div>Error: {error?.message ?? "Unknown error"}</div>
       ) : isLoading ? (
-        <div>Loading...</div>
+        <Loader text="Loading gallery..." full={true} />
       ) : (
-        <div>Gallery Page: {data.length} items</div>
+        <div>Gallery Page: {data?.length ?? 0} items</div>
       )}
     </>
   );

@@ -4,3 +4,6 @@ build
 *.env*
 !!.env.example
 tmp
+coverage
+.DS_Store
+.vscode

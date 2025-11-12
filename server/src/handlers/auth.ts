@@ -1,32 +1,53 @@
-import axios, { type AxiosError } from "axios";
+import { type AxiosError } from "axios";
 import type { Request, Response } from "express";
 import env from "../schemas/env.ts";
+
+const authController = await import("../controllers/index.ts").then((m) => new m.AuthController());
 
 export const discordCallback = async (req: Request, res: Response) => {
   const code = req.query.code as string;
 
-  const params = new URLSearchParams({
-    client_id: env.DISCORD_CLIENT_ID,
-    client_secret: env.DISCORD_CLIENT_SECRET,
-    code: code,
-    grant_type: "authorization_code",
-    redirect_uri: env.DISCORD_REDIRECT_URI,
-  });
-
   try {
-    const tokenRes = await axios.post("https://discordapp.com/api/oauth2/token", params, {});
-    const token = tokenRes.data.access_token;
+    const session = await authController.login(code);
 
-    const userRes = await axios.get(`https://discord.com/api/v6/users/@me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    return res.send(userRes.data);
+    req.session.userId = session.userId;
+    req.session.username = session.username;
+    req.session.accessToken = session.accessToken;
+    req.session.refreshToken = session.refreshToken;
+    req.session.expiresAt = session.expiresAt;
+    req.session.isAdmin = session.isAdmin;
+    return res.redirect(env.CLIENT_URL);
   } catch (err: unknown) {
     const axErr = err as AxiosError<unknown>;
     const status = axErr.response?.status ?? 500;
     const data = axErr.response?.data ?? { error: "OAuth exchange failed" };
-    return res.status(status).send(data);
+    return res.status(status).json(data);
+  }
+};
+
+export const logout = async (req: Request, res: Response) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: "Failed to logout" });
+    }
+    res.clearCookie("connect.sid");
+    return res.json({ message: "Logged out successfully" });
+  });
+};
+
+export const getCurrentUser = async (req: Request, res: Response) => {
+  const accessToken = req.session.accessToken;
+  if (!accessToken) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const user = await authController.getCurrentUser({ accessToken });
+    return res.json(user);
+  } catch (err: unknown) {
+    const axErr = err as AxiosError<unknown>;
+    const status = axErr.response?.status ?? 500;
+    const data = axErr.response?.data ?? { error: "Failed to fetch user" };
+    return res.status(status).json(data);
   }
 };

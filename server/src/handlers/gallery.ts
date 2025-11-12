@@ -1,16 +1,31 @@
 import type { Request, Response } from "express";
+import { createGallerySchema } from "utils";
 import z from "zod";
-import { CreateGalleryRequestSchema } from "../schemas/gallery.ts";
 
 const galleryController = await import("../controllers/index.ts").then(
   (m) => new m.GalleryController(),
 );
 
+export const listGalleries = async (req: Request, res: Response) => {
+  const guildId = String(req.query.guildId || "");
+  if (!guildId) {
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
+
+  try {
+    const galleries = await galleryController.listGalleries(guildId);
+    res.json(galleries);
+  } catch (err: unknown) {
+    console.error("[listGalleries] error:", err);
+    res.status(500).json({ error: "Failed to list galleries" });
+  }
+};
+
 export const createGallery = async (req: Request, res: Response) => {
   try {
-    const body = CreateGalleryRequestSchema.parse(req.body);
-    await galleryController.createGallery(body.name);
-    res.status(201).json({ name: body.name });
+    const body = createGallerySchema.parse(req.body);
+    const meta = await galleryController.createGallery(body, req.session.userId || "");
+    res.status(201).json(meta);
   } catch (err: unknown) {
     if ((err as Error)?.name === "InvalidInputError") {
       return res.status(400).json({ error: (err as Error).message });

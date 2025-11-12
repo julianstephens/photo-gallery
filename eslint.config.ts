@@ -1,4 +1,5 @@
 import pluginJs from "@eslint/js";
+import importPlugin from "eslint-plugin-import";
 import eslintPluginPrettierRecommended from "eslint-plugin-prettier/recommended";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
@@ -6,7 +7,6 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import globals from "globals";
 import { resolve } from "node:path";
 import tseslint from "typescript-eslint";
-import importPlugin from "eslint-plugin-import";
 
 export default [
   { files: ["**/*.{js,mjs,cjs,ts}"] },
@@ -14,7 +14,14 @@ export default [
     languageOptions: { ecmaVersion: 2020, globals: { ...globals.node, ...globals.browser } },
   },
   {
-    ignores: ["coverage", "**/public", "**/dist", "pnpm-lock.yaml", "pnpm-workspace.yaml"],
+    ignores: [
+      "coverage",
+      "**/public",
+      "**/dist",
+      "client/src/components/ui",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+    ],
   },
   {
     files: ["client/**/*.{ts,tsx}"],
