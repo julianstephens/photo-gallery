@@ -32,6 +32,12 @@ vi.mock("./handlers/index.ts", () => ({
   discordCallback: vi.fn((req: express.Request, res: express.Response) =>
     res.json({ user: "test" }),
   ),
+  logout: vi.fn((req: express.Request, res: express.Response) =>
+    res.json({ message: "Logged out" }),
+  ),
+  getCurrentUser: vi.fn((req: express.Request, res: express.Response) =>
+    res.json({ user: "test" }),
+  ),
   createGallery: vi.fn(async (req: express.Request, res: express.Response) => {
     const name = String((req.body as CreateGalleryRequest)?.name || "");
     await mockGalleryAPI.createGallery(name);
@@ -69,7 +75,7 @@ vi.mock("./handlers/index.ts", () => ({
 }));
 
 // Import after mocks are set up
-const router = await import("./routes.ts").then((m) => m.default);
+const router = await import("./routers.ts").then((m) => m.default);
 
 describe("Routes Integration Tests", () => {
   let app: express.Application;

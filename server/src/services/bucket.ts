@@ -137,7 +137,7 @@ export class BucketService {
     return getSignedUrl(
       // @ts-expect-error getSignedUrl accepts S3Client despite generic constraints
       this.#s3,
-      new PutObjectCommand({
+      new GetObjectCommand({
         Bucket: this.#bucketName,
         Key: key,
       }),
