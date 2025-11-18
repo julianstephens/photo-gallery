@@ -77,6 +77,7 @@ export const createApp = () => {
   // API routes
   app.use("/api", routers.authRouter);
   app.use("/api", routers.galleryRouter);
+  app.use("/api", routers.guildRouter);
 
   // 404 and centralized error handling
   app.use(notFoundHandler);

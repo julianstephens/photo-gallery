@@ -3,7 +3,6 @@ import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import AdminDashboard from "./pages/AdminDashboard";
 import Dashboard from "./pages/Dashboard";
-import GalleryPage from "./pages/Gallery";
 import LandingPage from "./pages/Landing";
 
 export const AppRoutes = () => {
@@ -13,7 +12,6 @@ export const AppRoutes = () => {
         <Route index element={<LandingPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="home" element={<Dashboard />} />
-          <Route path="gallery" element={<GalleryPage />} />
         </Route>
         <Route element={<ProtectedRoute requiresAdmin={true} />}>
           <Route path="admin" element={<AdminDashboard />} />

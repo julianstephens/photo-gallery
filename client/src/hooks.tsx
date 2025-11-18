@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useContext } from "react";
-import { getGalleryData } from "./queries";
+import { getDefaultGuild, listGalleries, listGalleryItems } from "./queries";
 import { AuthContext, getGuildIdFromUser } from "./utils";
 
 export const useAuth = () => {
@@ -11,14 +11,14 @@ export const useAuth = () => {
   return ctx;
 };
 
-export const useGalleryData = (guildId?: string) => {
+export const useListGalleries = (guildId?: string) => {
   const { isAuthed, currentUser } = useAuth();
   const resolvedGuildId = guildId || getGuildIdFromUser(currentUser);
   const enabled = isAuthed && Boolean(resolvedGuildId);
   const query = useQuery({
     queryKey: ["galleries", { guildId: resolvedGuildId }],
     enabled,
-    queryFn: () => getGalleryData(resolvedGuildId),
+    queryFn: () => listGalleries(resolvedGuildId),
   });
   if (!enabled) {
     return {
@@ -39,8 +39,28 @@ export const useGalleryData = (guildId?: string) => {
 };
 
 export const useSingleGalleryData = (galleryName: string) => {
-  const { data, isLoading, error } = useGalleryData();
+  const { data, isLoading, error } = useListGalleries();
 
   const gallery = data?.find((g) => g.name === galleryName) || null;
   return { data: gallery, isLoading, error };
+};
+
+export const useDefaultGuild = () => {
+  const { currentUser } = useAuth();
+  const { data: guildId } = useQuery({
+    queryKey: ["defaultGuild", { userId: currentUser?.id }],
+    queryFn: getDefaultGuild,
+    enabled: Boolean(currentUser),
+  });
+
+  return guildId;
+};
+
+export const useListGalleryItems = (galleryName: string) => {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["galleryItems", { galleryName }],
+    queryFn: () => listGalleryItems(galleryName),
+    enabled: Boolean(galleryName),
+  });
+  return { data, isLoading, error };
 };

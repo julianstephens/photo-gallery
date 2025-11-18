@@ -38,11 +38,21 @@ const upload = multer({
 });
 const galleryRouter = Router();
 galleryRouter.get("/galleries", handlers.listGalleries);
+galleryRouter.get("/galleries/items", handlers.listGalleryItems);
 galleryRouter.post("/galleries", handlers.createGallery);
 galleryRouter.post("/galleries/upload", upload.single("file"), handlers.uploadToGallery);
+galleryRouter.post("/galleries/default", handlers.setDefaultGallery);
+
+/**********************
+ * GUILD ROUTES
+ **********************/
+const guildRouter = Router();
+guildRouter.get("/guilds/default", handlers.getDefaultGuild);
+guildRouter.post("/guilds/default", handlers.setDefaultGuild);
 
 export default {
   healthRouter,
   authRouter,
   galleryRouter,
+  guildRouter,
 };

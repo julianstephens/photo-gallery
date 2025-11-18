@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { createGallerySchema } from "utils";
+import { createGallerySchema, setDefaultGallerySchema } from "utils";
 import z from "zod";
 
 const galleryController = await import("../controllers/index.ts").then(
@@ -18,6 +18,21 @@ export const listGalleries = async (req: Request, res: Response) => {
   } catch (err: unknown) {
     console.error("[listGalleries] error:", err);
     res.status(500).json({ error: "Failed to list galleries" });
+  }
+};
+
+export const listGalleryItems = async (req: Request, res: Response) => {
+  const galleryName = String(req.query.galleryName || "");
+  if (!galleryName) {
+    return res.status(400).json({ error: "Missing galleryName parameter" });
+  }
+
+  try {
+    const items = await galleryController.getGalleryContents(galleryName);
+    res.json(items);
+  } catch (err: unknown) {
+    console.error("[listGalleryItems] error:", err);
+    res.status(500).json({ error: "Failed to list gallery items" });
   }
 };
 
@@ -45,19 +60,15 @@ export const uploadToGallery = async (req: Request, res: Response) => {
   const file = req.file;
   if (!file) return res.status(400).json({ error: "Missing 'file' form field" });
 
-  const bucket = req.query.bucket as string;
-  if (!bucket) return res.status(400).json({ error: "Missing bucket (query param ?bucket=...)" });
-
-  // Optional: validate bucket name against S3/MinIO naming rules to avoid weird inputs
-  if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
-    return res.status(400).json({ error: "Invalid bucket name" });
+  const galleryName = String(req.body.galleryName || "");
+  if (!galleryName) {
+    return res.status(400).json({ error: "Missing galleryName parameter" });
   }
 
-  const prefix = (req.query.prefix as string) || "uploads";
-  const nowPrefix = `${prefix}/${new Date().toISOString().slice(0, 10)}`; // e.g., uploads/2025-11-05
+  const objectName = `uploads/${new Date().toISOString().slice(0, 10)}`;
 
   try {
-    const uploaded = await galleryController.uploadToGallery(file, bucket, nowPrefix);
+    const uploaded = await galleryController.uploadToGallery(file, galleryName, objectName);
     res.status(201).json(uploaded);
   } catch (err: unknown) {
     const hasName = (e: unknown): e is { name?: string; message?: string } =>
@@ -74,5 +85,22 @@ export const uploadToGallery = async (req: Request, res: Response) => {
     }
     console.error("[upload] error:", err);
     return res.status(500).json({ error: "Upload failed" });
+  }
+};
+
+export const setDefaultGallery = async (req: Request, res: Response) => {
+  try {
+    const body = setDefaultGallerySchema.parse(req.body);
+    const result = await galleryController.setDefaultGallery(body, req.session.userId || "");
+    res.status(200).json(result);
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "InvalidInputError") {
+      return res.status(400).json({ error: (err as Error).message });
+    }
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
+    }
+    console.error("[setDefaultGallery] error:", err);
+    res.status(500).json({ error: "Failed to set default gallery" });
   }
 };

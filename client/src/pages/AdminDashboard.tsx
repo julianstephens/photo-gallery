@@ -1,16 +1,16 @@
 import { GuildSelect } from "@/components/forms/Fields";
-import { GalleryItem } from "@/components/GalleryItem";
+import { GalleryCard } from "@/components/GalleryCard";
 import { CreateGalleryModal } from "@/components/modals/CreateGalleryModal";
-import { FilePickerModal } from "@/components/modals/FilePickerModal";
-import { useGalleryData } from "@/hooks";
+import { SetDefaultGuildButton } from "@/components/SetDefaultGuild";
+import { useDefaultGuild, useListGalleries } from "@/hooks";
 import { Button, Flex, Heading, Loader, Text } from "@chakra-ui/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const AdminDashboard = () => {
   const [guildId, setGuildId] = useState<string | undefined>(undefined);
-  const { data, error, isLoading } = useGalleryData(guildId);
+  const { data, error, isLoading } = useListGalleries(guildId);
+  const defaultGuild = useDefaultGuild();
   const [showCreateGalleryModal, setShowCreateGalleryModal] = useState(false);
-  const [showFilePickerModal, setShowFilePickerModal] = useState(false);
 
   const [guild, setGuild] = useState<string>("");
 
@@ -25,18 +25,17 @@ const AdminDashboard = () => {
     setShowCreateGalleryModal(false);
   };
 
-  const openFilePickerModal = () => {
-    setShowFilePickerModal(true);
-  };
-
-  const closeFilePickerModal = () => {
-    setShowFilePickerModal(false);
-  };
-
   const onGuildChange = (selectedGuild: string) => {
     setGuild(selectedGuild);
     setGuildId(selectedGuild);
   };
+
+  useEffect(() => {
+    if (defaultGuild) {
+      setGuild(defaultGuild);
+      setGuildId(defaultGuild);
+    }
+  }, [defaultGuild]);
 
   return (
     <>
@@ -46,7 +45,10 @@ const AdminDashboard = () => {
           <p>Welcome to the admin dashboard. Here you can manage the application.</p>
         </Flex>
         <Flex direction="row" gap="4" w="full" align="center">
-          <GuildSelect maxW="50%" value={guild} onChange={onGuildChange} />
+          <Flex direction="row" w="50%" justify="space-between" align="last baseline" gap="4">
+            <GuildSelect w="50%" value={guild} onChange={onGuildChange} />
+            <SetDefaultGuildButton defaultGuild={guild} />
+          </Flex>
           <Button ms="auto" colorPalette="blue" onClick={openCreateGalleryModal}>
             Create Gallery
           </Button>
@@ -60,17 +62,12 @@ const AdminDashboard = () => {
         ) : (
           <Flex direction="column" gap="4" w="full">
             {data?.map((gallery) => (
-              <GalleryItem
-                key={gallery.name}
-                info={gallery}
-                openFilePickerModal={openFilePickerModal}
-              />
+              <GalleryCard key={gallery.name} info={gallery} guildId={guild} />
             ))}
           </Flex>
         )}
       </Flex>
       <CreateGalleryModal open={showCreateGalleryModal} closeModal={closeCreateGalleryModal} />
-      <FilePickerModal open={showFilePickerModal} closeModal={closeFilePickerModal} />
     </>
   );
 };

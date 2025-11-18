@@ -12,3 +12,14 @@ export const galleryMetaSchema = z.object({
   ttlWeeks: z.number().min(1).max(6),
   createdBy: z.string().min(1).max(100),
 });
+
+export const setDefaultGallerySchema = z.object({
+  guildId: z.string().min(1).max(100),
+  galleryName: z.string().min(1).max(100),
+});
+
+export const uploadToGallerySchema = z.object({
+  guildId: z.string().min(1).max(100),
+  galleryName: z.string().min(1).max(100),
+  file: z.instanceof(File),
+});

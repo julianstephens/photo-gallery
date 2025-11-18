@@ -2,15 +2,20 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   type ListObjectsV2CommandOutput,
+  type PutObjectCommandInput,
   type _Object as S3Object,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
 import type { Readable } from "stream";
+import type { GalleryItem } from "utils";
 import env from "../schemas/env.ts";
 
 class BucketMissingError extends Error {
@@ -65,6 +70,34 @@ export class BucketService {
     return `${base}/${this.#sanitize(objectName)}`;
   };
 
+  async #getObjectMetadata(key: string): Promise<Record<string, string>> {
+    const resp = await this.#s3.send(
+      new HeadObjectCommand({
+        Bucket: this.#bucketName,
+        Key: key,
+      }),
+    );
+    return resp.Metadata ?? {};
+  }
+
+  async #getObjectContent(key: string): Promise<Buffer> {
+    const resp = await this.#s3.send(
+      new GetObjectCommand({
+        Bucket: this.#bucketName,
+        Key: key,
+      }),
+    );
+    if (!resp.Body) {
+      return Buffer.alloc(0);
+    }
+    const stream = resp.Body as Readable;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
   // List all objects under a prefix, handling pagination via ContinuationToken
   async #listAllFolderObjects(prefix: string) {
     const all: S3Object[] = [];
@@ -100,16 +133,52 @@ export class BucketService {
     );
   };
 
-  getBucketFolderContents = async (name: string) => {
+  createPresignedUrl = async (key: string): Promise<string> => {
+    return getSignedUrl(
+      // @ts-expect-error getSignedUrl accepts S3Client despite generic constraints
+      this.#s3,
+      new PutObjectCommand({
+        Bucket: this.#bucketName,
+        Key: key,
+      }),
+      { expiresIn: 3600 },
+    );
+  };
+
+  getBucketFolderContents = async (
+    name: string,
+    recursive?: boolean,
+    withContent?: boolean,
+  ): Promise<Array<GalleryItem>> => {
+    if (recursive === undefined) recursive = true;
     await this.ensureBucket();
     const prefix = this.#buildKey(name);
     const contents = await this.#listAllFolderObjects(prefix);
-    const items = contents.map((o: S3Object) => {
-      const key = o.Key ?? "";
-      const relative = key.startsWith(prefix) ? key.slice(prefix.length) : key;
-      return { name: relative, size: o.Size };
-    });
-    return items;
+    const items = await Promise.all(
+      contents.map(async (o: S3Object) => {
+        const key = o.Key ?? "";
+        const type = key.endsWith("/") ? "folder" : "file";
+        if (!recursive && type === "folder" && key !== prefix) {
+          return null;
+        }
+        const relative = key.startsWith(prefix) ? key.slice(prefix.length) : key;
+        const contentType = o.Key ? `image/${o.Key.split(".").pop()}` : "application/octet-stream";
+        return {
+          name: relative,
+          size: o.Size,
+          url: await this.createPresignedUrl(key),
+          metadata: await this.#getObjectMetadata(key),
+          content: withContent
+            ? {
+                data: await this.#getObjectContent(key),
+                contentLength: o.Size ?? 0,
+                contentType,
+              }
+            : undefined,
+        };
+      }),
+    );
+    return items.filter((item): item is GalleryItem => item !== null);
   };
 
   uploadToBucket = async (
@@ -132,27 +201,27 @@ export class BucketService {
   };
 
   uploadBufferToBucket = async (
-    bucketName: string,
+    galleryName: string,
     objectName: string,
     buffer: Buffer,
     meta?: Record<string, string>,
   ) => {
     await this.ensureBucket();
     const { ["Content-Type"]: contentType, ...metadata } = meta ?? {};
-    await this.#s3.send(
-      new PutObjectCommand({
-        Bucket: this.#bucketName,
-        Key: this.#buildKey(bucketName, objectName),
-        Body: buffer,
-        ContentLength: buffer.length,
-        ContentType: contentType,
-        Metadata: Object.keys(metadata).length ? metadata : undefined,
-      }),
-    );
+    const key = this.#buildKey(galleryName, objectName);
+    const putObjectData: PutObjectCommandInput = {
+      Bucket: this.#bucketName,
+      Key: key,
+      Body: buffer,
+      ContentLength: buffer.length,
+      ContentType: contentType,
+      Metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+    };
+    await this.#s3.send(new PutObjectCommand(putObjectData));
   };
 
   uploadStreamToBucket = async (
-    bucketName: string,
+    galleryName: string,
     objectName: string,
     stream: Readable,
     size?: number,
@@ -160,16 +229,17 @@ export class BucketService {
   ) => {
     await this.ensureBucket();
     const { ["Content-Type"]: contentType, ...metadata } = meta ?? {};
-    await this.#s3.send(
+    const res = await this.#s3.send(
       new PutObjectCommand({
         Bucket: this.#bucketName,
-        Key: this.#buildKey(bucketName, objectName),
+        Key: this.#buildKey(galleryName, objectName),
         Body: stream,
-        ContentLength: typeof size === "number" ? size : undefined,
+        // ContentLength: typeof size === "number" ? size : undefined,
         ContentType: contentType,
         Metadata: Object.keys(metadata).length ? metadata : undefined,
       }),
     );
+    console.log("Upload stream result:", res);
   };
 
   deleteObjectFromBucket = async (bucketName: string, objectName: string) => {

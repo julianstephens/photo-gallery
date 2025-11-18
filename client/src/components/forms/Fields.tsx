@@ -1,4 +1,4 @@
-import { useAuth } from "@/hooks";
+import { useAuth, useListGalleries } from "@/hooks";
 import {
   createListCollection,
   Field,
@@ -6,7 +6,7 @@ import {
   Select as FieldSelect,
   Portal,
 } from "@chakra-ui/react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FieldError, FieldValues } from "react-hook-form";
 import { Navigate } from "react-router";
 
@@ -30,6 +30,7 @@ export interface InputProps extends FormProps, FieldValues {
 export interface SelectProps extends FormProps, FieldValues {
   options: { value: string; label: string }[];
   usePortal?: boolean;
+  useLabel?: boolean;
 }
 
 export const Input = ({
@@ -73,6 +74,7 @@ export const Select = ({
   invalid,
   isMulti,
   usePortal = false,
+  useLabel = true,
   width,
   maxW,
 }: SelectProps) => {
@@ -80,7 +82,7 @@ export const Select = ({
   const collection = useMemo(() => createListCollection({ items: options }), [options]);
   return (
     <Field.Root maxW={maxW} width={width} invalid={invalid}>
-      <Field.Label htmlFor={name}>{label}</Field.Label>
+      {useLabel && <Field.Label htmlFor={name}>{label}</Field.Label>}
       <FieldSelect.Root
         name={name}
         my="2"
@@ -146,6 +148,34 @@ export const GuildSelect = (props: Omit<SelectProps, "name" | "options" | "label
     <Select
       name={props.name}
       label="Select a Guild"
+      options={selectOpts}
+      isMulti={false}
+      invalid={props.invalid}
+      {...props}
+    />
+  );
+};
+
+export const GallerySelect = (
+  props: Omit<SelectProps, "name" | "options" | "label" | "isMulti">,
+) => {
+  const { data, isLoading, error } = useListGalleries(props.guild);
+  const [selectOpts, setSelectOpts] = useState<{ value: string; label: string }[]>([]);
+
+  useEffect(() => {
+    if (data && !isLoading && !error) {
+      const opts = data.map((g) => ({ value: g.name, label: g.name }));
+      setSelectOpts(opts);
+      if (opts.length === 1) {
+        props.onChange(opts[0].value);
+      }
+    }
+  }, [data, isLoading, error, props]);
+
+  return (
+    <Select
+      name={props.name}
+      label="Select a Gallery"
       options={selectOpts}
       isMulti={false}
       invalid={props.invalid}

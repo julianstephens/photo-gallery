@@ -7,10 +7,12 @@ import {
   galleryMetaSchema,
   type CreateGalleryRequest,
   type Gallery,
+  type SetDefaultGalleryRequest,
 } from "utils";
 import redis from "../redis.ts";
 import { BucketService } from "../services/bucket.ts";
 import { UploadService } from "../services/upload.ts";
+import { InvalidInputError, validateString } from "../utils.ts";
 
 const EXPIRES_ZSET = "galleries:expiries";
 
@@ -21,13 +23,6 @@ type ZipEntry = NodeJS.ReadableStream & {
   autodrain: () => void;
   vars?: { uncompressedSize?: number };
 };
-
-class InvalidInputError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "InvalidInputError";
-  }
-}
 
 class UnsupportedMimeTypeError extends Error {
   constructor() {
@@ -48,13 +43,6 @@ export class GalleryController {
     this.#bucketService = new BucketService();
     this.#uploadService = new UploadService();
   }
-
-  #validateString = (value: string, errorMessage?: string) => {
-    if (!value || value.trim() === "") {
-      throw new InvalidInputError(errorMessage ?? "Input string cannot be empty");
-    }
-    return value.trim();
-  };
 
   #recordToMetadata = (record: Record<string, string> | null) => {
     if (!record) {
@@ -95,7 +83,7 @@ export class GalleryController {
   };
 
   listGalleries = async (guildId: string) => {
-    const validGuildId = this.#validateString(guildId, "Guild ID is required");
+    const validGuildId = validateString(guildId, "Guild ID is required");
 
     const { listKey } = this.#galleryKeys(validGuildId);
     const galleries = await redis.client.sMembers(listKey);
@@ -147,7 +135,7 @@ export class GalleryController {
   };
 
   createGallery = async (req: CreateGalleryRequest, userId: string) => {
-    const validUserId = this.#validateString(userId, "User ID is required");
+    const validUserId = validateString(userId, "User ID is required");
 
     const result = createGallerySchema.safeParse(req);
     if (!result.success) {
@@ -183,14 +171,12 @@ export class GalleryController {
     multi.zAdd(EXPIRES_ZSET, [{ score: expiresAt, value: memberKey }]);
     await multi.exec();
 
-    await this.#bucketService.createBucketFolder(
-      this.#validateString(req.galleryName, GalleryNameError),
-    );
+    await this.#bucketService.createBucketFolder(validateString(req.galleryName, GalleryNameError));
 
     return meta;
   };
 
-  uploadToGallery = async (file: Express.Multer.File, bucket: string, nowPrefix: string) => {
+  uploadToGallery = async (file: Express.Multer.File, galleryName: string, objectPath: string) => {
     // Single image upload
     if (
       this.#uploadService.isImageMime(file.mimetype) ||
@@ -199,13 +185,14 @@ export class GalleryController {
       const ext = extname(file.originalname).toLowerCase();
       const base = file.originalname.replace(ext, "");
       const objectName = this.#uploadService.buildObjectName(
-        nowPrefix,
+        objectPath,
         `${Date.now()}-${base}${ext}`,
       );
       const contentType = file.mimetype || mimeFromExt(ext) || "application/octet-stream";
 
-      await this.#bucketService.uploadBufferToBucket(bucket, objectName, file.buffer, {
+      await this.#bucketService.uploadBufferToBucket(galleryName, objectName, file.buffer, {
         "Content-Type": String(contentType),
+        Name: base,
       });
 
       return {
@@ -263,7 +250,7 @@ export class GalleryController {
         const contentType = mimeFromExt(ext) || "application/octet-stream";
         const filename = entryPath.split("/").pop() || `file${ext}`;
         const objectName = this.#uploadService.buildObjectName(
-          nowPrefix,
+          objectPath,
           `${Date.now()}-${filename}`,
         );
 
@@ -274,7 +261,7 @@ export class GalleryController {
           : Readable.fromWeb(entry as unknown as globalThis.ReadableStream<Uint8Array>);
 
         await this.#bucketService.uploadStreamToBucket(
-          bucket,
+          galleryName,
           objectName,
           nodeStream,
           size || undefined,
@@ -297,19 +284,24 @@ export class GalleryController {
   };
 
   getGalleryContents = async (name: string) => {
+    const validatedName = validateString(name, GalleryNameError);
+    console.log("Getting contents for gallery:", validatedName);
     const contents = await this.#bucketService.getBucketFolderContents(
-      this.#validateString(name, GalleryNameError),
+      `${validatedName}/uploads`,
+      true,
+      true,
     );
+    const filteredContents = contents.filter((item) => item.size && item.size > 0);
     return {
       gallery: name,
-      count: contents.length,
-      contents,
+      count: filteredContents.length,
+      contents: filteredContents,
     };
   };
 
   hasGallery = async (guildId: string, galleryName: string) => {
-    const validGuildId = this.#validateString(guildId, "Guild ID is required");
-    const validGalleryName = this.#validateString(galleryName, GalleryNameError);
+    const validGuildId = validateString(guildId, "Guild ID is required");
+    const validGalleryName = validateString(galleryName, GalleryNameError);
 
     const { listKey, metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
     if (!metaKey) {
@@ -333,9 +325,9 @@ export class GalleryController {
   };
 
   renameGallery = async (guildId: string, oldName: string, newName: string) => {
-    const validGuildId = this.#validateString(guildId, "Guild ID is required");
-    const validOldName = this.#validateString(oldName, "Old gallery name is required");
-    const validNewName = this.#validateString(newName, "New gallery name is required");
+    const validGuildId = validateString(guildId, "Guild ID is required");
+    const validOldName = validateString(oldName, "Old gallery name is required");
+    const validNewName = validateString(newName, "New gallery name is required");
 
     const multi = redis.client.multi();
     const {
@@ -371,8 +363,8 @@ export class GalleryController {
   };
 
   removeGallery = async (guildId: string, galleryName: string) => {
-    const validatedGuildId = this.#validateString(guildId, "Guild ID is required");
-    const validatedName = this.#validateString(galleryName, GalleryNameError);
+    const validatedGuildId = validateString(guildId, "Guild ID is required");
+    const validatedName = validateString(galleryName, GalleryNameError);
 
     const { listKey, memberKey, metaKey } = this.#galleryKeys(validatedGuildId, validatedName);
     if (!metaKey) {
@@ -387,5 +379,17 @@ export class GalleryController {
 
     await this.#bucketService.emptyBucketFolder(validatedName);
     await this.#bucketService.deleteBucketFolder(validatedName);
+  };
+
+  setDefaultGallery = async (body: SetDefaultGalleryRequest, userId: string) => {
+    const validatedGuildId = validateString(body.guildId, "Guild ID is required");
+    const validatedUserId = validateString(userId, "User ID is required");
+    const validatedGalleryName = validateString(body.galleryName, "Gallery name is required");
+
+    const key = `guild:${validatedGuildId}:user:${validatedUserId}:defaultGallery`;
+
+    await redis.client.set(key, validatedGalleryName);
+
+    return { defaultGallery: validatedGalleryName };
   };
 }

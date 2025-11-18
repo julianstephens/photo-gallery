@@ -1,12 +1,31 @@
+import { GallerySelect, GuildSelect } from "@/components/forms/Fields";
+import { Gallery } from "@/components/Gallery";
 import { Loader } from "@/components/Loader";
-import { useAuth, useGalleryData } from "@/hooks";
-import { Box, Button, Flex, Heading } from "@chakra-ui/react";
+import { useAuth, useDefaultGuild } from "@/hooks";
+import { Button, Flex, Heading } from "@chakra-ui/react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 const Dashboard = () => {
+  const [guild, setGuild] = useState<string>("");
+  const [gallery, setGallery] = useState<string>("");
   const { currentUser, authReady, logout } = useAuth();
-  const { data, isLoading, error } = useGalleryData();
   const goto = useNavigate();
+  const defaultGuild = useDefaultGuild();
+
+  const updateGuild = (selectedGuild: string) => {
+    setGuild(selectedGuild);
+  };
+
+  const updateGallery = (selectedGallery: string) => {
+    setGallery(selectedGallery);
+  };
+
+  useEffect(() => {
+    if (defaultGuild) {
+      setGuild(defaultGuild);
+    }
+  }, [defaultGuild]);
 
   if (!authReady) return <Loader />;
 
@@ -38,13 +57,14 @@ const Dashboard = () => {
         </Flex>
       </Flex>
       <Flex id="dashboard-content" direction="column" gap="4" mt="8" h="full" w="full">
-        {isLoading && <Loader />}
-        {error && <div>Error loading gallery data</div>}
-        {data && (
-          <Box alignSelf="center" my="auto">
-            Gallery has {data.length} items.
-          </Box>
-        )}
+        <GuildSelect value={guild} onChange={updateGuild} />
+        <GallerySelect
+          guild={guild}
+          setGuild={updateGuild}
+          value={gallery}
+          onChange={updateGallery}
+        />
+        <Gallery galleryName={gallery} />
       </Flex>
     </Flex>
   );
