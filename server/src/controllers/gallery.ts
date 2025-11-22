@@ -355,7 +355,7 @@ export class GalleryController {
       if (uploaded.length === 0) {
         await this.#uploadJobService.updateJobStatus(
           jobId,
-          void this.#uploadJobService.updateJobProgress(jobId, progress);
+          "failed",
           "ZIP contained no supported image files.",
         );
         return;
