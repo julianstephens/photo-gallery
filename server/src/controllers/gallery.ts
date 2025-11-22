@@ -338,12 +338,21 @@ export class GalleryController {
 
         // Update progress periodically
         if (processedCount % PROGRESS_UPDATE_INTERVAL === 0 || processedCount === count) {
-          const progress: UploadJobProgress = {
-            processedFiles: processedCount,
-            totalFiles: count,
-            uploadedFiles: uploaded,
-            failedFiles: failed,
-          };
+          // For intermediate progress, only send counts to avoid large payloads
+          const progress: UploadJobProgress =
+            (processedCount === count)
+              ? {
+                  processedFiles: processedCount,
+                  totalFiles: count,
+                  uploadedFiles: uploaded,
+                  failedFiles: failed,
+                }
+              : {
+                  processedFiles: processedCount,
+                  totalFiles: count,
+                  uploadedCount: uploaded.length,
+                  failedCount: failed.length,
+                };
           await this.#uploadJobService.updateJobProgress(jobId, progress);
         }
       }
