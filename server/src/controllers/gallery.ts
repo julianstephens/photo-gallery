@@ -226,7 +226,7 @@ export class GalleryController {
       );
 
       // Process ZIP file asynchronously (don't await)
-      setImmediate(() => {
+      Promise.resolve().then(() => {
         this.#processZipUpload(jobId, file.buffer, galleryName, objectPath).catch(async (err) => {
           console.error(`[uploadToGallery] Failed to process ZIP for job ${jobId}:`, err);
           // Ensure job is marked as failed if async processing throws
@@ -340,15 +340,15 @@ export class GalleryController {
 
         processedCount += 1;
 
-        // Update progress periodically
-        if (processedCount % PROGRESS_UPDATE_INTERVAL === 0 || processedCount === totalImageFiles) {
+        // Update progress periodically (intermediate updates only)
+        if (processedCount % PROGRESS_UPDATE_INTERVAL === 0) {
           const progress: UploadJobProgress = {
             processedFiles: processedCount,
             totalFiles: totalImageFiles,
-            uploadedFiles: processedCount === totalImageFiles ? uploaded : [],
-            failedFiles: processedCount === totalImageFiles ? failed : [],
+            uploadedFiles: [],
+            failedFiles: [],
           };
-          await this.#uploadJobService.updateJobProgress(jobId, progress);
+          void this.#uploadJobService.updateJobProgress(jobId, progress);
         }
       }
 

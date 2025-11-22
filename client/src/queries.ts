@@ -6,6 +6,7 @@ import {
   type GalleryItemResponse,
   type GalleryMeta,
   type RemoveGalleryRequest,
+  type UploadJob,
   type UploadToGalleryRequest,
   type User,
 } from "utils";
@@ -74,7 +75,7 @@ export const uploadToGallery = async (
   return response.data;
 };
 
-export const getUploadJob = async (jobId: string) => {
+export const getUploadJob = async (jobId: string): Promise<UploadJob> => {
   const { data } = await httpClient.get(`/galleries/upload/${jobId}`);
   return data;
 };
