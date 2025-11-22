@@ -77,6 +77,13 @@ export class UploadJobService {
 
   updateJobStatus = async (jobId: string, status: UploadJobStatus, error?: string) => {
     const jobKey = this.#buildJobKey(jobId);
+
+    // Validate job exists before updating to prevent creating incomplete entries
+    const exists = await redis.client.exists(jobKey);
+    if (!exists) {
+      throw new Error(`Job ${jobId} does not exist`);
+    }
+
     const updates: Record<string, string> = { status };
 
     if (status === "processing" && !(await redis.client.hGet(jobKey, "startedAt"))) {
@@ -96,6 +103,13 @@ export class UploadJobService {
 
   updateJobProgress = async (jobId: string, progress: UploadJobProgress) => {
     const jobKey = this.#buildJobKey(jobId);
+
+    // Validate job exists before updating to prevent creating incomplete entries
+    const exists = await redis.client.exists(jobKey);
+    if (!exists) {
+      throw new Error(`Job ${jobId} does not exist`);
+    }
+
     await redis.client.hSet(jobKey, {
       progress: JSON.stringify(progress),
     });

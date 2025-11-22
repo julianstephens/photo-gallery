@@ -14,6 +14,7 @@ vi.mock("../redis.ts", () => ({
       rPush: vi.fn(),
       del: vi.fn(),
       lRem: vi.fn(),
+      exists: vi.fn(),
     },
   },
 }));
@@ -104,8 +105,11 @@ describe("UploadJobService", () => {
 
   describe("updateJobStatus", () => {
     it("should update job status", async () => {
+      vi.mocked(redis.client.exists).mockResolvedValue(1);
+
       await service.updateJobStatus("job123", "processing");
 
+      expect(redis.client.exists).toHaveBeenCalledWith("upload:job:job123");
       expect(redis.client.hSet).toHaveBeenCalled();
       const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
       expect(callArgs[0]).toBe("upload:job:job123");
@@ -113,6 +117,7 @@ describe("UploadJobService", () => {
     });
 
     it("should set startedAt when status changes to processing", async () => {
+      vi.mocked(redis.client.exists).mockResolvedValue(1);
       vi.mocked(redis.client.hGet).mockResolvedValue(null);
 
       await service.updateJobStatus("job123", "processing");
@@ -122,6 +127,8 @@ describe("UploadJobService", () => {
     });
 
     it("should set completedAt when status is completed or failed", async () => {
+      vi.mocked(redis.client.exists).mockResolvedValue(1);
+
       await service.updateJobStatus("job123", "completed");
 
       const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
@@ -129,6 +136,8 @@ describe("UploadJobService", () => {
     });
 
     it("should set error message when provided", async () => {
+      vi.mocked(redis.client.exists).mockResolvedValue(1);
+
       await service.updateJobStatus("job123", "failed", "Test error");
 
       const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
@@ -138,6 +147,8 @@ describe("UploadJobService", () => {
 
   describe("updateJobProgress", () => {
     it("should update job progress", async () => {
+      vi.mocked(redis.client.exists).mockResolvedValue(1);
+
       const progress: UploadJobProgress = {
         processedFiles: 5,
         totalFiles: 10,
@@ -147,9 +158,25 @@ describe("UploadJobService", () => {
 
       await service.updateJobProgress("job123", progress);
 
+      expect(redis.client.exists).toHaveBeenCalledWith("upload:job:job123");
       expect(redis.client.hSet).toHaveBeenCalled();
       const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
       expect(callArgs[1]).toHaveProperty("progress");
+    });
+
+    it("should throw error when job does not exist", async () => {
+      vi.mocked(redis.client.exists).mockResolvedValue(0);
+
+      const progress: UploadJobProgress = {
+        processedFiles: 5,
+        totalFiles: 10,
+        uploadedFiles: [],
+        failedFiles: [],
+      };
+
+      await expect(service.updateJobProgress("nonexistent", progress)).rejects.toThrow(
+        "Job nonexistent does not exist",
+      );
     });
   });
 

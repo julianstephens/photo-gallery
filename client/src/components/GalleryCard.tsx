@@ -65,11 +65,12 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
         });
         setUploadProgress(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error polling upload job:", err);
       // Distinguish between transient and permanent errors
       // If error has a response and status is 404, treat as permanent (job not found)
-      if (err && (err.status === 404 || err?.response?.status === 404)) {
+      const error = err as { status?: number; response?: { status?: number } };
+      if (error && (error.status === 404 || error?.response?.status === 404)) {
         if (pollingIntervalRef.current) {
           clearInterval(pollingIntervalRef.current);
           pollingIntervalRef.current = null;
@@ -91,12 +92,55 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
   const uploadFiles = async (details: FileUploadFileAcceptDetails) => {
     setIsLoading(true);
     const errs = [];
-    for (const file of details.files) {
+
+    // Separate files into ZIP and non-ZIP
+    const zipFiles = details.files.filter(
+      (f) =>
+        f.name.toLowerCase().endsWith(".zip") ||
+        f.type === "application/zip" ||
+        f.type === "application/x-zip-compressed",
+    );
+    const imageFiles = details.files.filter((f) => !zipFiles.includes(f));
+
+    // Only allow one ZIP file at a time to avoid polling conflicts
+    if (zipFiles.length > 1) {
+      toaster.error({
+        title: "Multiple ZIP Files",
+        description: "Please upload only one ZIP file at a time.",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // Process image files first
+    for (const file of imageFiles) {
       try {
         const result = await uploadFileMutation.mutateAsync({
           guildId,
           galleryName: info.name,
           file,
+        });
+
+        if (result.type === "sync") {
+          toaster.success({
+            title: "Upload Successful",
+            description: `${file.name} uploaded successfully.`,
+          });
+        }
+      } catch (err) {
+        errs.push(err);
+        console.error("Error uploading file:", err);
+      }
+    }
+
+    // Process ZIP file if present
+    if (zipFiles.length === 1) {
+      const zipFile = zipFiles[0];
+      try {
+        const result = await uploadFileMutation.mutateAsync({
+          guildId,
+          galleryName: info.name,
+          file: zipFile,
         });
 
         // Handle async uploads (ZIP files)
@@ -114,19 +158,20 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
 
           // Initial poll
           void pollUploadJob(jobId);
-        } else {
-          // Sync upload (single image)
-          toaster.success({
-            title: "Upload Successful",
-            description: "File uploaded successfully.",
-          });
-          setIsLoading(false);
+          // Don't set loading to false - polling will handle it
+          return;
         }
       } catch (err) {
         errs.push(err);
-        console.error("Error uploading file:", err);
+        console.error("Error uploading ZIP file:", err);
       }
     }
+
+    // Only set loading to false if no async uploads are in progress
+    if (zipFiles.length === 0) {
+      setIsLoading(false);
+    }
+
     if (errs.length > 0) {
       toaster.error({
         title: "Upload Error",

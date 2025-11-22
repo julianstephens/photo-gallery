@@ -259,8 +259,8 @@ export class GalleryController {
       const uploaded: Array<{ key: string; contentType: string | false | null }> = [];
       const failed: Array<{ filename: string; error: string }> = [];
       let totalBytes = 0;
-      let count = 0;
-      let processedCount = 0;
+      let totalImageFiles = 0; // Total image files that will be processed
+      let processedCount = 0; // Files actually processed (uploaded or failed)
 
       const zipStream = unzipper.Parse();
 
@@ -284,11 +284,12 @@ export class GalleryController {
           continue;
         }
 
+        // This is an image file that will be processed
         const size = entry.vars?.uncompressedSize ?? 0;
         totalBytes += size;
-        count += 1;
+        totalImageFiles += 1;
 
-        if (count > MAX_ZIP_ENTRIES || totalBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
+        if (totalImageFiles > MAX_ZIP_ENTRIES || totalBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
           // Drain remaining entries, then bail
           entry.autodrain();
 
@@ -308,6 +309,7 @@ export class GalleryController {
 
         try {
           const contentType = mimeFromExt(ext) || "application/octet-stream";
+          // Use processedCount to ensure unique filenames even in tight loops
           const objectName = this.#uploadService.buildObjectName(
             objectPath,
             `${Date.now()}-${processedCount}-${filename}`,
@@ -339,22 +341,13 @@ export class GalleryController {
         processedCount += 1;
 
         // Update progress periodically
-        if (processedCount % PROGRESS_UPDATE_INTERVAL === 0 || processedCount === count) {
-          // For intermediate progress, only send counts to avoid large payloads
-          const progress: UploadJobProgress =
-            (processedCount === count)
-              ? {
-                  processedFiles: processedCount,
-                  totalFiles: count,
-                  uploadedFiles: uploaded,
-                  failedFiles: failed,
-                }
-              : {
-                  processedFiles: processedCount,
-                  totalFiles: count,
-                  uploadedCount: uploaded.length,
-                  failedCount: failed.length,
-                };
+        if (processedCount % PROGRESS_UPDATE_INTERVAL === 0 || processedCount === totalImageFiles) {
+          const progress: UploadJobProgress = {
+            processedFiles: processedCount,
+            totalFiles: totalImageFiles,
+            uploadedFiles: processedCount === totalImageFiles ? uploaded : [],
+            failedFiles: processedCount === totalImageFiles ? failed : [],
+          };
           await this.#uploadJobService.updateJobProgress(jobId, progress);
         }
       }
@@ -368,18 +361,28 @@ export class GalleryController {
         return;
       }
 
-      // Update final progress
+      // Final progress update with full details
       const finalProgress: UploadJobProgress = {
         processedFiles: processedCount,
-        totalFiles: count,
+        totalFiles: totalImageFiles,
         uploadedFiles: uploaded,
         failedFiles: failed,
       };
       await this.#uploadJobService.updateJobProgress(jobId, finalProgress);
       await this.#uploadJobService.updateJobStatus(jobId, "completed");
+
+      // Clean up job from list after completion
+      await this.#uploadJobService.deleteJob(jobId);
     } catch (err) {
       console.error(`[processZipUpload] Error processing ZIP for job ${jobId}:`, err);
       await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+
+      // Clean up job from list after failure
+      try {
+        await this.#uploadJobService.deleteJob(jobId);
+      } catch (cleanupErr) {
+        console.error(`[processZipUpload] Failed to cleanup job ${jobId}:`, cleanupErr);
+      }
     }
   };
 
