@@ -262,6 +262,9 @@ export class GalleryController {
       let totalImageFiles = 0; // Total image files that will be processed
       let processedCount = 0; // Files actually processed (uploaded or failed)
 
+      // Generate timestamp once for the entire batch to avoid collisions
+      const timestamp = Date.now();
+
       const zipStream = unzipper.Parse();
 
       // Create a stream from the in-memory buffer
@@ -309,10 +312,10 @@ export class GalleryController {
 
         try {
           const contentType = mimeFromExt(ext) || "application/octet-stream";
-          // Use processedCount to ensure unique filenames even in tight loops
+          // Use timestamp and processedCount to ensure unique filenames
           const objectName = this.#uploadService.buildObjectName(
             objectPath,
-            `${Date.now()}-${processedCount}-${filename}`,
+            `${timestamp}-${processedCount}-${filename}`,
           );
 
           // normalize to a Node.js Readable without using `any`
