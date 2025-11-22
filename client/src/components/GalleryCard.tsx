@@ -65,14 +65,26 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
         });
         setUploadProgress(null);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error polling upload job:", err);
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
+      // Distinguish between transient and permanent errors
+      // If error has a response and status is 404, treat as permanent (job not found)
+      if (err && (err.status === 404 || err?.response?.status === 404)) {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+        setIsLoading(false);
+        setUploadProgress(null);
+        toaster.error({
+          title: "Upload Job Not Found",
+          description: "The upload job could not be found. It may have expired or been deleted.",
+        });
+      } else {
+        // Transient error (e.g., network), just log and continue polling
+        // Optionally, show a non-intrusive warning/toast if desired
+        // Do not clear interval or reset state
       }
-      setIsLoading(false);
-      setUploadProgress(null);
     }
   };
 
