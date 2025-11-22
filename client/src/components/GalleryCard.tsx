@@ -89,6 +89,7 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
 
         // Handle async uploads (ZIP files)
         if (result.type === "async" && result.jobId) {
+          const jobId = result.jobId; // Capture jobId in local variable
           toaster.info({
             title: "Processing Upload",
             description: "Your ZIP file is being processed. Please wait...",
@@ -96,11 +97,11 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
 
           // Start polling for job status
           pollingIntervalRef.current = setInterval(() => {
-            void pollUploadJob(result.jobId!);
+            void pollUploadJob(jobId);
           }, 2000); // Poll every 2 seconds
 
           // Initial poll
-          void pollUploadJob(result.jobId);
+          void pollUploadJob(jobId);
         } else {
           // Sync upload (single image)
           toaster.success({

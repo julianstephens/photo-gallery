@@ -36,6 +36,7 @@ class UnsupportedMimeTypeError extends Error {
 const GalleryNameError = "Gallery name cannot be empty";
 const MAX_ZIP_ENTRIES = 1000;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024; // 500 MB guardrail
+const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every N files
 
 export class GalleryController {
   #bucketService: BucketService;
@@ -225,8 +226,14 @@ export class GalleryController {
       );
 
       // Process ZIP file asynchronously (don't await)
-      this.#processZipUpload(jobId, file.buffer, galleryName, objectPath).catch((err) => {
+      this.#processZipUpload(jobId, file.buffer, galleryName, objectPath).catch(async (err) => {
         console.error(`[uploadToGallery] Failed to process ZIP for job ${jobId}:`, err);
+        // Ensure job is marked as failed if async processing throws
+        try {
+          await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+        } catch (updateErr) {
+          console.error(`[uploadToGallery] Failed to update job status for ${jobId}:`, updateErr);
+        }
       });
 
       return {
@@ -330,7 +337,7 @@ export class GalleryController {
         processedCount += 1;
 
         // Update progress periodically
-        if (processedCount % 10 === 0 || processedCount === count) {
+        if (processedCount % PROGRESS_UPDATE_INTERVAL === 0 || processedCount === count) {
           const progress: UploadJobProgress = {
             processedFiles: processedCount,
             totalFiles: count,
