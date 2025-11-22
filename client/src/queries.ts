@@ -57,17 +57,26 @@ export const setDefaultGallery = async (guildId: string, galleryName: string): P
   });
 };
 
-export const uploadToGallery = async (uploadReq: UploadToGalleryRequest): Promise<void> => {
+export const uploadToGallery = async (
+  uploadReq: UploadToGalleryRequest,
+): Promise<{ type: "sync" | "async"; jobId?: string; uploaded?: unknown[] }> => {
   const formData = new FormData();
   formData.append("guildId", uploadReq.guildId);
   formData.append("galleryName", uploadReq.galleryName);
   formData.append("file", uploadReq.file);
 
-  await httpClient.post("/galleries/upload", formData, {
+  const response = await httpClient.post("/galleries/upload", formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },
   });
+
+  return response.data;
+};
+
+export const getUploadJob = async (jobId: string) => {
+  const { data } = await httpClient.get(`/galleries/upload/${jobId}`);
+  return data;
 };
 
 export const removeGallery = async (req: RemoveGalleryRequest): Promise<void> => {
