@@ -113,6 +113,16 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
       return;
     }
 
+    // Don't allow mixing ZIP and image files to avoid UX confusion
+    if (zipFiles.length > 0 && imageFiles.length > 0) {
+      toaster.error({
+        title: "Mixed File Types",
+        description: "Please upload either image files or a ZIP file, not both at the same time.",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     // Process image files first
     for (const file of imageFiles) {
       try {
