@@ -226,14 +226,16 @@ export class GalleryController {
       );
 
       // Process ZIP file asynchronously (don't await)
-      this.#processZipUpload(jobId, file.buffer, galleryName, objectPath).catch(async (err) => {
-        console.error(`[uploadToGallery] Failed to process ZIP for job ${jobId}:`, err);
-        // Ensure job is marked as failed if async processing throws
-        try {
-          await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
-        } catch (updateErr) {
-          console.error(`[uploadToGallery] Failed to update job status for ${jobId}:`, updateErr);
-        }
+      setImmediate(() => {
+        this.#processZipUpload(jobId, file.buffer, galleryName, objectPath).catch(async (err) => {
+          console.error(`[uploadToGallery] Failed to process ZIP for job ${jobId}:`, err);
+          // Ensure job is marked as failed if async processing throws
+          try {
+            await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+          } catch (updateErr) {
+            console.error(`[uploadToGallery] Failed to update job status for ${jobId}:`, updateErr);
+          }
+        });
       });
 
       return {
