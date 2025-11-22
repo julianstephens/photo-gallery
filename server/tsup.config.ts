@@ -5,4 +5,9 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
+  format: ["esm"],
+  platform: "node",
+  target: "node20",
+  skipNodeModulesBundle: true,
+  external: ["dotenv"],
 });

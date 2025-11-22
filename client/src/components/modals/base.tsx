@@ -6,6 +6,8 @@ export interface BaseModalProps {
   closeModal: () => void;
   children: React.ReactNode;
   actionButtonText?: string;
+  actionButtonColor?: string;
+  actionButtonLoading?: boolean;
   actionButtonOnClick?: () => void;
   withCancelButton?: boolean;
 }
@@ -13,6 +15,8 @@ export interface BaseModalProps {
 export interface ModalProps {
   open: boolean;
   closeModal: () => void;
+  actionButtonLoading?: boolean;
+  actionButtonOnClick?: () => void;
 }
 
 export const BaseModal = ({
@@ -21,6 +25,8 @@ export const BaseModal = ({
   closeModal,
   children,
   actionButtonText = "Submit",
+  actionButtonColor = "white",
+  actionButtonLoading = false,
   actionButtonOnClick,
   withCancelButton = true,
 }: BaseModalProps) => {
@@ -45,7 +51,13 @@ export const BaseModal = ({
               <Dialog.ActionTrigger asChild>
                 <Button variant="outline">Cancel</Button>
               </Dialog.ActionTrigger>
-              <Button onClick={actionButtonOnClick}>{actionButtonText}</Button>
+              <Button
+                loading={actionButtonLoading}
+                colorPalette={actionButtonColor}
+                onClick={actionButtonOnClick}
+              >
+                {actionButtonText}
+              </Button>
             </Dialog.Footer>
             <Dialog.CloseTrigger asChild>
               {withCancelButton && <CloseButton size="sm" />}

@@ -41,7 +41,7 @@ export const Gallery = ({ galleryName }: { galleryName: string }) => {
         <div>Error: {error?.message ?? "Unknown error"}</div>
       ) : isLoading ? (
         <Loader text="Loading gallery..." full={true} />
-      ) : (
+      ) : data?.count && data.count > 0 ? (
         <Flex direction="column" gap="4" w="full">
           <Flex direction="row" align="last baseline" gap="4" w="50%">
             <Select
@@ -61,6 +61,8 @@ export const Gallery = ({ galleryName }: { galleryName: string }) => {
             ))}
           </Flex>
         </Flex>
+      ) : (
+        <Text m="auto">No items found in this gallery.</Text>
       )}
     </Flex>
   );

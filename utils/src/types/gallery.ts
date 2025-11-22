@@ -2,6 +2,7 @@ import z from "zod";
 import type {
   createGallerySchema,
   galleryMetaSchema,
+  removeGallerySchema,
   setDefaultGallerySchema,
   uploadToGallerySchema,
 } from "../schemas/gallery.ts";
@@ -38,3 +39,5 @@ export interface GalleryItemContent {
 export type SetDefaultGalleryRequest = z.infer<typeof setDefaultGallerySchema>;
 
 export type UploadToGalleryRequest = z.infer<typeof uploadToGallerySchema>;
+
+export type RemoveGalleryRequest = z.infer<typeof removeGallerySchema>;

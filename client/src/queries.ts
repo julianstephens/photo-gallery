@@ -1,9 +1,11 @@
 import {
   createGallerySchema,
+  removeGallerySchema,
   type CreateGalleryRequest,
   type Gallery,
   type GalleryItemResponse,
   type GalleryMeta,
+  type RemoveGalleryRequest,
   type UploadToGalleryRequest,
   type User,
 } from "utils";
@@ -66,6 +68,11 @@ export const uploadToGallery = async (uploadReq: UploadToGalleryRequest): Promis
       "Content-Type": "multipart/form-data",
     },
   });
+};
+
+export const removeGallery = async (req: RemoveGalleryRequest): Promise<void> => {
+  const body = removeGallerySchema.parse(req);
+  await httpClient.delete("/galleries", { data: body });
 };
 
 export const login = () => {

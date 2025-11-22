@@ -23,3 +23,8 @@ export const uploadToGallerySchema = z.object({
   galleryName: z.string().min(1).max(100),
   file: z.instanceof(File),
 });
+
+export const removeGallerySchema = z.object({
+  guildId: z.string().min(1).max(100),
+  galleryName: z.string().min(1).max(100),
+});

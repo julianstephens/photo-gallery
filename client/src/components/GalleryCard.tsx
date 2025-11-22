@@ -1,17 +1,25 @@
 import { uploadToGallery } from "@/queries";
-import { Button, Card, FileUpload, Flex, type FileUploadFileAcceptDetails } from "@chakra-ui/react";
+import {
+  Button,
+  Card,
+  FileUpload,
+  Flex,
+  Icon,
+  type FileUploadFileAcceptDetails,
+} from "@chakra-ui/react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { HiUpload } from "react-icons/hi";
+import { HiTrash, HiUpload } from "react-icons/hi";
 import type { Gallery } from "utils";
 import { toaster } from "./ui/toaster";
 
 export interface GalleryCardProps {
   info: Gallery;
   guildId: string;
+  openConfirmDeleteModal?: () => void;
 }
 
-export const GalleryCard = ({ info, guildId }: GalleryCardProps) => {
+export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const uploadFileMutation = useMutation({
     mutationFn: uploadToGallery,
@@ -58,10 +66,14 @@ export const GalleryCard = ({ info, guildId }: GalleryCardProps) => {
             <p>Expires In: {info.meta.ttlWeeks} week(s)</p>
             <p>Created By: {info.meta.createdBy}</p>
           </Flex>
-          <Flex h="full">
+          <Flex direction="column" h="full" gap="2">
             <FileUpload.Root
-              accept={["application/zip", "image/*"]}
+              accept={["application/zip", "application/x-zip-compressed", "image/*"]}
+              onFileReject={(details) => {
+                console.error("Rejected files:", details.files);
+              }}
               onFileAccept={(details) => {
+                console.log("Accepted files for upload:", details.files);
                 void uploadFiles(details);
               }}
             >
@@ -73,6 +85,18 @@ export const GalleryCard = ({ info, guildId }: GalleryCardProps) => {
                 </Button>
               </FileUpload.Trigger>
             </FileUpload.Root>
+            <Button
+              variant="subtle"
+              colorPalette="red"
+              loading={isLoading}
+              disabled={isLoading}
+              onClick={openConfirmDeleteModal}
+            >
+              <Icon>
+                <HiTrash />
+              </Icon>
+              Delete gallery
+            </Button>
           </Flex>
         </Flex>
       </Card.Body>

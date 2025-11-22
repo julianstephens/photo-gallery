@@ -1,8 +1,8 @@
 import { queryClient } from "@/clients";
-import { GuildSelect, Input } from "@/components/forms/Fields";
+import { Input } from "@/components/forms/Fields";
 import { useAuth } from "@/hooks";
 import { createGallery } from "@/queries";
-import { getGuildIdFromUser, toErrorMessage } from "@/utils";
+import { toErrorMessage } from "@/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -11,15 +11,19 @@ import { Navigate } from "react-router";
 import { type CreateGalleryRequest, createGallerySchema } from "utils";
 import { toaster } from "../ui/toaster";
 
+export interface CreateGalleryFormProps {
+  doSubmit: boolean;
+  setDoSubmit: (value: boolean) => void;
+  closeModal: () => void;
+  guildId: string;
+}
+
 export const CreateGalleryForm = ({
   doSubmit,
   setDoSubmit,
   closeModal,
-}: {
-  doSubmit: boolean;
-  setDoSubmit: (value: boolean) => void;
-  closeModal: () => void;
-}) => {
+  guildId,
+}: CreateGalleryFormProps) => {
   const { currentUser } = useAuth();
   const {
     handleSubmit,
@@ -29,16 +33,16 @@ export const CreateGalleryForm = ({
     resolver: zodResolver(createGallerySchema),
     defaultValues: {
       galleryName: "",
-      guildId: "",
+      guildId: guildId,
       ttlWeeks: 1,
     },
   });
 
   const createGalleryMutation = useMutation({
     mutationFn: createGallery,
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["galleries", { guildId: getGuildIdFromUser(currentUser) }],
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["galleries", { guildId }],
       });
     },
   });
@@ -77,11 +81,6 @@ export const CreateGalleryForm = ({
             {...field}
           />
         )}
-      />
-      <Controller
-        name="guildId"
-        control={control}
-        render={({ field }) => <GuildSelect {...field} invalid={!!errors.guildId} />}
       />
       <Controller
         name="ttlWeeks"

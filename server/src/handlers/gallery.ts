@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { createGallerySchema, setDefaultGallerySchema } from "utils";
+import { createGallerySchema, removeGallerySchema, setDefaultGallerySchema } from "utils";
 import z from "zod";
 
 const galleryController = await import("../controllers/index.ts").then(
@@ -102,5 +102,22 @@ export const setDefaultGallery = async (req: Request, res: Response) => {
     }
     console.error("[setDefaultGallery] error:", err);
     res.status(500).json({ error: "Failed to set default gallery" });
+  }
+};
+
+export const removeGallery = async (req: Request, res: Response) => {
+  try {
+    const body = removeGallerySchema.parse(req.body);
+    await galleryController.removeGallery(body.guildId, body.galleryName);
+    res.status(204).send();
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "InvalidInputError") {
+      return res.status(400).json({ error: (err as Error).message });
+    }
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
+    }
+    console.error("[removeGallery] error:", err);
+    res.status(500).json({ error: "Failed to remove gallery" });
   }
 };

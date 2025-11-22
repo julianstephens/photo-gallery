@@ -19,6 +19,7 @@ interface FormProps {
   errors?: Record<string, FieldError>;
   width?: string;
   maxW?: string;
+  disabled?: boolean;
 }
 
 export interface InputProps extends FormProps, FieldValues {
@@ -77,6 +78,7 @@ export const Select = ({
   useLabel = true,
   width,
   maxW,
+  disabled,
 }: SelectProps) => {
   const formattedValue = useMemo(() => (Array.isArray(value) ? value : [value]), [value]);
   const collection = useMemo(() => createListCollection({ items: options }), [options]);
@@ -92,6 +94,7 @@ export const Select = ({
         onValueChange={(e) => {
           onChange(e.value[0]);
         }}
+        disabled={disabled}
       >
         <FieldSelect.HiddenSelect />
         <FieldSelect.Control>
@@ -179,6 +182,7 @@ export const GallerySelect = (
       options={selectOpts}
       isMulti={false}
       invalid={props.invalid}
+      disabled={isLoading || selectOpts.length === 0}
       {...props}
     />
   );

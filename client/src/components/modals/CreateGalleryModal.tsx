@@ -2,7 +2,11 @@ import { useState } from "react";
 import { CreateGalleryForm } from "../forms/CreateGalleryForm";
 import { BaseModal, type ModalProps } from "./base";
 
-export const CreateGalleryModal = ({ open, closeModal }: ModalProps) => {
+export interface CreateGalleryModalProps extends ModalProps {
+  guildId: string;
+}
+
+export const CreateGalleryModal = ({ open, closeModal, guildId }: CreateGalleryModalProps) => {
   const [doSubmit, setDoSubmit] = useState(false);
   return (
     <BaseModal
@@ -13,7 +17,12 @@ export const CreateGalleryModal = ({ open, closeModal }: ModalProps) => {
         setDoSubmit(true);
       }}
     >
-      <CreateGalleryForm closeModal={closeModal} doSubmit={doSubmit} setDoSubmit={setDoSubmit} />
+      <CreateGalleryForm
+        guildId={guildId}
+        closeModal={closeModal}
+        doSubmit={doSubmit}
+        setDoSubmit={setDoSubmit}
+      />
     </BaseModal>
   );
 };
