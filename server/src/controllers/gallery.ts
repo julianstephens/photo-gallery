@@ -310,7 +310,7 @@ export class GalleryController {
           const contentType = mimeFromExt(ext) || "application/octet-stream";
           const objectName = this.#uploadService.buildObjectName(
             objectPath,
-            `${Date.now()}-${filename}`,
+            `${Date.now()}-${processedCount}-${filename}`,
           );
 
           // normalize to a Node.js Readable without using `any`
