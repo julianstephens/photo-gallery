@@ -92,6 +92,7 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
   const uploadFiles = async (details: FileUploadFileAcceptDetails) => {
     setIsLoading(true);
     const errs = [];
+    let hasAsyncUpload = false;
 
     // Separate files into ZIP and non-ZIP
     const zipFiles = details.files.filter(
@@ -145,6 +146,7 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
 
         // Handle async uploads (ZIP files)
         if (result.type === "async" && result.jobId) {
+          hasAsyncUpload = true;
           const jobId = result.jobId; // Capture jobId in local variable
           toaster.info({
             title: "Processing Upload",
@@ -167,16 +169,14 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
       }
     }
 
-    // Only set loading to false if no async uploads are in progress
-    if (zipFiles.length === 0) {
-      setIsLoading(false);
-    }
-
-    if (errs.length > 0) {
-      toaster.error({
-        title: "Upload Error",
-        description: `${errs.length} files failed to upload.`,
-      });
+    // Only handle errors and set loading to false if no async uploads are in progress
+    if (!hasAsyncUpload) {
+      if (errs.length > 0) {
+        toaster.error({
+          title: "Upload Error",
+          description: `${errs.length} files failed to upload.`,
+        });
+      }
       setIsLoading(false);
     }
   };
