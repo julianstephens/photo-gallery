@@ -53,13 +53,19 @@ jobs:
             VITE_API_URL=${{ secrets.VITE_API_URL }}
 
       - name: Deploy Server to Coolify
-        if: ${{ secrets.COOLIFY_SERVER_WEBHOOK != '' }}
+        if: ${{ env.COOLIFY_SERVER_WEBHOOK != '' }}
+        env:
+          COOLIFY_SERVER_WEBHOOK: ${{ secrets.COOLIFY_SERVER_WEBHOOK }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          curl --request GET "${{ secrets.COOLIFY_SERVER_WEBHOOK }}" \
-               --header "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+          curl --request GET "$COOLIFY_SERVER_WEBHOOK" \
+               --header "Authorization: Bearer $COOLIFY_TOKEN"
 
       - name: Deploy Client to Coolify
-        if: ${{ secrets.COOLIFY_CLIENT_WEBHOOK != '' }}
+        if: ${{ env.COOLIFY_CLIENT_WEBHOOK != '' }}
+        env:
+          COOLIFY_CLIENT_WEBHOOK: ${{ secrets.COOLIFY_CLIENT_WEBHOOK }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          curl --request GET "${{ secrets.COOLIFY_CLIENT_WEBHOOK }}" \
-               --header "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+          curl --request GET "$COOLIFY_CLIENT_WEBHOOK" \
+               --header "Authorization: Bearer $COOLIFY_TOKEN"
