@@ -7,15 +7,23 @@ ENV HUSKY=0
 WORKDIR /app
 RUN corepack enable && apk add --no-cache curl
 
-
 FROM base AS deps
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Cache pnpm fetch
+COPY pnpm-lock.yaml ./
+RUN pnpm fetch
+
+# Copy package files
+COPY package.json pnpm-workspace.yaml ./
 COPY server/package.json server/package.json
 COPY utils/package.json utils/package.json
-RUN pnpm install --filter utils --frozen-lockfile
+
+# Install dependencies (offline)
+# This step is cached unless lockfile or package.jsons change
+RUN pnpm install --filter server... --frozen-lockfile --offline
+
+# Copy utils source and build
 COPY utils utils
 RUN pnpm --filter utils build
-RUN pnpm install --filter server... --frozen-lockfile
 
 FROM deps AS build
 COPY server server
@@ -24,11 +32,17 @@ RUN pnpm --filter server build
 FROM base AS runner
 ENV NODE_ENV=production
 WORKDIR /app
+
+# Copy store from deps
 COPY --from=deps /pnpm/store /pnpm/store
+
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json server/package.json
 COPY --from=deps /app/utils ./utils
-RUN npm_config_ignore_scripts=true pnpm install --filter server --prod --frozen-lockfile
+
+# Install prod dependencies (offline)
+RUN npm_config_ignore_scripts=true pnpm install --filter server --prod --frozen-lockfile --offline
+
 COPY --from=build /app/server/dist ./server/dist
 
 EXPOSE 4000
