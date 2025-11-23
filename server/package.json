@@ -11,7 +11,8 @@
     "test:coverage": "vitest run --coverage",
     "dev": "pnpm dlx tsx watch ./src/index.ts",
     "build": "pnpm tsup",
-    "server": "pnpm --filter server"
+    "server": "pnpm --filter server",
+    "clean": "rm -rf dist node_modules"
   },
   "keywords": [],
   "author": "",

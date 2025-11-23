@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsup"
+    "build": "tsup",
+    "clean": "rm -rf dist node_modules"
   },
   "keywords": [],
   "author": "",
