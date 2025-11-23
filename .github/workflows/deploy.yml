@@ -51,6 +51,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VITE_API_URL=${{ secrets.VITE_API_URL }}
+            VITE_UPLOAD_BASE_URL=${{ secrets.VITE_UPLOAD_BASE_URL }}
 
       - name: Deploy Server to Coolify
         if: ${{ env.COOLIFY_SERVER_WEBHOOK != '' }}
