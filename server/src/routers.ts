@@ -40,7 +40,7 @@ const galleryRouter = Router();
 galleryRouter.get("/galleries", handlers.listGalleries);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
 galleryRouter.get("/galleries/upload/:jobId", handlers.getUploadJob);
-galleryRouter.get("/images/:galleryName/*", handlers.getImage);
+galleryRouter.get("/images/:galleryName/{*imagePath}", handlers.getImage);
 galleryRouter.post("/galleries", handlers.createGallery);
 galleryRouter.post("/galleries/upload", upload.single("file"), handlers.uploadToGallery);
 galleryRouter.post("/galleries/default", handlers.setDefaultGallery);

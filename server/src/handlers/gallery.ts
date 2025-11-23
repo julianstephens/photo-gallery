@@ -148,7 +148,8 @@ export const getUploadJob = async (req: Request, res: Response) => {
 
 export const getImage = async (req: Request, res: Response) => {
   const galleryName = req.params.galleryName;
-  const imagePath = req.params[0]; // Capture the rest of the path
+  const rawImagePath = req.params.imagePath;
+  const imagePath = Array.isArray(rawImagePath) ? rawImagePath.join("/") : rawImagePath;
 
   if (!galleryName) {
     return res.status(400).json({ error: "Missing galleryName parameter" });

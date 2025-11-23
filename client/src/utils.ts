@@ -24,7 +24,7 @@ export const toErrorMessage = (err: unknown): string => {
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const ImageSize = {
-  SM: 200,
-  MD: 400,
-  LG: 600,
+  SM: "50%",
+  MD: "75%",
+  LG: "100%",
 } as const;
