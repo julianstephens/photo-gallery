@@ -403,6 +403,8 @@ export class GalleryController {
         processedCount += 1;
 
         if (processedCount % PROGRESS_UPDATE_INTERVAL === 0) {
+          // Send empty arrays for intermediate updates to minimize Redis payload size
+          // Full file lists are only sent in the final progress update
           const progress: UploadJobProgress = {
             processedFiles: processedCount,
             totalFiles: totalImageFiles,

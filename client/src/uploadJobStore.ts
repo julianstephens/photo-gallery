@@ -26,7 +26,7 @@ class UploadJobStore {
 
   clearJobId(jobId: string): void {
     const keysToDelete = Array.from(this.activeJobs.entries())
-      .filter(([_, value]) => value === jobId)
+      .filter(([, value]) => value === jobId)
       .map(([key]) => key);
     for (const key of keysToDelete) {
       this.activeJobs.delete(key);

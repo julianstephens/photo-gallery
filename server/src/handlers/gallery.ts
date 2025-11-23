@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { createGallerySchema, removeGallerySchema, setDefaultGallerySchema } from "utils";
 import z from "zod";
+import { appLogger } from "../middleware/logger.ts";
 
 const galleryController = await import("../controllers/index.ts").then(
   (m) => new m.GalleryController(),
@@ -140,7 +141,7 @@ export const getUploadJob = async (req: Request, res: Response) => {
     if ((err as Error)?.name === "InvalidInputError") {
       return res.status(404).json({ error: (err as Error).message });
     }
-    console.error("[getUploadJob] error:", err);
+    appLogger.error({ err, jobId }, "[getUploadJob] error");
     res.status(500).json({ error: "Failed to get upload job" });
   }
 };
