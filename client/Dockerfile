@@ -10,12 +10,14 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY client/package.json client/package.json
 COPY utils/package.json utils/package.json
+RUN pnpm install --filter utils --frozen-lockfile
+COPY utils utils
+RUN pnpm --filter utils build
 RUN pnpm install --filter client... --frozen-lockfile
 
 FROM deps AS build
 COPY client client
-COPY utils utils
-RUN pnpm --filter utils build
+COPY --from=deps /app/utils ./utils
 RUN pnpm --filter client build
 
 FROM nginx:1.27-alpine AS runner

@@ -6,12 +6,15 @@ ENV PATH="${PNPM_HOME}:${PATH}"
 ENV HUSKY=0
 WORKDIR /app
 RUN corepack enable
+RUN apk update && \
+    apk add curl && \
+    rm -rf /var/cache/apk/*
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json server/package.json
 COPY utils/package.json utils/package.json
-RUN pnpm install --filter utils... --frozen-lockfile
+RUN pnpm install --filter utils --frozen-lockfile
 COPY utils utils
 RUN pnpm --filter utils build
 RUN pnpm install --filter server... --frozen-lockfile
