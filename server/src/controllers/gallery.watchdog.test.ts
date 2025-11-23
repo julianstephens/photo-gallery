@@ -58,6 +58,19 @@ vi.mock("unzipper", () => ({
   },
 }));
 
+const redisClientMocks = vi.hoisted(() => ({
+  exists: vi.fn().mockResolvedValue(1),
+  hGet: vi.fn().mockResolvedValue("gallery-folder"),
+  hSet: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("../redis.ts", () => ({
+  default: {
+    client: redisClientMocks,
+    store: {},
+  },
+}));
+
 describe("GalleryController ZIP watchdog", () => {
   const flushAsync = async () => {
     await Promise.resolve();
@@ -99,6 +112,9 @@ describe("GalleryController ZIP watchdog", () => {
     bucketServiceMocks.getObject.mockReset();
 
     unzipperBufferMock.mockReset();
+    redisClientMocks.exists.mockReset().mockResolvedValue(1);
+    redisClientMocks.hGet.mockReset().mockResolvedValue("gallery-folder");
+    redisClientMocks.hSet.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {

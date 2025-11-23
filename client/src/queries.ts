@@ -33,9 +33,12 @@ export const getGallery = async (guildId: string, galleryName: string): Promise<
   return res.data;
 };
 
-export const listGalleryItems = async (galleryName: string): Promise<GalleryItemResponse> => {
+export const listGalleryItems = async (
+  guildId: string,
+  galleryName: string,
+): Promise<GalleryItemResponse> => {
   const res = await httpClient.get<GalleryItemResponse>("/galleries/items", {
-    params: { galleryName },
+    params: { guildId, galleryName },
   });
   return res.data;
 };

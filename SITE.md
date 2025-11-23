@@ -1,6 +1,6 @@
 # Photo Gallery 5000
 
-Photo Gallery 5000 is a full-stack gallery management tool optimized for Discord-style communities that need to ingest large photo drops, curate them per guild, and expose them through a clean browser UI.
+Photo Gallery 5000 is a full-stack gallery management tool optimized for Discord communities that need to ingest large photo drops, curate them per guild, and expose them through a clean browser UI.
 
 ## Repository Overview
 

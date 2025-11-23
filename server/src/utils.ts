@@ -25,3 +25,12 @@ export const validateString = (value: string, errorMessage?: string) => {
   }
   return value.trim();
 };
+
+export const normalizeGalleryFolderName = (value: string) => {
+  const trimmed = validateString(value, "Gallery name cannot be empty").toLowerCase();
+  const slug = trimmed
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+  return slug || "gallery";
+};

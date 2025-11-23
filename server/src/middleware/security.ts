@@ -1,9 +1,9 @@
-import helmet from "helmet";
 import compression from "compression";
-import cors from "cors";
-import hpp from "hpp";
 import cookieParser from "cookie-parser";
+import cors from "cors";
 import type { Express } from "express";
+import helmet from "helmet";
+import hpp from "hpp";
 import env, { parsedCorsOrigins } from "../schemas/env.ts";
 
 export function applySecurity(app: Express) {
@@ -17,6 +17,10 @@ export function applySecurity(app: Express) {
   app.use(
     helmet({
       contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: {
+        policy: "cross-origin",
+      },
     }),
   );
 

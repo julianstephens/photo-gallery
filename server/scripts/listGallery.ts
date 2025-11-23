@@ -1,23 +1,25 @@
 import "dotenv/config";
 import { GalleryController } from "../src/controllers/gallery.ts";
 
-const galleryName = process.argv[2];
+const guildId = process.argv[2];
+const galleryName = process.argv[3];
 
-if (!galleryName) {
-  console.error("Usage: pnpm tsx scripts/listGallery.ts <galleryName>");
+if (!guildId || !galleryName) {
+  console.error("Usage: pnpm dlx tsx scripts/listGallery.ts <guildId> <galleryName>");
   process.exit(1);
 }
 
 const controller = new GalleryController();
 
 controller
-  .getGalleryContents(galleryName)
+  .getGalleryContents(guildId, galleryName)
   .then((result) => {
     const summary = {
       count: result.count,
       names: result.contents.map((item) => item.name),
     };
     console.log(JSON.stringify(summary, null, 2));
+    process.exit(0);
   })
   .catch((err) => {
     console.error(err);

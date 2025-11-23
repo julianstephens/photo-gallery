@@ -110,6 +110,29 @@ describe("gallery handlers", () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({ error: "Missing galleryName parameter" });
     });
+
+    it("validates guildId is present", async () => {
+      const req = createReq({ query: { galleryName: "g" } as Request["query"] });
+      const res = createRes();
+
+      await listGalleryItems(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
+    });
+
+    it("returns gallery items when params are valid", async () => {
+      const req = createReq({
+        query: { galleryName: "g", guildId: "guild-1" } as Request["query"],
+      });
+      const res = createRes();
+      controllerMocks.getGalleryContents.mockResolvedValue({ count: 0, contents: [] });
+
+      await listGalleryItems(req, res);
+
+      expect(controllerMocks.getGalleryContents).toHaveBeenCalledWith("guild-1", "g");
+      expect(res.json).toHaveBeenCalledWith({ count: 0, contents: [] });
+    });
   });
 
   describe("createGallery", () => {
@@ -315,10 +338,23 @@ describe("gallery handlers", () => {
       expect(res.status).toHaveBeenCalledWith(400);
     });
 
+    it("requires guildId", async () => {
+      const res = createRes();
+      const req = createReq({
+        params: { galleryName: "g", imagePath: "img.png" } as Request["params"],
+      });
+
+      await getImage(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
+    });
+
     it("fetches images and sets headers", async () => {
       const res = createRes();
       const req = createReq({
         params: { galleryName: "g", imagePath: "img.png" } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
       });
       controllerMocks.getImage.mockResolvedValue({
         data: Buffer.from("123"),
@@ -327,7 +363,7 @@ describe("gallery handlers", () => {
 
       await getImage(req, res);
 
-      expect(controllerMocks.getImage).toHaveBeenCalledWith("g", "img.png");
+      expect(controllerMocks.getImage).toHaveBeenCalledWith("guild-1", "g", "img.png");
       expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "image/png");
       expect(res.send).toHaveBeenCalledWith(Buffer.from("123"));
     });
@@ -336,6 +372,7 @@ describe("gallery handlers", () => {
       const res = createRes();
       const req = createReq({
         params: { galleryName: "g", imagePath: "img.png" } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
       });
       controllerMocks.getImage.mockRejectedValue({ name: "NoSuchKey" });
 

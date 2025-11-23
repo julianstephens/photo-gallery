@@ -15,7 +15,7 @@ import redis from "../redis.ts";
 import { BucketService } from "../services/bucket.ts";
 import { UploadService } from "../services/upload.ts";
 import { UploadJobService } from "../services/uploadJob.ts";
-import { InvalidInputError, validateString } from "../utils.ts";
+import { InvalidInputError, normalizeGalleryFolderName, validateString } from "../utils.ts";
 
 const EXPIRES_ZSET = "galleries:expiries";
 
@@ -44,24 +44,38 @@ export class GalleryController {
     this.#uploadJobService = new UploadJobService();
   }
 
+  #isAppleDoubleFile = (pathLike: string | undefined | null) => {
+    if (!pathLike) return false;
+    const normalized = pathLike.replace(/\\/g, "/");
+    const segments = normalized.split("/");
+    const filename = segments[segments.length - 1] ?? "";
+    if (segments.includes("__MACOSX")) return true;
+    if (filename.startsWith("._")) return true;
+    const stripped = filename.replace(/^\d+-\d+-/, "");
+    return stripped.startsWith("._");
+  };
+
   #recordToMetadata = (record: Record<string, string> | null) => {
     if (!record) {
       throw new Error("Missing gallery metadata");
     }
 
-    const parsed = {
+    const parsed: Record<string, unknown> = {
       createdAt: Number(record.createdAt) || NaN,
       expiresAt: Number(record.expiresAt) || NaN,
       ttlWeeks: Number(record.ttlWeeks) || NaN,
       createdBy: record.createdBy || "",
     };
+    if (record.folderName) {
+      parsed.folderName = record.folderName;
+    }
 
     const result = galleryMetaSchema.safeParse(parsed);
     if (!result.success) {
       throw new Error("Corrupted gallery metadata");
     }
 
-    return parsed;
+    return result.data;
   };
 
   #galleryKeys = (guildId: string, galleryName?: string) => {
@@ -72,6 +86,29 @@ export class GalleryController {
       metaKey = `guild:${guildId}:gallery:${galleryName}:meta`;
     }
     return { listKey, memberKey, metaKey };
+  };
+
+  #getGalleryFolderName = async (guildId: string, galleryName: string) => {
+    const validGuildId = validateString(guildId, "Guild ID is required");
+    const validGalleryName = validateString(galleryName, GalleryNameError);
+
+    const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+    if (!metaKey) {
+      throw new Error("Internal error: missing meta key");
+    }
+
+    const exists = await redis.client.exists(metaKey);
+    if (!exists) {
+      throw new InvalidInputError("Gallery does not exist");
+    }
+
+    const folderName = await redis.client.hGet(metaKey, "folderName");
+    if (folderName && folderName.trim().length > 0) {
+      return folderName;
+    }
+
+    await redis.client.hSet(metaKey, { folderName: validGalleryName });
+    return validGalleryName;
   };
 
   listGalleries = async (guildId: string) => {
@@ -128,6 +165,7 @@ export class GalleryController {
 
   createGallery = async (req: CreateGalleryRequest, userId: string) => {
     const validUserId = validateString(userId, "User ID is required");
+    const validatedGalleryName = validateString(req.galleryName, GalleryNameError);
 
     const result = createGallerySchema.safeParse(req);
     if (!result.success) {
@@ -135,14 +173,22 @@ export class GalleryController {
     }
 
     const expiresAt = Date.now() + req.ttlWeeks * 7 * 24 * 60 * 60 * 1000;
-    const { listKey, memberKey, metaKey } = this.#galleryKeys(req.guildId, req.galleryName);
+    const { listKey, memberKey, metaKey } = this.#galleryKeys(req.guildId, validatedGalleryName);
     if (!metaKey) {
       throw new Error("Internal error: missing meta key");
     }
 
     const guildSet = await redis.client.sMembers(listKey);
-    if (guildSet.includes(req.galleryName)) {
+    if (guildSet.includes(validatedGalleryName)) {
       throw new InvalidInputError("Gallery name already exists");
+    }
+
+    const folderName = normalizeGalleryFolderName(validatedGalleryName);
+    const hasFolderCollision = guildSet.some(
+      (name) => normalizeGalleryFolderName(name) === folderName,
+    );
+    if (hasFolderCollision) {
+      throw new InvalidInputError("A gallery with this folder already exists");
     }
 
     const meta = galleryMetaSchema.parse({
@@ -150,20 +196,25 @@ export class GalleryController {
       expiresAt,
       ttlWeeks: req.ttlWeeks,
       createdBy: validUserId,
+      folderName,
     });
 
     const multi = redis.client.multi();
-    multi.sAdd(listKey, req.galleryName);
-    multi.hSet(metaKey, {
+    multi.sAdd(listKey, validatedGalleryName);
+    const metaPayload: Record<string, string> = {
       createdAt: String(meta.createdAt),
       expiresAt: String(meta.expiresAt),
       ttlWeeks: String(meta.ttlWeeks),
       createdBy: meta.createdBy,
-    });
+    };
+    if (meta.folderName) {
+      metaPayload.folderName = meta.folderName;
+    }
+    multi.hSet(metaKey, metaPayload);
     multi.zAdd(EXPIRES_ZSET, [{ score: expiresAt, value: memberKey }]);
     await multi.exec();
 
-    await this.#bucketService.createBucketFolder(validateString(req.galleryName, GalleryNameError));
+    await this.#bucketService.createBucketFolder(meta.folderName ?? folderName);
 
     return meta;
   };
@@ -174,11 +225,16 @@ export class GalleryController {
     guildId: string,
     objectPath: string,
   ) => {
+    const folderName = await this.#getGalleryFolderName(guildId, galleryName);
+
     // Single image upload
     if (
       this.#uploadService.isImageMime(file.mimetype) ||
       this.#uploadService.allowedImageExts.has(extname(file.originalname).toLowerCase())
     ) {
+      if (this.#isAppleDoubleFile(file.originalname)) {
+        throw new InvalidInputError("macOS resource fork files are not supported");
+      }
       const ext = extname(file.originalname).toLowerCase();
       const base = file.originalname.replace(ext, "");
       const objectName = this.#uploadService.buildObjectName(
@@ -187,7 +243,7 @@ export class GalleryController {
       );
       const contentType = file.mimetype || mimeFromExt(ext) || "application/octet-stream";
 
-      await this.#bucketService.uploadBufferToBucket(galleryName, objectName, file.buffer, {
+      await this.#bucketService.uploadBufferToBucket(folderName, objectName, file.buffer, {
         "Content-Type": String(contentType),
         Name: base,
       });
@@ -230,15 +286,20 @@ export class GalleryController {
 
       // Process ZIP file asynchronously (don't await)
       Promise.resolve().then(() => {
-        this.#processZipUpload(jobId, file.buffer, galleryName, objectPath).catch(async (err) => {
-          appLogger.error({ err, jobId }, "[uploadToGallery] Failed to process ZIP for job");
-          // Ensure job is marked as failed if async processing throws
-          try {
-            await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
-          } catch (updateErr) {
-            appLogger.error({ updateErr, jobId }, "[uploadToGallery] Failed to update job status");
-          }
-        });
+        this.#processZipUpload(jobId, file.buffer, galleryName, folderName, objectPath).catch(
+          async (err) => {
+            appLogger.error({ err, jobId }, "[uploadToGallery] Failed to process ZIP for job");
+            // Ensure job is marked as failed if async processing throws
+            try {
+              await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+            } catch (updateErr) {
+              appLogger.error(
+                { updateErr, jobId },
+                "[uploadToGallery] Failed to update job status",
+              );
+            }
+          },
+        );
       });
 
       return {
@@ -254,6 +315,7 @@ export class GalleryController {
     jobId: string,
     buffer: Buffer,
     galleryName: string,
+    folderName: string,
     objectPath: string,
   ) => {
     const timeoutError = new Error("ZIP processing timed out.");
@@ -331,7 +393,9 @@ export class GalleryController {
 
       const imageEntries = directory.files.filter((entry) => {
         if (entry.type !== "File") return false;
-        const ext = extname(entry.path || "").toLowerCase();
+        const entryPath = entry.path || "";
+        if (this.#isAppleDoubleFile(entryPath)) return false;
+        const ext = extname(entryPath).toLowerCase();
         return this.#uploadService.allowedImageExts.has(ext);
       });
 
@@ -389,6 +453,13 @@ export class GalleryController {
         }
 
         const entryPath = entry.path || "";
+        if (this.#isAppleDoubleFile(entryPath)) {
+          appLogger.debug(
+            { jobId, entryPath },
+            "[GalleryController.#processZipUpload] Skipping AppleDouble resource",
+          );
+          continue;
+        }
         const ext = extname(entryPath).toLowerCase();
 
         const size = entry.uncompressedSize ?? entry.extra?.uncompressedSize ?? 0;
@@ -428,7 +499,7 @@ export class GalleryController {
           });
 
           await this.#bucketService.uploadStreamToBucket(
-            galleryName,
+            folderName,
             objectName,
             nodeStream,
             size || undefined,
@@ -524,14 +595,16 @@ export class GalleryController {
     }
   };
 
-  getGalleryContents = async (name: string) => {
+  getGalleryContents = async (guildId: string, name: string) => {
     const validatedName = validateString(name, GalleryNameError);
-    console.log("Getting contents for gallery:", validatedName);
+    const folderName = await this.#getGalleryFolderName(guildId, validatedName);
     const contents = await this.#bucketService.getBucketFolderContents(
-      `${validatedName}/uploads`,
+      `${folderName}/uploads`,
       true,
     );
-    const filteredContents = contents.filter((item) => item.size && item.size > 0);
+    const filteredContents = contents.filter((item) => {
+      return item.size && item.size > 0 && !this.#isAppleDoubleFile(item.name);
+    });
     return {
       gallery: name,
       count: filteredContents.length,
@@ -568,6 +641,8 @@ export class GalleryController {
     const validGuildId = validateString(guildId, "Guild ID is required");
     const validOldName = validateString(oldName, "Old gallery name is required");
     const validNewName = validateString(newName, "New gallery name is required");
+    const currentFolderName = await this.#getGalleryFolderName(validGuildId, validOldName);
+    const newFolderName = normalizeGalleryFolderName(validNewName);
 
     const multi = redis.client.multi();
     const {
@@ -591,6 +666,12 @@ export class GalleryController {
     if (guildSet.includes(validNewName)) {
       throw new InvalidInputError("New gallery name already exists");
     }
+    const folderCollision = guildSet
+      .filter((name) => name !== validOldName)
+      .some((name) => normalizeGalleryFolderName(name) === newFolderName);
+    if (folderCollision) {
+      throw new InvalidInputError("A gallery with this folder already exists");
+    }
 
     multi.sRem(listKey, validOldName);
     multi.sAdd(listKey, validNewName);
@@ -599,12 +680,15 @@ export class GalleryController {
     multi.zAdd(EXPIRES_ZSET, [{ score: 0, value: newMemberKey }]);
     await multi.exec();
 
-    await this.#bucketService.renameBucketFolder(validOldName, validNewName);
+    await redis.client.hSet(newMetaKey, { folderName: newFolderName });
+
+    await this.#bucketService.renameBucketFolder(currentFolderName, newFolderName);
   };
 
   removeGallery = async (guildId: string, galleryName: string) => {
     const validatedGuildId = validateString(guildId, "Guild ID is required");
     const validatedName = validateString(galleryName, GalleryNameError);
+    const folderName = await this.#getGalleryFolderName(validatedGuildId, validatedName);
 
     const { listKey, memberKey, metaKey } = this.#galleryKeys(validatedGuildId, validatedName);
     if (!metaKey) {
@@ -617,8 +701,8 @@ export class GalleryController {
     multi.zRem(EXPIRES_ZSET, memberKey);
     await multi.exec();
 
-    await this.#bucketService.emptyBucketFolder(validatedName);
-    await this.#bucketService.deleteBucketFolder(validatedName);
+    await this.#bucketService.emptyBucketFolder(folderName);
+    await this.#bucketService.deleteBucketFolder(folderName);
   };
 
   setDefaultGallery = async (body: SetDefaultGalleryRequest, userId: string) => {
@@ -641,15 +725,16 @@ export class GalleryController {
     return job;
   };
 
-  getImage = async (galleryName: string, imagePath: string) => {
+  getImage = async (guildId: string, galleryName: string, imagePath: string) => {
     const validatedGalleryName = validateString(galleryName, GalleryNameError);
+    const folderName = await this.#getGalleryFolderName(guildId, validatedGalleryName);
     const validatedImagePath = validateString(imagePath, ImagePathError);
 
     // Sanitize path to prevent traversal attacks
     const sanitizedImagePath = this.#uploadService.sanitizeKeySegment(validatedImagePath);
 
     // Build the full S3 key
-    const key = `${validatedGalleryName}/uploads/${sanitizedImagePath}`;
+    const key = `${folderName}/uploads/${sanitizedImagePath}`;
 
     // Get the object from S3
     return await this.#bucketService.getObject(key);

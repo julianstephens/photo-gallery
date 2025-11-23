@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 import type { GalleryItem as GI } from "utils";
 import { GalleryItem } from "./GalleryItem";
 
-export const Gallery = ({ galleryName }: { galleryName: string }) => {
+export const Gallery = ({ guildId, galleryName }: { guildId: string; galleryName: string }) => {
   const [errored, setErrored] = useState(false);
-  const { data, isLoading, error } = useListGalleryItems(galleryName);
+  const { data, isLoading, error } = useListGalleryItems(guildId, galleryName);
 
   useEffect(() => {
     if (error) {

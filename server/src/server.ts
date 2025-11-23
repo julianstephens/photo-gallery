@@ -70,14 +70,11 @@ export const createApp = () => {
 
   app.use(routers.healthRouter);
 
-  // Rate limits
-  app.use("/auth", authRateLimiter);
-  app.use("/api", apiRateLimiter);
-
-  // API routes
+  // API routes with scoped rate limits
+  app.use("/api/auth", authRateLimiter);
   app.use("/api", routers.authRouter);
-  app.use("/api", routers.galleryRouter);
-  app.use("/api", routers.guildRouter);
+  app.use("/api", apiRateLimiter, routers.galleryRouter);
+  app.use("/api", apiRateLimiter, routers.guildRouter);
 
   // 404 and centralized error handling
   app.use(notFoundHandler);

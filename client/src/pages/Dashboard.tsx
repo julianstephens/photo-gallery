@@ -1,9 +1,12 @@
 import { GallerySelect, GuildSelect } from "@/components/forms/Fields";
 import { Gallery } from "@/components/Gallery";
 import { Loader } from "@/components/Loader";
+import { SetDefaultGuildButton } from "@/components/SetDefaultGuild";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useAuth, useDefaultGuild } from "@/hooks";
-import { Button, Flex, Heading } from "@chakra-ui/react";
+import { Box, Button, Flex, Heading, IconButton } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
+import { HiArrowUp } from "react-icons/hi";
 import { useNavigate } from "react-router";
 
 const Dashboard = () => {
@@ -19,6 +22,10 @@ const Dashboard = () => {
 
   const updateGallery = (selectedGallery: string) => {
     setGallery(selectedGallery);
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -57,15 +64,27 @@ const Dashboard = () => {
         </Flex>
       </Flex>
       <Flex id="dashboard-content" direction="column" gap="4" mt="8" h="full" w="full">
-        <GuildSelect value={guild} onChange={updateGuild} />
+        <Flex gap="4" mb="4">
+          <GuildSelect value={guild} onChange={updateGuild} />
+          <Box w="fit" alignSelf="last baseline" mb="0.5rem">
+            <SetDefaultGuildButton defaultGuild={guild} />
+          </Box>
+        </Flex>
         <GallerySelect
           guild={guild}
           setGuild={updateGuild}
           value={gallery}
           onChange={updateGallery}
         />
-        <Gallery galleryName={gallery} />
+        <Gallery guildId={guild} galleryName={gallery} />
       </Flex>
+      <Box position="fixed" bottom="1rem" right="3rem">
+        <Tooltip content="Scroll to top">
+          <IconButton rounded="full" onClick={scrollToTop}>
+            <HiArrowUp />
+          </IconButton>
+        </Tooltip>
+      </Box>
     </Flex>
   );
 };

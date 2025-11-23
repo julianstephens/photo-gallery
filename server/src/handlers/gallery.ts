@@ -28,8 +28,13 @@ export const listGalleryItems = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing galleryName parameter" });
   }
 
+  const guildId = String(req.query.guildId || "");
+  if (!guildId) {
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
+
   try {
-    const items = await galleryController.getGalleryContents(galleryName);
+    const items = await galleryController.getGalleryContents(guildId, galleryName);
     res.json(items);
   } catch (err: unknown) {
     console.error("[listGalleryItems] error:", err);
@@ -150,6 +155,7 @@ export const getImage = async (req: Request, res: Response) => {
   const galleryName = req.params.galleryName;
   const rawImagePath = req.params.imagePath;
   const imagePath = Array.isArray(rawImagePath) ? rawImagePath.join("/") : rawImagePath;
+  const guildId = String(req.query.guildId || "");
 
   if (!galleryName) {
     return res.status(400).json({ error: "Missing galleryName parameter" });
@@ -159,8 +165,12 @@ export const getImage = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing imagePath parameter" });
   }
 
+  if (!guildId) {
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
+
   try {
-    const { data, contentType } = await galleryController.getImage(galleryName, imagePath);
+    const { data, contentType } = await galleryController.getImage(guildId, galleryName, imagePath);
 
     // Set cache headers for CDN support
     res.setHeader("Content-Type", contentType);

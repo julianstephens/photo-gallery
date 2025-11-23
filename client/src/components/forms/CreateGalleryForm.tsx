@@ -5,7 +5,7 @@ import { createGallery } from "@/queries";
 import { toErrorMessage } from "@/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Navigate } from "react-router";
 import { type CreateGalleryRequest, createGallerySchema } from "utils";
@@ -64,7 +64,7 @@ export const CreateGalleryForm = ({
     setDoSubmit(false);
     const form = document.getElementById("create-gallery-form");
     form?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
-  }, [doSubmit, setDoSubmit]);
+  }, [doSubmit, setDoSubmit, errors]);
 
   return (
     <form id="create-gallery-form" onSubmit={handleSubmit(onSubmit)}>
@@ -93,6 +93,9 @@ export const CreateGalleryForm = ({
             maxValue={6}
             invalid={!!errors.ttlWeeks}
             {...field}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              field.onChange(parseInt(e.target.value))
+            }
           />
         )}
       />

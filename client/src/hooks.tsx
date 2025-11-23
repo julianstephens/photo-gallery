@@ -56,11 +56,11 @@ export const useDefaultGuild = () => {
   return guildId;
 };
 
-export const useListGalleryItems = (galleryName: string) => {
+export const useListGalleryItems = (guildId: string, galleryName: string) => {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["galleryItems", { galleryName }],
-    queryFn: () => listGalleryItems(galleryName),
-    enabled: Boolean(galleryName),
+    queryKey: ["galleryItems", { guildId, galleryName }],
+    queryFn: () => listGalleryItems(guildId, galleryName),
+    enabled: Boolean(guildId && galleryName),
   });
   return { data, isLoading, error };
 };

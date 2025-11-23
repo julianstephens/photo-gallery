@@ -8,7 +8,16 @@ export const apiRateLimiter: RateLimitRequestHandler = rateLimit({
   legacyHeaders: false,
   validate: true,
   message: { error: "Too many requests, please try again later." },
-  skip: (req) => req.ip === "::1",
+  skip: (req) => {
+    if (req.ip === "::1") {
+      return true;
+    }
+    const originalUrl = req.originalUrl || "";
+    if (req.method === "GET" && originalUrl.includes("/galleries/upload/")) {
+      return true;
+    }
+    return false;
+  },
   handler: (req, res, _next, options) => {
     const reset = (req as typeof req & { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
     if (reset instanceof Date) {
