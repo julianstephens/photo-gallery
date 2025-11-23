@@ -17,3 +17,34 @@ Photo Gallery 5000 is a full-stack gallery management tool optimized for Discord
 - **Shared Validation** – Zod schemas compile into TypeScript types that both React forms and Express handlers consume, guaranteeing aligned validation rules across the stack.
 
 This repository favors clear separation between request validation, controller logic, and infrastructure concerns, enabling confident iteration on either side of the stack while maintaining testable boundaries.
+
+## Architecture Diagram
+
+```
+┌────────────┐        HTTPS/JSON        ┌────────────┐        Redis commands        ┌────────┐
+│  Client    │ ───────────────────────▶ │  Server    │ ───────────────────────────▶ │ Redis  │
+│ (React +   │ ◀─────────────────────── │ (Express   │ ◀─────────────────────────── │        │
+│  React     │   Upload job polling     │  handlers, │   Session + gallery meta     └────────┘
+│  Query)    │                          │  controllers│
+└────┬───────┘                          └────┬───────┘
+	│   Uploads (images/ZIP)                │  Streams/buffers
+	▼                                        ▼
+┌────────────┐  Signed object access   ┌────────────┐
+│  Browser   │◀───────────────────────▶│   S3 /     │
+│  Gallery   │                        │  Object    │
+│  Viewer    │  Direct image viewing  │  Storage   │
+└────────────┘                        └────┬───────┘
+								   │
+								   │ ZIP processing watchdog
+								   ▼
+							    ┌────────────┐
+							    │ Upload Job │
+							    │   Service  │
+							    └────────────┘
+```
+
+Data flow summary:
+
+- Users interact with the React client, which calls Express APIs and streams uploads directly through the server.
+- The server reads/writes gallery metadata and session data in Redis while streaming binary objects into S3-compatible storage.
+- Background ZIP jobs update Redis progress so the client can poll for status, and the browser fetches finalized images straight from object storage using presigned URLs.
