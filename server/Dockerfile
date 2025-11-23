@@ -3,6 +3,7 @@ FROM node:20-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PNPM_STORE_PATH="${PNPM_HOME}/store"
 ENV PATH="${PNPM_HOME}:${PATH}"
+ENV HUSKY=0
 WORKDIR /app
 RUN corepack enable
 
@@ -24,7 +25,7 @@ WORKDIR /app
 COPY --from=deps /pnpm/store /pnpm/store
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json server/package.json
-RUN pnpm install --filter server --prod --frozen-lockfile
+RUN npm_config_ignore_scripts=true pnpm install --filter server --prod --frozen-lockfile
 COPY --from=build /app/server/dist ./server/dist
 
 EXPOSE 4000
