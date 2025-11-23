@@ -169,7 +169,10 @@ export const getImage = async (req: Request, res: Response) => {
     if ((err as Error)?.name === "InvalidInputError") {
       return res.status(400).json({ error: (err as Error).message });
     }
+    if ((err as Error)?.name === "NoSuchKey") {
+      return res.status(404).json({ error: "Image not found" });
+    }
     appLogger.error({ err, galleryName, imagePath }, "[getImage] error");
-    res.status(404).json({ error: "Image not found" });
+    res.status(500).json({ error: "Failed to retrieve image" });
   }
 };
