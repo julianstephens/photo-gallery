@@ -35,6 +35,8 @@ export const envSchema = z.object({
   JSON_LIMIT: z.string().default("1mb"),
   URLENCODED_LIMIT: z.string().default("1mb"),
   COOKIE_SECRET: z.string().min(16).optional(),
+  COOKIE_SECURE: z.coerce.boolean().optional(),
+  COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).optional(),
   SESSION_COOKIE_DOMAIN: z.string().optional(),
   ADMIN_USER_IDS: z.string().transform((val) =>
     val

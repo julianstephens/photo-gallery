@@ -60,15 +60,15 @@ export const createApp = () => {
     secret: env.SESSION_SECRET,
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: env.COOKIE_SAMESITE ?? (env.NODE_ENV === "production" ? "none" : "lax"),
+      secure: env.COOKIE_SECURE ?? env.NODE_ENV === "production",
     },
   };
 
   if (env.NODE_ENV === "production") {
     app.set("trust proxy", 1);
-    sess.cookie = { secure: true, sameSite: "none", ...sess.cookie };
-    if (env.SESSION_COOKIE_DOMAIN) {
-      sess.cookie = { ...sess.cookie, domain: env.SESSION_COOKIE_DOMAIN };
+    if (env.SESSION_COOKIE_DOMAIN && sess.cookie) {
+      sess.cookie.domain = env.SESSION_COOKIE_DOMAIN;
     }
   }
 
