@@ -10,7 +10,7 @@ import {
   type UploadToGalleryRequest,
   type User,
 } from "utils";
-import { httpClient } from "./clients";
+import { httpClient, uploadHttpClient } from "./clients";
 
 export const listGalleries = async (guildId: string): Promise<Gallery[]> => {
   const res = await httpClient.get<Gallery[]>("/galleries", { params: { guildId } });
@@ -69,7 +69,7 @@ export const uploadToGallery = async (
   formData.append("galleryName", uploadReq.galleryName);
   formData.append("file", uploadReq.file);
 
-  const response = await httpClient.post("/galleries/upload", formData, {
+  const response = await uploadHttpClient.post("/galleries/upload", formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },

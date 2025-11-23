@@ -1,29 +1,39 @@
 import { QueryClient } from "@tanstack/react-query";
-import axios, { AxiosError } from "axios";
+import axios, { AxiosError, type AxiosInstance } from "axios";
 
 type RetriableAxiosError = AxiosError & { retryAfterMs?: number };
 
-// Axios instance with credentials for API calls
-export const httpClient = axios.create({
-  baseURL: "/api",
-  withCredentials: true,
-});
-
-// Response interceptor to attach parsed Retry-After (ms) to error for queries & manual polling
-httpClient.interceptors.response.use(
-  (res) => res,
-  (error: AxiosError) => {
-    const retriableError = error as RetriableAxiosError;
-    const retryAfterHeader = error.response?.headers?.["retry-after"];
-    if (retryAfterHeader) {
-      const seconds = parseInt(String(retryAfterHeader), 10);
-      if (Number.isFinite(seconds) && seconds > 0) {
-        retriableError.retryAfterMs = seconds * 1000;
+const attachRetryAfterInterceptor = (client: AxiosInstance) => {
+  client.interceptors.response.use(
+    (res) => res,
+    (error: AxiosError) => {
+      const retriableError = error as RetriableAxiosError;
+      const retryAfterHeader = error.response?.headers?.["retry-after"];
+      if (retryAfterHeader) {
+        const seconds = parseInt(String(retryAfterHeader), 10);
+        if (Number.isFinite(seconds) && seconds > 0) {
+          retriableError.retryAfterMs = seconds * 1000;
+        }
       }
-    }
-    return Promise.reject(retriableError);
-  },
-);
+      return Promise.reject(retriableError);
+    },
+  );
+};
+
+const createHttpClient = (baseURL: string) => {
+  const instance = axios.create({
+    baseURL,
+    withCredentials: true,
+  });
+  attachRetryAfterInterceptor(instance);
+  return instance;
+};
+
+const uploadBaseURL = import.meta.env.VITE_UPLOAD_BASE_URL as string | undefined;
+
+// Axios instance with credentials for API calls
+export const httpClient = createHttpClient("/api");
+export const uploadHttpClient = uploadBaseURL ? createHttpClient(uploadBaseURL) : httpClient;
 
 // Exponential backoff with jitter (±20%) capped
 const computeBackoffMs = (attempt: number, base = 1000, max = 30000) => {
