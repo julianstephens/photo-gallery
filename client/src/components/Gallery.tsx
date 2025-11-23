@@ -1,6 +1,5 @@
 import { Loader } from "@/components/Loader";
 import { useListGalleryItems } from "@/hooks";
-import { ImageSize } from "@/utils";
 import { Box, Flex, Text } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import type { GalleryItem as GI } from "utils";
@@ -9,7 +8,6 @@ import { GalleryItem } from "./GalleryItem";
 export const Gallery = ({ galleryName }: { galleryName: string }) => {
   const [errored, setErrored] = useState(false);
   const { data, isLoading, error } = useListGalleryItems(galleryName);
-  const [defaultImageSize] = useState<string>(ImageSize.SM);
 
   useEffect(() => {
     if (error) {
@@ -19,7 +17,7 @@ export const Gallery = ({ galleryName }: { galleryName: string }) => {
         setErrored(false);
       }
     }
-  }, [error, data, isLoading, defaultImageSize]);
+  }, [error, data, isLoading]);
 
   return (
     <Flex id="gallery" w="full" h="full" pb="4rem">
