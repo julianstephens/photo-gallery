@@ -80,7 +80,7 @@ export class BucketService {
     return resp.Metadata ?? {};
   }
 
-  getObject = async (key: string): Promise<{ data: Buffer; contentType: string }> => {
+  async getObject(key: string): Promise<{ data: Buffer; contentType: string }> {
     await this.ensureBucket();
     const resp = await this.#s3.send(
       new GetObjectCommand({
@@ -105,7 +105,7 @@ export class BucketService {
       data: Buffer.concat(chunks),
       contentType,
     };
-  };
+  }
 
   // List all objects under a prefix, handling pagination via ContinuationToken
   async #listAllFolderObjects(prefix: string) {
@@ -175,7 +175,6 @@ export class BucketService {
           size: o.Size,
           url: await this.createPresignedUrl(key),
           metadata: await this.#getObjectMetadata(key),
-          content: undefined,
         };
       }),
     );

@@ -26,6 +26,7 @@ class UnsupportedMimeTypeError extends Error {
 }
 
 const GalleryNameError = "Gallery name cannot be empty";
+const ImagePathError = "Image path is required";
 const MAX_ZIP_ENTRIES = 1000;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024; // 500 MB guardrail
 const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every N files
@@ -588,7 +589,7 @@ export class GalleryController {
 
   getImage = async (galleryName: string, imagePath: string) => {
     const validatedGalleryName = validateString(galleryName, GalleryNameError);
-    const validatedImagePath = validateString(imagePath, "Image path is required");
+    const validatedImagePath = validateString(imagePath, ImagePathError);
 
     // Build the full S3 key
     const key = `${validatedGalleryName}/uploads/${validatedImagePath}`;

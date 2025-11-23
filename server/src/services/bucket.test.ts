@@ -384,8 +384,10 @@ describe("BucketService", () => {
       service = await BucketService.create();
       const result = await service.getBucketFolderContents("test-bucket", true);
       expect(result).toHaveLength(1);
-      expect(result[0]).toHaveProperty("content");
-      expect(result[0].content).toBeUndefined();
+      expect(result[0]).not.toHaveProperty("content");
+      expect(result[0]).toHaveProperty("name");
+      expect(result[0]).toHaveProperty("url");
+      expect(result[0]).toHaveProperty("metadata");
     });
   });
 
