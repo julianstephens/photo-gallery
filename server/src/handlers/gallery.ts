@@ -145,3 +145,35 @@ export const getUploadJob = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to get upload job" });
   }
 };
+
+export const getImage = async (req: Request, res: Response) => {
+  const galleryName = req.params.galleryName;
+  const rawImagePath = req.params.imagePath;
+  const imagePath = Array.isArray(rawImagePath) ? rawImagePath.join("/") : rawImagePath;
+
+  if (!galleryName) {
+    return res.status(400).json({ error: "Missing galleryName parameter" });
+  }
+
+  if (!imagePath) {
+    return res.status(400).json({ error: "Missing imagePath parameter" });
+  }
+
+  try {
+    const { data, contentType } = await galleryController.getImage(galleryName, imagePath);
+
+    // Set cache headers for CDN support
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(data);
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "InvalidInputError") {
+      return res.status(400).json({ error: (err as Error).message });
+    }
+    if ((err as Error)?.name === "NoSuchKey") {
+      return res.status(404).json({ error: "Image not found" });
+    }
+    appLogger.error({ err, galleryName, imagePath }, "[getImage] error");
+    res.status(500).json({ error: "Failed to retrieve image" });
+  }
+};

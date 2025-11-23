@@ -1,7 +1,82 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UploadService } from "../services/upload.ts";
+import { GalleryController } from "./gallery.ts";
+
+const redisMocks = vi.hoisted(() => ({
+  sMembersMock: vi.fn(),
+  multiMock: vi.fn(),
+}));
+
+type PipelineOperation = { cmd: string; args: unknown[] };
+type Pipeline = {
+  ops: PipelineOperation[];
+  hGetAll: (key: string) => Pipeline;
+  sRem: (key: string, member: string) => Pipeline;
+  del: (key: string) => Pipeline;
+  zRem: (key: string, member: string) => Pipeline;
+  exec: () => Promise<unknown>;
+};
+
+const execResults: unknown[] = [];
+const pipelines: Pipeline[] = [];
+const execCallOrder: PipelineOperation[][] = [];
+
+const createPipeline = (): Pipeline => {
+  const ops: PipelineOperation[] = [];
+  const pipeline: Pipeline = {
+    ops,
+    hGetAll(key: string) {
+      ops.push({ cmd: "hGetAll", args: [key] });
+      return this;
+    },
+    sRem(key: string, member: string) {
+      ops.push({ cmd: "sRem", args: [key, member] });
+      return this;
+    },
+    del(key: string) {
+      ops.push({ cmd: "del", args: [key] });
+      return this;
+    },
+    zRem(key: string, member: string) {
+      ops.push({ cmd: "zRem", args: [key, member] });
+      return this;
+    },
+    exec() {
+      execCallOrder.push([...ops]);
+      return Promise.resolve(execResults.shift());
+    },
+  };
+  return pipeline;
+};
+
+vi.mock("../redis.ts", () => ({
+  default: {
+    client: {
+      sMembers: redisMocks.sMembersMock,
+      multi: redisMocks.multiMock,
+    },
+    store: {},
+  },
+}));
 
 describe("GalleryAPI Unit Tests", () => {
+  beforeEach(() => {
+    execResults.length = 0;
+    pipelines.length = 0;
+    execCallOrder.length = 0;
+    redisMocks.sMembersMock.mockReset();
+    redisMocks.multiMock.mockReset();
+    redisMocks.multiMock.mockImplementation(() => {
+      const pipeline = createPipeline();
+      pipelines.push(pipeline);
+      return pipeline;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe("Input validation", () => {
     it("should validate empty strings", () => {
       const validateString = (value: string, errorMessage?: string) => {
@@ -42,6 +117,66 @@ describe("GalleryAPI Unit Tests", () => {
       expect(uploadService.allowedImageExts.has(".png")).toBe(true);
       expect(uploadService.allowedImageExts.has(".gif")).toBe(true);
       expect(uploadService.allowedImageExts.has(".pdf")).toBe(false);
+    });
+  });
+
+  describe("listGalleries", () => {
+    it("returns only active galleries and cleans up expired entries", async () => {
+      const now = 1_700_000_000_000;
+      const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
+
+      redisMocks.sMembersMock.mockResolvedValue(["active", "expired"]);
+      execResults.push([
+        {
+          createdAt: String(now - 1_000),
+          expiresAt: String(now + 10_000),
+          ttlWeeks: "1",
+          createdBy: "user-a",
+        },
+        {
+          createdAt: String(now - 5_000),
+          expiresAt: String(now - 100),
+          ttlWeeks: "1",
+          createdBy: "user-b",
+        },
+      ]);
+      execResults.push([]);
+
+      const controller = new GalleryController();
+      const result = await controller.listGalleries("guild-123");
+
+      expect(result).toEqual([
+        {
+          name: "active",
+          meta: {
+            createdAt: now - 1_000,
+            expiresAt: now + 10_000,
+            ttlWeeks: 1,
+            createdBy: "user-a",
+          },
+        },
+      ]);
+
+      expect(pipelines).toHaveLength(2);
+      const cleanupOps = pipelines[1].ops;
+      expect(cleanupOps).toEqual([
+        { cmd: "sRem", args: ["guild:guild-123:galleries", "expired"] },
+        { cmd: "del", args: ["guild:guild-123:gallery:expired:meta"] },
+        { cmd: "zRem", args: ["galleries:expiries", "guild:guild-123:gallery:expired"] },
+      ]);
+      expect(execCallOrder).toHaveLength(2);
+      expect(execCallOrder[0]).toEqual(pipelines[0].ops);
+      expect(execCallOrder[1]).toEqual(cleanupOps);
+
+      nowSpy.mockRestore();
+    });
+
+    it("short-circuits when no galleries exist", async () => {
+      redisMocks.sMembersMock.mockResolvedValue([]);
+      const controller = new GalleryController();
+      const result = await controller.listGalleries("guild-123");
+      expect(result).toEqual([]);
+      expect(redisMocks.multiMock).not.toHaveBeenCalled();
     });
   });
 });

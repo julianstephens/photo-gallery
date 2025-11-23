@@ -35,8 +35,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build
+        run: pnpm build
+
       - name: Lint
         run: pnpm lint
+
+      - name: Prepare test env
+        working-directory: server
+        run: |
+          cat <<'EOF' > .env
+            PORT="3000"
+            S3_ENDPOINT="http://localhost"
+            S3_ACCESS_KEY="test"
+            S3_SECRET_KEY="test"
+            CLIENT_URL="http://localhost:5173"
+            DISCORD_API_URL="https://discord.com/api/v10"
+            DISCORD_CLIENT_ID=test
+            DISCORD_CLIENT_SECRET=test
+            DISCORD_REDIRECT_URI="http://localhost/api/auth/discord"
+            MASTER_BUCKET_NAME="test-bucket"
+            REDIS_HOST="localhost"
+            REDIS_PORT="6379"
+            REDIS_USER="default"
+            REDIS_PASSWORD="test"
+            SESSION_SECRET="test"
+            ADMIN_USER_IDS="test"
+          EOF
 
       - name: Run tests (all workspaces)
         run: pnpm -r test

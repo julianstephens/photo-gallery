@@ -170,7 +170,7 @@ export const GallerySelect = (
       const opts = data.map((g) => ({ value: g.name, label: g.name }));
       setSelectOpts(opts);
       if (opts.length === 1) {
-        props.onChange(opts[0].value);
+        void props.onChange(opts[0].value);
       }
     }
   }, [data, isLoading, error, props]);

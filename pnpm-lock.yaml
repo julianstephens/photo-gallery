@@ -1122,6 +1122,7 @@ packages:
   '@smithy/core@3.18.3':
     resolution: {integrity: sha512-qqpNskkbHOSfrbFbjhYj5o8VMXO26fvN1K/+HbCzUNlTuxgNcPRouUDNm+7D6CkN244WG7aK533Ne18UtJEgAA==}
     engines: {node: '>=18.0.0'}
+    deprecated: Please upgrade your lockfile to use the latest 3.x version of @smithy/core for various fixes, see https://github.com/smithy-lang/smithy-typescript/blob/main/packages/core/CHANGELOG.md
 
   '@smithy/credential-provider-imds@4.2.4':
     resolution: {integrity: sha512-YVNMjhdz2pVto5bRdux7GMs0x1m0Afz3OcQy/4Yf9DH4fWOtroGH7uLvs7ZmDyoBJzLdegtIPpXrpJOZWvUXdw==}

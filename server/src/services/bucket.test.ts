@@ -370,11 +370,8 @@ describe("BucketService", () => {
     });
   });
 
-  describe("getBucketFolderContents with content", () => {
-    it("should include content data when withContent is true", async () => {
-      const { Readable } = await import("stream");
-      const mockBody = Readable.from([Buffer.from("test content")]);
-
+  describe("getBucketFolderContents", () => {
+    it("should not include content data to optimize performance", async () => {
       mockS3.send
         .mockResolvedValueOnce({}) // HeadBucket in ctor
         .mockResolvedValueOnce({}) // HeadBucket in method
@@ -382,14 +379,55 @@ describe("BucketService", () => {
           Contents: [{ Key: "test-bucket/file.txt", Size: 100 }],
           IsTruncated: false,
         })
-        .mockResolvedValueOnce({ Metadata: {} }) // HeadObject
-        .mockResolvedValueOnce({ Body: mockBody }); // GetObject
+        .mockResolvedValueOnce({ Metadata: {} }); // HeadObject
 
       service = await BucketService.create();
-      const result = await service.getBucketFolderContents("test-bucket", true, true);
+      const result = await service.getBucketFolderContents("test-bucket", true);
       expect(result).toHaveLength(1);
-      expect(result[0]).toHaveProperty("content");
-      expect(result[0].content).toBeDefined();
+      expect(result[0]).not.toHaveProperty("content");
+      expect(result[0]).toHaveProperty("name");
+      expect(result[0]).toHaveProperty("url");
+      expect(result[0]).toHaveProperty("metadata");
+    });
+  });
+
+  describe("getObject", () => {
+    it("should fetch object with content type", async () => {
+      const { Readable } = await import("stream");
+      const mockBody = Readable.from([Buffer.from("test image data")]);
+
+      mockS3.send
+        .mockResolvedValueOnce({}) // HeadBucket in ctor
+        .mockResolvedValueOnce({}) // HeadBucket in method
+        .mockResolvedValueOnce({
+          Body: mockBody,
+          ContentType: "image/jpeg",
+        }); // GetObject
+
+      service = await BucketService.create();
+      const result = await service.getObject("test-bucket/image.jpg");
+
+      expect(result).toHaveProperty("data");
+      expect(result).toHaveProperty("contentType");
+      expect(result.contentType).toBe("image/jpeg");
+      expect(result.data.toString()).toBe("test image data");
+    });
+
+    it("should default to application/octet-stream if no content type", async () => {
+      const { Readable } = await import("stream");
+      const mockBody = Readable.from([Buffer.from("test data")]);
+
+      mockS3.send
+        .mockResolvedValueOnce({}) // HeadBucket in ctor
+        .mockResolvedValueOnce({}) // HeadBucket in method
+        .mockResolvedValueOnce({
+          Body: mockBody,
+        }); // GetObject
+
+      service = await BucketService.create();
+      const result = await service.getObject("test-bucket/file");
+
+      expect(result.contentType).toBe("application/octet-stream");
     });
   });
 });
