@@ -5,10 +5,8 @@ ENV PNPM_STORE_PATH="${PNPM_HOME}/store"
 ENV PATH="${PNPM_HOME}:${PATH}"
 ENV HUSKY=0
 WORKDIR /app
-RUN corepack enable
-RUN apk update && \
-    apk add curl && \
-    rm -rf /var/cache/apk/*
+RUN corepack enable && apk add --no-cache curl
+
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
