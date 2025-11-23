@@ -66,7 +66,7 @@ export const createApp = () => {
 
   if (env.NODE_ENV === "production") {
     app.set("trust proxy", 1);
-    sess.cookie = { secure: true, ...sess.cookie };
+    sess.cookie = { secure: true, sameSite: "none", ...sess.cookie };
     if (env.SESSION_COOKIE_DOMAIN) {
       sess.cookie = { ...sess.cookie, domain: env.SESSION_COOKIE_DOMAIN };
     }
