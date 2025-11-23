@@ -75,6 +75,15 @@ export const createApp = () => {
     }
     app.set("trust proxy", trustProxy);
 
+    // Force protocol to https if we are behind a proxy that terminates SSL but doesn't set the header correctly
+    // or if we are in a known secure environment (like Cloudflare Tunnel)
+    app.use((req, _res, next) => {
+      if (req.headers["x-forwarded-proto"] === "http") {
+        req.headers["x-forwarded-proto"] = "https";
+      }
+      next();
+    });
+
     if (env.SESSION_COOKIE_DOMAIN && sess.cookie) {
       sess.cookie.domain = env.SESSION_COOKIE_DOMAIN;
     }
