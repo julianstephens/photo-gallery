@@ -4,14 +4,13 @@ import env from "../schemas/env.ts";
 import type { AuthSessionData, DiscordTokenResponse, TokenParam } from "../types.ts";
 
 export class AuthController {
-  #params: URLSearchParams;
-
-  constructor() {
-    this.#params = new URLSearchParams({
+  #buildTokenParams(code: string) {
+    return new URLSearchParams({
       client_id: env.DISCORD_CLIENT_ID,
       client_secret: env.DISCORD_CLIENT_SECRET,
       grant_type: "authorization_code",
       redirect_uri: env.DISCORD_REDIRECT_URI,
+      code,
     });
   }
 
@@ -20,11 +19,10 @@ export class AuthController {
   };
 
   login = async (code: string): Promise<AuthSessionData> => {
-    this.#params.append("code", code);
-
+    const params = this.#buildTokenParams(code);
     const { data } = await axios.post<DiscordTokenResponse>(
       `${env.DISCORD_API_URL}/oauth2/token`,
-      this.#params.toString(),
+      params.toString(),
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
@@ -44,7 +42,9 @@ export class AuthController {
     };
   };
 
-  logout() {}
+  logout() {
+    // No server-side action needed; session will be destroyed in the handler
+  }
 
   getCurrentUser = async ({ accessToken }: TokenParam) => {
     const { data } = await axios.get<DiscordUser>(`${env.DISCORD_API_URL}/users/@me`, {
