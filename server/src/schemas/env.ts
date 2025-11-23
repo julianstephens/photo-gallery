@@ -25,6 +25,10 @@ export const envSchema = z.object({
     .transform((val) => parseInt(val, 10)),
   REDIS_USER: z.string(),
   REDIS_PASSWORD: z.string(),
+  REDIS_DB: z
+    .string()
+    .default("1")
+    .transform((val) => parseInt(val, 10)),
   SESSION_SECRET: z.string(),
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
   CORS_CREDENTIALS: z.coerce.boolean().default(false),

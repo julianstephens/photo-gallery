@@ -1,9 +1,9 @@
+import { RedisStore } from "connect-redis";
 import { createClient } from "redis";
 import env from "./schemas/env.ts";
-import { RedisStore } from "connect-redis";
 
 const redisClient = createClient({
-  url: `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/1`,
+  url: `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`,
 });
 redisClient.connect().catch(console.error);
 
