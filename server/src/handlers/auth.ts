@@ -16,7 +16,12 @@ export const discordCallback = async (req: Request, res: Response) => {
     req.session.refreshToken = session.refreshToken;
     req.session.expiresAt = session.expiresAt;
     req.session.isAdmin = session.isAdmin;
-    return res.redirect(env.CLIENT_URL);
+    req.session.save((err) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to save session" });
+      }
+      return res.redirect(env.CLIENT_URL);
+    });
   } catch (err: unknown) {
     const axErr = err as AxiosError<unknown>;
     const status = axErr.response?.status ?? 500;

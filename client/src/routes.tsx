@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import AdminDashboard from "./pages/AdminDashboard";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/Landing";
+import NotFoundPage from "./pages/NotFound";
 
 export const AppRoutes = () => {
   return (
@@ -16,6 +17,7 @@ export const AppRoutes = () => {
         <Route element={<ProtectedRoute requiresAdmin={true} />}>
           <Route path="admin" element={<AdminDashboard />} />
         </Route>
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   );
