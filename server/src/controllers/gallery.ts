@@ -591,8 +591,11 @@ export class GalleryController {
     const validatedGalleryName = validateString(galleryName, GalleryNameError);
     const validatedImagePath = validateString(imagePath, ImagePathError);
 
+    // Sanitize path to prevent traversal attacks
+    const sanitizedImagePath = this.#uploadService.sanitizeKeySegment(validatedImagePath);
+
     // Build the full S3 key
-    const key = `${validatedGalleryName}/uploads/${validatedImagePath}`;
+    const key = `${validatedGalleryName}/uploads/${sanitizedImagePath}`;
 
     // Get the object from S3
     return await this.#bucketService.getObject(key);

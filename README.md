@@ -8,10 +8,21 @@ This application has been optimized for fast image loading and scalability:
 
 ### Image Delivery Architecture
 
+The application uses **presigned S3 URLs** as the primary image delivery method:
+
 - **Metadata-Only Listings**: Gallery listing endpoints return only image metadata (filename, dimensions, presigned URLs) rather than binary image data
 - **Direct Image URLs**: Images are served via presigned S3 URLs, allowing browsers to cache and parallelize downloads
 - **Lazy Loading**: Images use native browser lazy loading (`loading="lazy"`) to defer loading off-screen images
-- **Cache-Control Headers**: The `/api/images/:galleryName/*` endpoint sets aggressive cache headers for CDN support
+
+#### Alternative Endpoint (Optional)
+
+For environments where direct S3 access is restricted or unavailable, the `/api/images/:galleryName/*` endpoint provides an alternative image delivery method:
+
+- Serves images proxied through the API server
+- Sets aggressive cache headers (`Cache-Control: public, max-age=31536000, immutable`) for CDN support
+- Can be used as a fallback when presigned URLs expire or are inaccessible
+
+**Note**: The frontend currently uses presigned S3 URLs directly. The `/api/images/*` endpoint is available but not actively used by the client.
 
 ### CDN Integration (Recommended)
 
