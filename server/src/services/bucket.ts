@@ -80,23 +80,32 @@ export class BucketService {
     return resp.Metadata ?? {};
   }
 
-  async #getObjectContent(key: string): Promise<Buffer> {
+  getObject = async (key: string): Promise<{ data: Buffer; contentType: string }> => {
+    await this.ensureBucket();
     const resp = await this.#s3.send(
       new GetObjectCommand({
         Bucket: this.#bucketName,
         Key: key,
       }),
     );
+
+    const contentType = resp.ContentType || "application/octet-stream";
+
     if (!resp.Body) {
-      return Buffer.alloc(0);
+      return { data: Buffer.alloc(0), contentType };
     }
+
     const stream = resp.Body as Readable;
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
-    return Buffer.concat(chunks);
-  }
+
+    return {
+      data: Buffer.concat(chunks),
+      contentType,
+    };
+  };
 
   // List all objects under a prefix, handling pagination via ContinuationToken
   async #listAllFolderObjects(prefix: string) {
@@ -148,7 +157,6 @@ export class BucketService {
   getBucketFolderContents = async (
     name: string,
     recursive?: boolean,
-    withContent?: boolean,
   ): Promise<Array<GalleryItem>> => {
     if (recursive === undefined) recursive = true;
     await this.ensureBucket();
@@ -162,19 +170,12 @@ export class BucketService {
           return null;
         }
         const relative = key.startsWith(prefix) ? key.slice(prefix.length) : key;
-        const contentType = o.Key ? `image/${o.Key.split(".").pop()}` : "application/octet-stream";
         return {
           name: relative,
           size: o.Size,
           url: await this.createPresignedUrl(key),
           metadata: await this.#getObjectMetadata(key),
-          content: withContent
-            ? {
-                data: await this.#getObjectContent(key),
-                contentLength: o.Size ?? 0,
-                contentType,
-              }
-            : undefined,
+          content: undefined,
         };
       }),
     );

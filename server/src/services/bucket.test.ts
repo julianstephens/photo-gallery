@@ -370,11 +370,8 @@ describe("BucketService", () => {
     });
   });
 
-  describe("getBucketFolderContents with content", () => {
-    it("should include content data when withContent is true", async () => {
-      const { Readable } = await import("stream");
-      const mockBody = Readable.from([Buffer.from("test content")]);
-
+  describe("getBucketFolderContents", () => {
+    it("should not include content data to optimize performance", async () => {
       mockS3.send
         .mockResolvedValueOnce({}) // HeadBucket in ctor
         .mockResolvedValueOnce({}) // HeadBucket in method
@@ -382,14 +379,13 @@ describe("BucketService", () => {
           Contents: [{ Key: "test-bucket/file.txt", Size: 100 }],
           IsTruncated: false,
         })
-        .mockResolvedValueOnce({ Metadata: {} }) // HeadObject
-        .mockResolvedValueOnce({ Body: mockBody }); // GetObject
+        .mockResolvedValueOnce({ Metadata: {} }); // HeadObject
 
       service = await BucketService.create();
-      const result = await service.getBucketFolderContents("test-bucket", true, true);
+      const result = await service.getBucketFolderContents("test-bucket", true);
       expect(result).toHaveLength(1);
       expect(result[0]).toHaveProperty("content");
-      expect(result[0].content).toBeDefined();
+      expect(result[0].content).toBeUndefined();
     });
   });
 });

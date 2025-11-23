@@ -475,7 +475,6 @@ export class GalleryController {
     const contents = await this.#bucketService.getBucketFolderContents(
       `${validatedName}/uploads`,
       true,
-      true,
     );
     const filteredContents = contents.filter((item) => item.size && item.size > 0);
     return {
@@ -585,5 +584,16 @@ export class GalleryController {
       throw new InvalidInputError("Upload job not found");
     }
     return job;
+  };
+
+  getImage = async (galleryName: string, imagePath: string) => {
+    const validatedGalleryName = validateString(galleryName, GalleryNameError);
+    const validatedImagePath = validateString(imagePath, "Image path is required");
+
+    // Build the full S3 key
+    const key = `${validatedGalleryName}/uploads/${validatedImagePath}`;
+
+    // Get the object from S3
+    return await this.#bucketService.getObject(key);
   };
 }
