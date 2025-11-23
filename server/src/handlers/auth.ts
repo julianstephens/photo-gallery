@@ -16,8 +16,23 @@ export const discordCallback = async (req: Request, res: Response) => {
     req.session.refreshToken = session.refreshToken;
     req.session.expiresAt = session.expiresAt;
     req.session.isAdmin = session.isAdmin;
+
+    console.log("Debug Session Save:", {
+      secure: req.secure,
+      protocol: req.protocol,
+      trustProxy: req.app.get("trust proxy"),
+      headers: {
+        "x-forwarded-proto": req.headers["x-forwarded-proto"],
+        "x-forwarded-for": req.headers["x-forwarded-for"],
+        host: req.headers.host,
+      },
+      sessionID: req.sessionID,
+      cookie: req.session.cookie,
+    });
+
     req.session.save((err) => {
       if (err) {
+        console.error("Session save error:", err);
         return res.status(500).json({ error: "Failed to save session" });
       }
       return res.redirect(env.CLIENT_URL);

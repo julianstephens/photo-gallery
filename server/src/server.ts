@@ -65,8 +65,16 @@ export const createApp = () => {
     },
   };
 
-  if (env.NODE_ENV === "production") {
-    app.set("trust proxy", 1);
+  if (env.NODE_ENV === "production" || env.TRUST_PROXY) {
+    let trustProxy: number | string | boolean = 1;
+    if (env.TRUST_PROXY) {
+      if (env.TRUST_PROXY.toLowerCase() === "true") trustProxy = true;
+      else if (env.TRUST_PROXY.toLowerCase() === "false") trustProxy = false;
+      else if (!Number.isNaN(Number(env.TRUST_PROXY))) trustProxy = Number(env.TRUST_PROXY);
+      else trustProxy = env.TRUST_PROXY;
+    }
+    app.set("trust proxy", trustProxy);
+
     if (env.SESSION_COOKIE_DOMAIN && sess.cookie) {
       sess.cookie.domain = env.SESSION_COOKIE_DOMAIN;
     }
