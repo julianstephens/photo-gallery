@@ -1,5 +1,6 @@
 import { lookup as mimeFromExt } from "mime-types";
 import { extname } from "path";
+import type { Readable } from "stream";
 import unzipper from "unzipper";
 import {
   createGallerySchema,
@@ -30,6 +31,7 @@ const ImagePathError = "Image path is required";
 const MAX_ZIP_ENTRIES = 1000;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024; // 500 MB guardrail
 const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every N files
+export const ZIP_WATCHDOG_TIMEOUT_MS = 5 * 60 * 1000; // Prevent hung ZIP processing (5 minutes)
 
 export class GalleryController {
   #bucketService: BucketService;
@@ -254,12 +256,49 @@ export class GalleryController {
     galleryName: string,
     objectPath: string,
   ) => {
+    const timeoutError = new Error("ZIP processing timed out.");
+    let watchdogTimer: NodeJS.Timeout | undefined;
+    let watchdogTriggered = false;
+    let activeStream: Readable | null = null;
+
+    const clearWatchdog = () => {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+        watchdogTimer = undefined;
+      }
+    };
+
+    const throwIfWatchdogTriggered = () => {
+      if (watchdogTriggered) {
+        throw timeoutError;
+      }
+    };
+
+    const trackStreamForWatchdog = (stream: Readable | null) => {
+      activeStream = stream;
+      if (watchdogTriggered && stream) {
+        stream.destroy(timeoutError);
+      }
+    };
+
+    watchdogTimer = setTimeout(() => {
+      watchdogTriggered = true;
+      appLogger.error(
+        { jobId, galleryName },
+        "[processZipUpload] ZIP watchdog triggered after timeout",
+      );
+      if (activeStream) {
+        activeStream.destroy(timeoutError);
+      }
+    }, ZIP_WATCHDOG_TIMEOUT_MS);
+
     try {
       appLogger.info(
         { jobId, galleryName, objectPath, bufferSize: buffer.length },
         "[GalleryController.#processZipUpload] Starting ZIP processing",
       );
       await this.#uploadJobService.updateJobStatus(jobId, "processing");
+      throwIfWatchdogTriggered();
 
       const uploaded: Array<{ key: string; contentType: string | false | null }> = [];
       const failed: Array<{ filename: string; error: string }> = [];
@@ -270,9 +309,10 @@ export class GalleryController {
       const timestamp = Date.now();
 
       const startedAt = Date.now();
-      const MAX_PROCESSING_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+      const MAX_PROCESSING_DURATION_MS = ZIP_WATCHDOG_TIMEOUT_MS;
 
       const directory = await unzipper.Open.buffer(buffer);
+      throwIfWatchdogTriggered();
       appLogger.info(
         { jobId, entryCount: directory.files.length },
         "[GalleryController.#processZipUpload] Opened ZIP directory",
@@ -323,6 +363,7 @@ export class GalleryController {
 
       let entriesSeen = 0;
       for (const entry of imageEntries) {
+        throwIfWatchdogTriggered();
         entriesSeen += 1;
         if (entriesSeen === 1) {
           appLogger.info(
@@ -373,11 +414,17 @@ export class GalleryController {
           );
 
           const nodeStream = entry.stream();
+          trackStreamForWatchdog(nodeStream);
           nodeStream.on("error", (err) => {
             appLogger.error(
               { err, jobId, filename },
               "[GalleryController.#processZipUpload] Entry stream error",
             );
+          });
+          nodeStream.once("close", () => {
+            if (activeStream === nodeStream) {
+              trackStreamForWatchdog(null);
+            }
           });
 
           await this.#bucketService.uploadStreamToBucket(
@@ -389,6 +436,8 @@ export class GalleryController {
               "Content-Type": String(contentType),
             },
           );
+          trackStreamForWatchdog(null);
+          throwIfWatchdogTriggered();
 
           uploaded.push({ key: objectName, contentType });
           appLogger.info(
@@ -398,6 +447,7 @@ export class GalleryController {
         } catch (err) {
           appLogger.error({ err, jobId, filename }, "[processZipUpload] Failed to upload file");
           failed.push({ filename, error: String(err) });
+          throwIfWatchdogTriggered();
           continue;
         }
 
@@ -458,8 +508,10 @@ export class GalleryController {
       // Clean up job from list after completion
       await this.#uploadJobService.finalizeJob(jobId);
     } catch (err) {
+      const isWatchdogTimeout = err instanceof Error && err.message === timeoutError.message;
       appLogger.error({ err, jobId }, "[processZipUpload] Error processing ZIP for job");
-      await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+      const failureMessage = isWatchdogTimeout ? timeoutError.message : String(err);
+      await this.#uploadJobService.updateJobStatus(jobId, "failed", failureMessage);
 
       // Clean up job from list after failure
       try {
@@ -467,6 +519,8 @@ export class GalleryController {
       } catch (cleanupErr) {
         appLogger.error({ cleanupErr, jobId }, "[processZipUpload] Failed to cleanup job");
       }
+    } finally {
+      clearWatchdog();
     }
   };
 

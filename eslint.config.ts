@@ -18,6 +18,7 @@ export default [
       "coverage",
       "**/public",
       "**/dist",
+      "**/coverage",
       "client/src/components/ui",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
