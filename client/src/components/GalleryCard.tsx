@@ -1,4 +1,6 @@
-import { getUploadJob, uploadToGallery } from "@/queries";
+import { useUploadJobWorker } from "@/hooks/useUploadJobWorker";
+import { uploadToGallery } from "@/queries";
+import { uploadJobStore } from "@/uploadJobStore";
 import {
   Button,
   Card,
@@ -9,9 +11,9 @@ import {
   type FileUploadFileAcceptDetails,
 } from "@chakra-ui/react";
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { HiTrash, HiUpload } from "react-icons/hi";
-import type { Gallery, UploadJob } from "utils";
+import type { Gallery } from "utils";
 import { toaster } from "./ui/toaster";
 
 export interface GalleryCardProps {
@@ -22,79 +24,89 @@ export interface GalleryCardProps {
 
 export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
     jobId: string;
     status: string;
     progress?: { processedFiles: number; totalFiles: number };
   } | null>(null);
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const uploadFileMutation = useMutation({
-    mutationFn: uploadToGallery,
-  });
+  const { start, stop, state: workerState } = useUploadJobWorker();
 
-  const pollUploadJob = async (jobId: string) => {
-    try {
-      const job = (await getUploadJob(jobId)) as UploadJob;
-      setUploadProgress({
-        jobId,
-        status: job.status,
-        progress: job.progress,
-      });
+  const uploadFileMutation = useMutation({ mutationFn: uploadToGallery });
 
-      if (job.status === "completed") {
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
-        setIsLoading(false);
-        toaster.success({
-          title: "Upload Completed",
-          description: `Successfully uploaded ${job.progress?.uploadedFiles.length ?? 0} files.`,
-        });
-        setUploadProgress(null);
-      } else if (job.status === "failed") {
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
-        setIsLoading(false);
-        toaster.error({
-          title: "Upload Failed",
-          description: job.error || "Upload failed",
-        });
-        setUploadProgress(null);
-      }
-    } catch (err: unknown) {
-      console.error("Error polling upload job:", err);
-      // Distinguish between transient and permanent errors
-      // If error has a response and status is 404, treat as permanent (job not found)
-      const error = err as { status?: number; response?: { status?: number } };
-      if (error && (error.status === 404 || error?.response?.status === 404)) {
-        if (pollingIntervalRef.current) {
-          clearInterval(pollingIntervalRef.current);
-          pollingIntervalRef.current = null;
-        }
-        setIsLoading(false);
-        setUploadProgress(null);
-        toaster.error({
-          title: "Upload Job Not Found",
-          description: "The upload job could not be found. It may have expired or been deleted.",
-        });
-      } else {
-        // Transient error (e.g., network), just log and continue polling
-        // Optionally, show a non-intrusive warning/toast if desired
-        // Do not clear interval or reset state
-      }
-    }
+  const openModalWithLoading = async () => {
+    setDeleteLoading(true);
+    openConfirmDeleteModal?.();
+    setDeleteLoading(false);
   };
+
+  // Sync worker state into component state for display + side effects.
+  useEffect(() => {
+    if (!workerState) return;
+    console.log("[GalleryCard] Worker state changed", workerState);
+    if (workerState.status === "running" && workerState.job) {
+      setUploadProgress({
+        jobId: workerState.job.id,
+        status: workerState.job.status,
+        progress: workerState.job.progress,
+      });
+    }
+
+    if (workerState.status === "completed" && workerState.job) {
+      setIsLoading(false);
+      toaster.success({
+        title: "Upload Completed",
+        description: "Upload completed.",
+      });
+      setUploadProgress(null);
+    }
+
+    if (workerState.status === "failed") {
+      setIsLoading(false);
+      toaster.error({ title: "Upload Failed", description: workerState.error || "Upload failed" });
+      setUploadProgress(null);
+    }
+
+    if (workerState.status === "timeout") {
+      setIsLoading(false);
+      toaster.error({
+        title: "Upload Timeout",
+        description: "Upload processing took too long and was cancelled.",
+      });
+      setUploadProgress(null);
+    }
+
+    if (workerState.status === "not_found") {
+      setIsLoading(false);
+      toaster.error({
+        title: "Upload Job Not Found",
+        description: "The upload job could not be found. It may have expired or been deleted.",
+      });
+      setUploadProgress(null);
+    }
+  }, [workerState]);
+
+  // On mount, reattach to any active upload job for this gallery
+  useEffect(() => {
+    const key = uploadJobStore.makeKey(guildId, info.name);
+    const existingJobId = uploadJobStore.getActiveJob(key);
+    if (existingJobId) {
+      console.log("[GalleryCard] Reattaching to existing upload job", {
+        guildId,
+        galleryName: info.name,
+        jobId: existingJobId,
+      });
+      setIsLoading(true);
+      start(existingJobId);
+    }
+  }, [guildId, info.name, start]);
 
   const uploadFiles = async (details: FileUploadFileAcceptDetails) => {
     setIsLoading(true);
-    const errs = [];
+    const errs: unknown[] = [];
     let hasAsyncUpload = false;
 
-    // Separate files into ZIP and non-ZIP
     const zipFiles = details.files.filter(
       (f) =>
         f.name.toLowerCase().endsWith(".zip") ||
@@ -103,7 +115,6 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
     );
     const imageFiles = details.files.filter((f) => !zipFiles.includes(f));
 
-    // Only allow one ZIP file at a time to avoid polling conflicts
     if (zipFiles.length > 1) {
       toaster.error({
         title: "Multiple ZIP Files",
@@ -113,17 +124,16 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
       return;
     }
 
-    // Don't allow mixing ZIP and image files to avoid UX confusion
     if (zipFiles.length > 0 && imageFiles.length > 0) {
       toaster.error({
         title: "Mixed File Types",
-        description: "Please upload either image files or a ZIP file, not both at the same time.",
+        description: "Upload either image files OR a ZIP, not both.",
       });
       setIsLoading(false);
       return;
     }
 
-    // Process image files first
+    // Upload images (synchronous)
     for (const file of imageFiles) {
       try {
         const result = await uploadFileMutation.mutateAsync({
@@ -131,12 +141,8 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
           galleryName: info.name,
           file,
         });
-
         if (result.type === "sync") {
-          toaster.success({
-            title: "Upload Successful",
-            description: `${file.name} uploaded successfully.`,
-          });
+          toaster.success({ title: "Upload Successful", description: `${file.name} uploaded.` });
         }
       } catch (err) {
         errs.push(err);
@@ -144,34 +150,34 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
       }
     }
 
-    // Process ZIP file if present
+    // Upload ZIP (async)
     if (zipFiles.length === 1) {
       const zipFile = zipFiles[0];
       try {
+        console.log("[GalleryCard] Starting ZIP upload", {
+          guildId,
+          galleryName: info.name,
+          filename: zipFile.name,
+          size: zipFile.size,
+        });
         const result = await uploadFileMutation.mutateAsync({
           guildId,
           galleryName: info.name,
           file: zipFile,
         });
-
-        // Handle async uploads (ZIP files)
         if (result.type === "async" && result.jobId) {
           hasAsyncUpload = true;
-          const jobId = result.jobId; // Capture jobId in local variable
+          console.log("[GalleryCard] Received async jobId for ZIP upload", {
+            jobId: result.jobId,
+          });
+          const key = uploadJobStore.makeKey(guildId, info.name);
+          uploadJobStore.setActiveJob(key, result.jobId);
+          start(result.jobId);
           toaster.info({
             title: "Processing Upload",
-            description: "Your ZIP file is being processed. Please wait...",
+            description: "ZIP file is being processed. You can continue browsing.",
           });
-
-          // Start polling for job status
-          pollingIntervalRef.current = setInterval(() => {
-            void pollUploadJob(jobId);
-          }, 2000); // Poll every 2 seconds
-
-          // Initial poll
-          void pollUploadJob(jobId);
-          // Don't set loading to false - polling will handle it
-          return;
+          return; // defer completion until async finishes
         }
       } catch (err) {
         errs.push(err);
@@ -179,26 +185,16 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
       }
     }
 
-    // Only handle errors and set loading to false if no async uploads are in progress
     if (!hasAsyncUpload) {
       if (errs.length > 0) {
-        toaster.error({
-          title: "Upload Error",
-          description: `${errs.length} files failed to upload.`,
-        });
+        toaster.error({ title: "Upload Error", description: `${errs.length} file(s) failed.` });
       }
       setIsLoading(false);
     }
   };
 
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, []);
+  // Cleanup on unmount: stop worker
+  useEffect(() => () => stop(), [stop]);
 
   return (
     <Card.Root>
@@ -215,7 +211,7 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
           <Flex direction="column" h="full" gap="2">
             {uploadProgress && (
               <Flex direction="column" gap={1} w="full" p={2} bg="gray.50" borderRadius="md">
-                <Text fontSize="sm" fontWeight="medium">
+                <Text fontSize="sm" fontWeight="medium" color="gray.800">
                   {uploadProgress.status === "processing"
                     ? "Processing..."
                     : uploadProgress.status === "pending"
@@ -242,7 +238,7 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
             >
               <FileUpload.HiddenInput />
               <FileUpload.Trigger asChild>
-                <Button variant="outline" loading={isLoading} disabled={isLoading}>
+                <Button variant="outline" loading={isLoading} disabled={isLoading || deleteLoading}>
                   <HiUpload />
                   Upload images
                 </Button>
@@ -251,9 +247,9 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
             <Button
               variant="subtle"
               colorPalette="red"
-              loading={isLoading}
-              disabled={isLoading}
-              onClick={openConfirmDeleteModal}
+              loading={deleteLoading}
+              disabled={deleteLoading || isLoading}
+              onClick={openModalWithLoading}
             >
               <Icon>
                 <HiTrash />

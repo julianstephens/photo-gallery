@@ -7,3 +7,4 @@ tmp
 coverage
 .DS_Store
 .vscode
+logs

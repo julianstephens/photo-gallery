@@ -64,7 +64,7 @@ export const GalleryItem = ({ item, imageSize }: GalleryItemProps) => {
   return (
     <Flex>
       <Tooltip content={name}>
-        <Link href={item.url}>
+        <Link href={item.url} target="_blank" rel="noopener noreferrer">
           <Image w={imageSize} src={imgSrc ?? undefined} alt={name} />
         </Link>
       </Tooltip>

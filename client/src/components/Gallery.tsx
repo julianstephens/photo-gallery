@@ -1,7 +1,7 @@
 import { Loader } from "@/components/Loader";
 import { useListGalleryItems } from "@/hooks";
 import { ImageSize } from "@/utils";
-import { createListCollection, Flex, Text } from "@chakra-ui/react";
+import { createListCollection, Flex, Grid, GridItem, Text } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import type { GalleryItem as GI } from "utils";
 import { GalleryItem } from "./GalleryItem";
@@ -55,11 +55,13 @@ export const Gallery = ({ galleryName }: { galleryName: string }) => {
             />
             <Text flexShrink={0}>{data?.count ?? 0} items</Text>
           </Flex>
-          <Flex direction="column" gap="4" w="full">
+          <Grid templateColumns="repeat(auto-fill, minmax(150px, 1fr))" gap="4">
             {data?.contents.map((item: GI) => (
-              <GalleryItem item={item} imageSize={parseInt(selectedSize[0])} key={item.name} />
+              <GridItem key={item.name}>
+                <GalleryItem item={item} imageSize={parseInt(selectedSize[0])} />
+              </GridItem>
             ))}
-          </Flex>
+          </Grid>
         </Flex>
       ) : (
         <Text m="auto">No items found in this gallery.</Text>
