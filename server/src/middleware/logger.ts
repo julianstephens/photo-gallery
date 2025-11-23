@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { dirname } from "node:path";
 import pino from "pino";
 import { pinoHttp, type Options as PinoHttpOptions } from "pino-http";
 import env from "../schemas/env.ts";
@@ -19,6 +21,34 @@ export const logger = pino({
   base: undefined,
   timestamp: pino.stdTimeFunctions.isoTime,
 });
+
+// Application logger: writes structured logs to file instead of console
+const appLogPath = "logs/app.log";
+try {
+  const logsDir = dirname(appLogPath);
+  mkdirSync(logsDir, { recursive: true });
+} catch {
+  // best-effort: if this fails, pino will still throw when writing
+}
+
+export const appLogger = pino(
+  {
+    level: env.LOG_LEVEL,
+    redact: {
+      paths: [
+        "req.headers.authorization",
+        "req.headers.cookie",
+        "res.headers.set-cookie",
+        "req.body.password",
+        "req.body.token",
+      ],
+      remove: true,
+    },
+    base: undefined,
+    timestamp: pino.stdTimeFunctions.isoTime,
+  },
+  pino.destination(appLogPath),
+);
 
 export const httpLogger = pinoHttp<IncomingMessage, ServerResponse>({
   logger,

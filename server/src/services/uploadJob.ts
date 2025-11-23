@@ -5,6 +5,7 @@ import redis from "../redis.ts";
 const UPLOAD_JOBS_PREFIX = "upload:job:";
 const UPLOAD_JOBS_LIST = "upload:jobs";
 const JOB_TTL_SECONDS = 24 * 60 * 60; // 24 hours
+const TERMINAL_JOB_TTL_SECONDS = 10 * 60; // Keep completed jobs for 10 minutes
 
 export class UploadJobService {
   #buildJobKey = (jobId: string) => `${UPLOAD_JOBS_PREFIX}${jobId}`;
@@ -119,5 +120,15 @@ export class UploadJobService {
     const jobKey = this.#buildJobKey(jobId);
     await redis.client.del(jobKey);
     await redis.client.lRem(UPLOAD_JOBS_LIST, 0, jobId);
+  };
+
+  finalizeJob = async (jobId: string) => {
+    const jobKey = this.#buildJobKey(jobId);
+    const exists = await redis.client.exists(jobKey);
+    if (!exists) {
+      return;
+    }
+    await redis.client.lRem(UPLOAD_JOBS_LIST, 0, jobId);
+    await redis.client.expire(jobKey, TERMINAL_JOB_TTL_SECONDS);
   };
 }
