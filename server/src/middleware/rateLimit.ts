@@ -1,7 +1,7 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { type RateLimitRequestHandler } from "express-rate-limit";
 
 // Generic API limiter (15 min window, 100 reqs per IP). Adjust per route group if needed.
-export const apiRateLimiter = rateLimit({
+export const apiRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: "draft-7", // RateLimit-* headers
@@ -9,13 +9,29 @@ export const apiRateLimiter = rateLimit({
   validate: true,
   message: { error: "Too many requests, please try again later." },
   skip: (req) => req.ip === "::1",
+  handler: (req, res, _next, options) => {
+    const reset = (req as typeof req & { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
+    if (reset instanceof Date) {
+      const deltaSec = Math.max(1, Math.ceil((reset.getTime() - Date.now()) / 1000));
+      res.setHeader("Retry-After", String(deltaSec));
+    }
+    res.status(options.statusCode).json(options.message);
+  },
 });
 
 // Stricter limiter for auth endpoints
-export const authRateLimiter = rateLimit({
+export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { error: "Too many auth attempts. Please wait." },
+  handler: (req, res, _next, options) => {
+    const reset = (req as typeof req & { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
+    if (reset instanceof Date) {
+      const deltaSec = Math.max(1, Math.ceil((reset.getTime() - Date.now()) / 1000));
+      res.setHeader("Retry-After", String(deltaSec));
+    }
+    res.status(options.statusCode).json(options.message);
+  },
 });

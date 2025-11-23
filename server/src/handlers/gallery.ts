@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { createGallerySchema, removeGallerySchema, setDefaultGallerySchema } from "utils";
 import z from "zod";
+import { appLogger } from "../middleware/logger.ts";
 
 const galleryController = await import("../controllers/index.ts").then(
   (m) => new m.GalleryController(),
@@ -65,11 +66,16 @@ export const uploadToGallery = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing galleryName parameter" });
   }
 
+  const guildId = String(req.body.guildId || "");
+  if (!guildId) {
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
+
   const objectName = `uploads/${new Date().toISOString().slice(0, 10)}`;
 
   try {
-    const uploaded = await galleryController.uploadToGallery(file, galleryName, objectName);
-    res.status(201).json(uploaded);
+    const result = await galleryController.uploadToGallery(file, galleryName, guildId, objectName);
+    res.status(201).json(result);
   } catch (err: unknown) {
     const hasName = (e: unknown): e is { name?: string; message?: string } =>
       typeof e === "object" && e !== null && ("name" in e || "message" in e);
@@ -119,5 +125,23 @@ export const removeGallery = async (req: Request, res: Response) => {
     }
     console.error("[removeGallery] error:", err);
     res.status(500).json({ error: "Failed to remove gallery" });
+  }
+};
+
+export const getUploadJob = async (req: Request, res: Response) => {
+  const jobId = req.params.jobId;
+  if (!jobId) {
+    return res.status(400).json({ error: "Missing jobId parameter" });
+  }
+
+  try {
+    const job = await galleryController.getUploadJob(jobId);
+    res.json(job);
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "InvalidInputError") {
+      return res.status(404).json({ error: (err as Error).message });
+    }
+    appLogger.error({ err, jobId }, "[getUploadJob] error");
+    res.status(500).json({ error: "Failed to get upload job" });
   }
 };

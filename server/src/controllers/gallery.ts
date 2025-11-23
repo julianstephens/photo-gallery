@@ -1,6 +1,5 @@
 import { lookup as mimeFromExt } from "mime-types";
 import { extname } from "path";
-import { type Readable } from "stream";
 import unzipper from "unzipper";
 import {
   createGallerySchema,
@@ -8,21 +7,16 @@ import {
   type CreateGalleryRequest,
   type Gallery,
   type SetDefaultGalleryRequest,
+  type UploadJobProgress,
 } from "utils";
+import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 import { BucketService } from "../services/bucket.ts";
 import { UploadService } from "../services/upload.ts";
+import { UploadJobService } from "../services/uploadJob.ts";
 import { InvalidInputError, validateString } from "../utils.ts";
 
 const EXPIRES_ZSET = "galleries:expiries";
-
-// Narrow type for entries produced by unzipper.Parse() to avoid `any`
-type ZipEntry = NodeJS.ReadableStream & {
-  path: string;
-  type: "File" | "Directory";
-  autodrain: () => void;
-  vars?: { uncompressedSize?: number };
-};
 
 class UnsupportedMimeTypeError extends Error {
   constructor() {
@@ -34,14 +28,17 @@ class UnsupportedMimeTypeError extends Error {
 const GalleryNameError = "Gallery name cannot be empty";
 const MAX_ZIP_ENTRIES = 1000;
 const MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024; // 500 MB guardrail
+const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every N files
 
 export class GalleryController {
   #bucketService: BucketService;
   #uploadService: UploadService;
+  #uploadJobService: UploadJobService;
 
   constructor() {
     this.#bucketService = new BucketService();
     this.#uploadService = new UploadService();
+    this.#uploadJobService = new UploadJobService();
   }
 
   #recordToMetadata = (record: Record<string, string> | null) => {
@@ -63,14 +60,6 @@ export class GalleryController {
 
     return parsed;
   };
-
-  // #resolveGuild = (guild?: string) => {
-  //   // 1. get all guilds the user is in
-  //   // 2. if guild param is provided, check user is in that guild
-  //   // 3. if no guild param, use primary guild
-  //   // 4. if no primary guild, error
-  //   // 5. return guild id
-  // };
 
   #galleryKeys = (guildId: string, galleryName?: string) => {
     const listKey = `guild:${guildId}:galleries`;
@@ -176,7 +165,12 @@ export class GalleryController {
     return meta;
   };
 
-  uploadToGallery = async (file: Express.Multer.File, galleryName: string, objectPath: string) => {
+  uploadToGallery = async (
+    file: Express.Multer.File,
+    galleryName: string,
+    guildId: string,
+    objectPath: string,
+  ) => {
     // Single image upload
     if (
       this.#uploadService.isImageMime(file.mimetype) ||
@@ -196,91 +190,283 @@ export class GalleryController {
       });
 
       return {
+        type: "sync" as const,
         uploaded: [{ key: objectName, contentType }],
       };
     }
 
-    // ZIP upload
+    // ZIP upload - check if it's a ZIP file
     const isZipByExt = file.originalname.toLowerCase().endsWith(".zip");
     const isZipByMagic = this.#uploadService.looksLikeZip(file.buffer);
     const isZipByMime = this.#uploadService.isZipMime(file.mimetype);
 
     if (isZipByExt || isZipByMagic || isZipByMime) {
-      const uploaded: Array<{ key: string; contentType: string | false | null }> = [];
-      let totalBytes = 0;
-      let count = 0;
-
-      const zipStream = unzipper.Parse();
-
-      // Create a stream from the in-memory buffer
-      const { Readable } = await import("stream");
-      const src = Readable.from(file.buffer);
-      src.pipe(zipStream);
-
-      // Consume entries sequentially
-      for await (const entry of zipStream as AsyncIterable<ZipEntry>) {
-        const entryPath: string = entry.path || "";
-        const type: string = entry.type || "File";
-        if (type !== "File") {
-          entry.autodrain();
-          continue;
-        }
-
-        const ext = extname(entryPath).toLowerCase();
-        if (!this.#uploadService.allowedImageExts.has(ext)) {
-          entry.autodrain();
-          continue;
-        }
-
-        const size = entry.vars?.uncompressedSize ?? 0;
-        totalBytes += size;
-        count += 1;
-        if (count > MAX_ZIP_ENTRIES || totalBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
-          // Drain remaining entries, then bail
-          entry.autodrain();
-
-          for await (const rest of zipStream as AsyncIterable<ZipEntry>) {
-            rest.autodrain();
-          }
-          throw new InvalidInputError(
-            "ZIP limits exceeded (too many files or total size too large).",
-          );
-        }
-
-        const contentType = mimeFromExt(ext) || "application/octet-stream";
-        const filename = entryPath.split("/").pop() || `file${ext}`;
-        const objectName = this.#uploadService.buildObjectName(
-          objectPath,
-          `${Date.now()}-${filename}`,
-        );
-
-        // normalize to a Node.js Readable without using `any`
-        const hasPipe = typeof (entry as { pipe?: unknown }).pipe === "function";
-        const nodeStream = hasPipe
-          ? (entry as unknown as Readable)
-          : Readable.fromWeb(entry as unknown as globalThis.ReadableStream<Uint8Array>);
-
-        await this.#bucketService.uploadStreamToBucket(
+      appLogger.info(
+        {
+          guildId,
           galleryName,
-          objectName,
-          nodeStream,
-          size || undefined,
-          {
-            "Content-Type": String(contentType),
-          },
-        );
+          objectPath,
+          originalName: file.originalname,
+          size: file.size,
+        },
+        "[GalleryController.uploadToGallery] Received ZIP for async processing",
+      );
 
-        uploaded.push({ key: objectName, contentType });
-      }
+      // Create an upload job for async processing
+      const jobId = await this.#uploadJobService.createJob(
+        guildId,
+        galleryName,
+        file.originalname,
+        file.size,
+      );
 
-      if (uploaded.length === 0) {
-        throw new InvalidInputError("ZIP contained no supported image files.");
-      }
+      appLogger.info(
+        { jobId, guildId, galleryName, filename: file.originalname },
+        "[GalleryController.uploadToGallery] Created upload job",
+      );
 
-      return { uploaded };
+      // Process ZIP file asynchronously (don't await)
+      Promise.resolve().then(() => {
+        this.#processZipUpload(jobId, file.buffer, galleryName, objectPath).catch(async (err) => {
+          appLogger.error({ err, jobId }, "[uploadToGallery] Failed to process ZIP for job");
+          // Ensure job is marked as failed if async processing throws
+          try {
+            await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+          } catch (updateErr) {
+            appLogger.error({ updateErr, jobId }, "[uploadToGallery] Failed to update job status");
+          }
+        });
+      });
+
+      return {
+        type: "async" as const,
+        jobId,
+      };
     }
 
     throw new UnsupportedMimeTypeError();
+  };
+
+  #processZipUpload = async (
+    jobId: string,
+    buffer: Buffer,
+    galleryName: string,
+    objectPath: string,
+  ) => {
+    try {
+      appLogger.info(
+        { jobId, galleryName, objectPath, bufferSize: buffer.length },
+        "[GalleryController.#processZipUpload] Starting ZIP processing",
+      );
+      await this.#uploadJobService.updateJobStatus(jobId, "processing");
+
+      const uploaded: Array<{ key: string; contentType: string | false | null }> = [];
+      const failed: Array<{ filename: string; error: string }> = [];
+      let totalBytes = 0;
+      let processedCount = 0; // Files actually processed (uploaded or failed)
+
+      // Generate timestamp once for the entire batch to avoid collisions
+      const timestamp = Date.now();
+
+      const startedAt = Date.now();
+      const MAX_PROCESSING_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+      const directory = await unzipper.Open.buffer(buffer);
+      appLogger.info(
+        { jobId, entryCount: directory.files.length },
+        "[GalleryController.#processZipUpload] Opened ZIP directory",
+      );
+
+      if (!directory.files.length) {
+        appLogger.warn({ jobId }, "[processZipUpload] ZIP archive contained no entries");
+        await this.#uploadJobService.updateJobStatus(
+          jobId,
+          "failed",
+          "ZIP contained no supported image files.",
+        );
+        await this.#uploadJobService.finalizeJob(jobId);
+        return;
+      }
+
+      const imageEntries = directory.files.filter((entry) => {
+        if (entry.type !== "File") return false;
+        const ext = extname(entry.path || "").toLowerCase();
+        return this.#uploadService.allowedImageExts.has(ext);
+      });
+
+      if (imageEntries.length === 0) {
+        appLogger.warn(
+          { jobId },
+          "[processZipUpload] ZIP archive contained no supported image entries",
+        );
+        await this.#uploadJobService.updateJobStatus(
+          jobId,
+          "failed",
+          "ZIP contained no supported image files.",
+        );
+        await this.#uploadJobService.finalizeJob(jobId);
+        return;
+      }
+
+      if (imageEntries.length > MAX_ZIP_ENTRIES) {
+        await this.#uploadJobService.updateJobStatus(
+          jobId,
+          "failed",
+          "ZIP limits exceeded (too many files).",
+        );
+        await this.#uploadJobService.finalizeJob(jobId);
+        return;
+      }
+
+      const totalImageFiles = imageEntries.length;
+
+      let entriesSeen = 0;
+      for (const entry of imageEntries) {
+        entriesSeen += 1;
+        if (entriesSeen === 1) {
+          appLogger.info(
+            { jobId, entryPath: entry.path, entryType: entry.type },
+            "[GalleryController.#processZipUpload] First ZIP entry detected",
+          );
+        } else if (entriesSeen % 100 === 0) {
+          appLogger.info(
+            { jobId, entriesSeen },
+            "[GalleryController.#processZipUpload] Processed 100 ZIP entries",
+          );
+        }
+
+        if (Date.now() - startedAt > MAX_PROCESSING_DURATION_MS) {
+          appLogger.error({ jobId, galleryName }, "[processZipUpload] ZIP processing timed out");
+          await this.#uploadJobService.updateJobStatus(
+            jobId,
+            "failed",
+            "ZIP processing timed out.",
+          );
+          await this.#uploadJobService.finalizeJob(jobId);
+          return;
+        }
+
+        const entryPath = entry.path || "";
+        const ext = extname(entryPath).toLowerCase();
+
+        const size = entry.uncompressedSize ?? entry.extra?.uncompressedSize ?? 0;
+        totalBytes += size;
+
+        if (totalBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
+          await this.#uploadJobService.updateJobStatus(
+            jobId,
+            "failed",
+            "ZIP limits exceeded (too many files or total size too large).",
+          );
+          await this.#uploadJobService.finalizeJob(jobId);
+          return;
+        }
+
+        const filename = entryPath.split("/").pop() || `file${ext}`;
+
+        try {
+          const contentType = mimeFromExt(ext) || "application/octet-stream";
+          const objectName = this.#uploadService.buildObjectName(
+            objectPath,
+            `${timestamp}-${processedCount}-${filename}`,
+          );
+
+          const nodeStream = entry.stream();
+          nodeStream.on("error", (err) => {
+            appLogger.error(
+              { err, jobId, filename },
+              "[GalleryController.#processZipUpload] Entry stream error",
+            );
+          });
+
+          await this.#bucketService.uploadStreamToBucket(
+            galleryName,
+            objectName,
+            nodeStream,
+            size || undefined,
+            {
+              "Content-Type": String(contentType),
+            },
+          );
+
+          uploaded.push({ key: objectName, contentType });
+          appLogger.info(
+            { jobId, galleryName, objectName, filename, contentType },
+            "[GalleryController.#processZipUpload] Uploaded file",
+          );
+        } catch (err) {
+          appLogger.error({ err, jobId, filename }, "[processZipUpload] Failed to upload file");
+          failed.push({ filename, error: String(err) });
+          continue;
+        }
+
+        processedCount += 1;
+
+        if (processedCount % PROGRESS_UPDATE_INTERVAL === 0) {
+          // Send empty arrays for intermediate updates to minimize Redis payload size
+          // Full file lists are only sent in the final progress update
+          const progress: UploadJobProgress = {
+            processedFiles: processedCount,
+            totalFiles: totalImageFiles,
+            uploadedFiles: [],
+            failedFiles: [],
+          };
+          appLogger.info(
+            { jobId, processedFiles: progress.processedFiles, totalFiles: progress.totalFiles },
+            "[GalleryController.#processZipUpload] Updating intermediate progress",
+          );
+          void this.#uploadJobService.updateJobProgress(jobId, progress);
+        }
+      }
+
+      // If no image entries were found at all, fail the job explicitly
+      if (uploaded.length === 0) {
+        appLogger.warn(
+          { jobId, totalImageFiles, uploadedCount: uploaded.length },
+          "[processZipUpload] ZIP contained no supported image files",
+        );
+        await this.#uploadJobService.updateJobStatus(
+          jobId,
+          "failed",
+          "ZIP contained no supported image files.",
+        );
+        await this.#uploadJobService.finalizeJob(jobId);
+        return;
+      }
+
+      // Final progress update with full details
+      const finalProgress: UploadJobProgress = {
+        processedFiles: processedCount,
+        totalFiles: totalImageFiles,
+        uploadedFiles: uploaded,
+        failedFiles: failed,
+      };
+      await this.#uploadJobService.updateJobProgress(jobId, finalProgress);
+      await this.#uploadJobService.updateJobStatus(jobId, "completed");
+      appLogger.info(
+        {
+          jobId,
+          galleryName,
+          totalFiles: totalImageFiles,
+          uploadedCount: uploaded.length,
+          failedCount: failed.length,
+        },
+        "[GalleryController.#processZipUpload] Completed ZIP processing",
+      );
+
+      // Clean up job from list after completion
+      await this.#uploadJobService.finalizeJob(jobId);
+    } catch (err) {
+      appLogger.error({ err, jobId }, "[processZipUpload] Error processing ZIP for job");
+      await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+
+      // Clean up job from list after failure
+      try {
+        await this.#uploadJobService.finalizeJob(jobId);
+      } catch (cleanupErr) {
+        appLogger.error({ cleanupErr, jobId }, "[processZipUpload] Failed to cleanup job");
+      }
+    }
   };
 
   getGalleryContents = async (name: string) => {
@@ -391,5 +577,13 @@ export class GalleryController {
     await redis.client.set(key, validatedGalleryName);
 
     return { defaultGallery: validatedGalleryName };
+  };
+
+  getUploadJob = async (jobId: string) => {
+    const job = await this.#uploadJobService.getJob(jobId);
+    if (!job) {
+      throw new InvalidInputError("Upload job not found");
+    }
+    return job;
   };
 }

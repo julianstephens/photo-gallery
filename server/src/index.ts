@@ -1,3 +1,4 @@
+import { appLogger } from "./middleware/logger.ts";
 import env from "./schemas/env.ts";
 import { createApp, printRegisteredRoutes } from "./server.ts";
 
@@ -5,18 +6,18 @@ import { createApp, printRegisteredRoutes } from "./server.ts";
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   const app = createApp();
 
-  console.log("Registered Routes:");
+  appLogger.info("Registered Routes:");
   printRegisteredRoutes(app.router.stack);
   const server = app.listen(env.PORT, () => {
-    console.log(`Server listening on http://0.0.0.0:${env.PORT} (${env.NODE_ENV})`);
+    appLogger.info(`Server listening on http://0.0.0.0:${env.PORT} (${env.NODE_ENV})`);
   });
 
   // Graceful shutdown
   const shutdown = (signal: string) => {
-    console.log(`\n${signal} received, shutting down...`);
+    appLogger.info({ signal }, `${signal} received, shutting down...`);
     server.close((err?: Error) => {
       if (err) {
-        console.error("Error during server close:", err);
+        appLogger.error({ err }, "Error during server close");
         process.exit(1);
       }
       process.exit(0);

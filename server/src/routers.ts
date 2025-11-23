@@ -33,12 +33,13 @@ authRouter.get("/auth/me", handlers.getCurrentUser);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50 MB
+    fileSize: 500 * 1024 * 1024, // 500 MB - allow larger zip archives
   },
 });
 const galleryRouter = Router();
 galleryRouter.get("/galleries", handlers.listGalleries);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
+galleryRouter.get("/galleries/upload/:jobId", handlers.getUploadJob);
 galleryRouter.post("/galleries", handlers.createGallery);
 galleryRouter.post("/galleries/upload", upload.single("file"), handlers.uploadToGallery);
 galleryRouter.post("/galleries/default", handlers.setDefaultGallery);
