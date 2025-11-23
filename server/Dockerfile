@@ -28,22 +28,14 @@ RUN pnpm --filter utils build
 FROM deps AS build
 COPY server server
 RUN pnpm --filter server build
+RUN pnpm deploy --filter=server --prod /prod/server --legacy
+RUN cp -r server/dist /prod/server/dist
 
 FROM base AS runner
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy store from deps
-COPY --from=deps /pnpm/store /pnpm/store
-
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY server/package.json server/package.json
-COPY --from=deps /app/utils ./utils
-
-# Install prod dependencies (offline)
-RUN npm_config_ignore_scripts=true pnpm install --filter server --prod --frozen-lockfile --offline
-
-COPY --from=build /app/server/dist ./server/dist
+COPY --from=build /prod/server ./
 
 EXPOSE 4000
-CMD ["node", "server/dist/index.js"]
+CMD ["node", "dist/index.js"]
