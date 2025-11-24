@@ -39,9 +39,15 @@ const createHttpClient = (baseURL: string) => {
   return instance;
 };
 
+const appendTrailingSlash = (val: string) => (val.endsWith("/") ? val : `${val}/`);
+
 const computeApiBaseUrl = (value?: string) => {
-  if (!value || value.startsWith("/")) {
-    return value ?? "/api";
+  if (!value) {
+    return "/api/";
+  }
+
+  if (value.startsWith("/")) {
+    return appendTrailingSlash(value);
   }
 
   try {
@@ -49,9 +55,11 @@ const computeApiBaseUrl = (value?: string) => {
     if (!url.pathname || url.pathname === "/") {
       url.pathname = "/api";
     }
-    return url.toString().replace(/\/$/, "");
+    url.pathname = appendTrailingSlash(url.pathname);
+    return url.toString();
   } catch {
-    return value.endsWith("/api") ? value : `${value.replace(/\/$/, "")}/api`;
+    const normalized = value.endsWith("/api") ? value : `${value.replace(/\/$/, "")}/api`;
+    return appendTrailingSlash(normalized);
   }
 };
 
