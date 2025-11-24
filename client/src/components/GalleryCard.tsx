@@ -232,7 +232,6 @@ export const GalleryCard = ({ info, guildId, openConfirmDeleteModal }: GalleryCa
                 console.error("Rejected files:", details.files);
               }}
               onFileAccept={(details) => {
-                console.log("Accepted files for upload:", details.files);
                 void uploadFiles(details);
               }}
             >
