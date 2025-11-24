@@ -6,7 +6,7 @@ export const apiRateLimiter: RateLimitRequestHandler = rateLimit({
   max: 100,
   standardHeaders: "draft-7", // RateLimit-* headers
   legacyHeaders: false,
-  trustProxy: true,
+  trustProxy: 2,
   validate: true,
   message: { error: "Too many requests, please try again later." },
   skip: (req) => {
@@ -35,7 +35,7 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   max: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  trustProxy: true,
+  trustProxy: 2,
   message: { error: "Too many auth attempts. Please wait." },
   handler: (req, res, _next, options) => {
     const reset = (req as typeof req & { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
