@@ -29,10 +29,11 @@ const createHttpClient = (baseURL: string) => {
   return instance;
 };
 
+const defaultBaseURL = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api";
 const uploadBaseURL = import.meta.env.VITE_UPLOAD_BASE_URL as string | undefined;
 
 // Axios instance with credentials for API calls
-export const httpClient = createHttpClient("/api");
+export const httpClient = createHttpClient(defaultBaseURL);
 export const uploadHttpClient = uploadBaseURL ? createHttpClient(uploadBaseURL) : httpClient;
 
 // Exponential backoff with jitter (±20%) capped
