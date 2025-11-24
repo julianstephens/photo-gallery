@@ -1,7 +1,4 @@
 # syntax=docker/dockerfile-upstream:1.7
-ARG VITE_API_URL
-ARG VITE_UPLOAD_BASE_URL
-
 FROM node:20-alpine AS base
 ENV PNPM_HOME="/pnpm"
 ENV PNPM_STORE_PATH="${PNPM_HOME}/store"
@@ -21,8 +18,13 @@ RUN pnpm install --filter client... --frozen-lockfile
 FROM deps AS build
 COPY client client
 COPY --from=deps /app/utils ./utils
+
+ARG VITE_API_URL
+ARG VITE_UPLOAD_BASE_URL
+RUN test -n "$VITE_API_URL" && test -n "$VITE_UPLOAD_BASE_URL"
 ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_UPLOAD_BASE_URL=${VITE_UPLOAD_BASE_URL}
+
 RUN pnpm --filter client build
 
 FROM nginx:1.27-alpine AS runner
