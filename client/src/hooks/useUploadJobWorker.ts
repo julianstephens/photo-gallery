@@ -1,3 +1,4 @@
+import { uploadHttpClient } from "@/clients";
 import { uploadJobStore } from "@/uploadJobStore";
 import type { UploadJob, WorkerInMessage, WorkerOutMessage } from "@/workers/uploadJobWorker";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -49,11 +50,12 @@ export const useUploadJobWorker = () => {
     };
   }, []);
 
-  const controls = useMemo(
-    () => ({
+  const controls = useMemo(() => {
+    const uploadBase = (uploadHttpClient.defaults.baseURL ?? "/api/").replace(/\/$/, "");
+    return {
       start: (jobId: string) => {
         if (!workerRef.current) return;
-        const msg: WorkerInMessage = { type: "start", jobId };
+        const msg: WorkerInMessage = { type: "start", jobId, baseUrl: uploadBase };
         console.log("[useUploadJobWorker] Sending start to worker", msg);
         workerRef.current.postMessage(msg);
         setState({ job: null, status: "running", error: null });
@@ -65,9 +67,8 @@ export const useUploadJobWorker = () => {
         workerRef.current.postMessage(msg);
         setState({ job: null, status: "idle", error: null });
       },
-    }),
-    [],
-  );
+    };
+  }, []);
 
   return { ...controls, state };
 };

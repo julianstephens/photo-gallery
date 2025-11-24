@@ -55,8 +55,8 @@ const pollOnce = async (baseUrl: string) => {
     activeJobId = null;
     return;
   }
-
-  const url = `${baseUrl}/galleries/upload/${encodeURIComponent(activeJobId)}`;
+  const normalizedBase = baseUrl.replace(/\/$/, "");
+  const url = `${normalizedBase}/galleries/upload/${encodeURIComponent(activeJobId)}`;
 
   try {
     console.log("[uploadJobWorker] Polling job status", { jobId: activeJobId, url });
