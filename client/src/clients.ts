@@ -20,12 +20,22 @@ const attachRetryAfterInterceptor = (client: AxiosInstance) => {
   );
 };
 
+const needsAbsolutePathNormalization = (baseURL: string) => /^https?:\/\//i.test(baseURL);
+
 const createHttpClient = (baseURL: string) => {
   const instance = axios.create({
     baseURL,
     withCredentials: true,
   });
   attachRetryAfterInterceptor(instance);
+  if (needsAbsolutePathNormalization(baseURL)) {
+    instance.interceptors.request.use((config) => {
+      if (typeof config.url === "string" && config.url.startsWith("/")) {
+        config.url = config.url.replace(/^\//, "");
+      }
+      return config;
+    });
+  }
   return instance;
 };
 
