@@ -29,12 +29,31 @@ const createHttpClient = (baseURL: string) => {
   return instance;
 };
 
-const defaultBaseURL = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api";
+const computeApiBaseUrl = (value?: string) => {
+  if (!value || value.startsWith("/")) {
+    return value ?? "/api";
+  }
+
+  try {
+    const url = new URL(value);
+    if (!url.pathname || url.pathname === "/") {
+      url.pathname = "/api";
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return value.endsWith("/api") ? value : `${value.replace(/\/$/, "")}/api`;
+  }
+};
+
+const defaultBaseURL = computeApiBaseUrl(import.meta.env.VITE_API_URL as string | undefined);
 const uploadBaseURL = import.meta.env.VITE_UPLOAD_BASE_URL as string | undefined;
+const resolvedUploadBaseURL = uploadBaseURL ? computeApiBaseUrl(uploadBaseURL) : undefined;
 
 // Axios instance with credentials for API calls
 export const httpClient = createHttpClient(defaultBaseURL);
-export const uploadHttpClient = uploadBaseURL ? createHttpClient(uploadBaseURL) : httpClient;
+export const uploadHttpClient = resolvedUploadBaseURL
+  ? createHttpClient(resolvedUploadBaseURL)
+  : httpClient;
 
 // Exponential backoff with jitter (±20%) capped
 const computeBackoffMs = (attempt: number, base = 1000, max = 30000) => {
