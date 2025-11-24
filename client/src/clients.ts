@@ -64,14 +64,21 @@ const computeApiBaseUrl = (value?: string) => {
 };
 
 const defaultBaseURL = computeApiBaseUrl(import.meta.env.VITE_API_URL as string | undefined);
-const uploadBaseURL = import.meta.env.VITE_UPLOAD_BASE_URL as string | undefined;
-const resolvedUploadBaseURL = uploadBaseURL ? computeApiBaseUrl(uploadBaseURL) : undefined;
+const uploadBaseURL = (import.meta.env.VITE_UPLOAD_BASE_URL as string | undefined)?.trim();
+const resolvedUploadBaseURL =
+  uploadBaseURL && uploadBaseURL.length > 0 ? computeApiBaseUrl(uploadBaseURL) : undefined;
 
 // Axios instance with credentials for API calls
 export const httpClient = createHttpClient(defaultBaseURL);
 export const uploadHttpClient = resolvedUploadBaseURL
   ? createHttpClient(resolvedUploadBaseURL)
   : httpClient;
+
+// Debug: log which base URLs are being used
+if (typeof window !== "undefined") {
+  console.debug("[clients] API base URL:", defaultBaseURL);
+  console.debug("[clients] Upload base URL:", resolvedUploadBaseURL ?? "using default");
+}
 
 // Exponential backoff with jitter (±20%) capped
 const computeBackoffMs = (attempt: number, base = 1000, max = 30000) => {
