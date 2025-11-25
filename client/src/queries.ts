@@ -99,7 +99,7 @@ export const login = async () => {
   });
 
   // If the API origin is reachable and responds with CORS/health, prefer primary
-  const healthUrl = `${primaryOrigin}/healthz`;
+  const healthUrl = `${primaryOrigin}/api/healthz`;
   try {
     const res = await fetch(healthUrl, { method: "GET", mode: "cors", credentials: "include" });
     if (res.ok) {
