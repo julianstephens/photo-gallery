@@ -58,9 +58,11 @@ if (!parsedEnv.success) {
 
 export function parsedCorsOrigins(): (string | RegExp)[] | "*" {
   if (env.CORS_ORIGINS.trim() === "*") return "*";
-  return env.CORS_ORIGINS.split(",")
+  const origins = env.CORS_ORIGINS.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  console.log("Parsed CORS origins:", origins);
+  return origins;
 }
 
 const env = parsedEnv.data;
