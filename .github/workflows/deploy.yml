@@ -27,11 +27,13 @@ jobs:
           filters: |
             server:
               - 'server/**'
+              - 'utils/**'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
             client:
               - 'client/**'
+              - 'utils/**'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
