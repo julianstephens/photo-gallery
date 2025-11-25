@@ -74,6 +74,10 @@ export const uploadHttpClient = resolvedUploadBaseURL
   ? createHttpClient(resolvedUploadBaseURL)
   : httpClient;
 
+// Export base URLs as strings for use in other modules (login fallback behavior, etc.)
+export const API_BASE_URL = defaultBaseURL;
+export const UPLOAD_BASE_URL = resolvedUploadBaseURL;
+
 // Debug: log which base URLs are being used
 if (typeof window !== "undefined") {
   console.debug("[clients] API base URL:", defaultBaseURL);

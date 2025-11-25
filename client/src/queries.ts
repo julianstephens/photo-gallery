@@ -10,7 +10,7 @@ import {
   type UploadToGalleryRequest,
   type User,
 } from "utils";
-import { httpClient, uploadHttpClient } from "./clients";
+import { API_BASE_URL, httpClient, UPLOAD_BASE_URL, uploadHttpClient } from "./clients";
 
 export const listGalleries = async (guildId: string): Promise<Gallery[]> => {
   const res = await httpClient.get<Gallery[]>("galleries", { params: { guildId } });
@@ -88,9 +88,39 @@ export const removeGallery = async (req: RemoveGalleryRequest): Promise<void> =>
   await httpClient.delete("galleries", { data: body });
 };
 
-export const login = () => {
-  const authUrl = new URL("auth", httpClient.defaults.baseURL).toString();
-  window.location.assign(authUrl);
+export const login = async () => {
+  const base = (httpClient.defaults.baseURL as string) ?? API_BASE_URL ?? "/api/";
+  const primaryAuthUrl = new URL("auth", base).toString();
+  const primaryOrigin = new URL(primaryAuthUrl).origin;
+  console.debug("[queries] Attempting auth redirect:", {
+    primaryAuthUrl,
+    base,
+    PRIMARY_ORIGIN: primaryOrigin,
+  });
+
+  // If the API origin is reachable and responds with CORS/health, prefer primary
+  const healthUrl = `${primaryOrigin}/healthz`;
+  try {
+    const res = await fetch(healthUrl, { method: "GET", mode: "cors", credentials: "include" });
+    if (res.ok) {
+      console.debug("[queries] Primary API responsive. Redirecting to auth URL.", {
+        primaryAuthUrl,
+      });
+      window.location.assign(primaryAuthUrl);
+      return;
+    }
+    console.warn("[queries] Primary health check responded non-ok. Falling back.", {
+      status: res.status,
+    });
+  } catch (err) {
+    console.warn("[queries] Primary health check failed. Falling back to direct API.", err);
+  }
+
+  // Fallback: attempt to use the direct upload base configured (if available) or primary
+  const fallbackBase = (UPLOAD_BASE_URL as string) ?? base;
+  const fallbackAuthUrl = new URL("auth", fallbackBase).toString();
+  console.debug("[queries] Redirecting to fallback auth URL:", { fallbackAuthUrl });
+  window.location.assign(fallbackAuthUrl);
 };
 
 export const logout = async () => {
