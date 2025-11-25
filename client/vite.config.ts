@@ -6,7 +6,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
 export default defineConfig({
   plugins: [react(), tsconfigPaths()],
   worker: {
-    format: "es",
+    format: "iife",
     plugins: () => [react(), tsconfigPaths()],
   },
   server: {

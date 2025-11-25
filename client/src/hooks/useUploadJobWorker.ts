@@ -19,8 +19,9 @@ export const useUploadJobWorker = () => {
 
   // Lazy-init worker instance (Vite web worker import)
   useEffect(() => {
-    const WorkerCtor = new URL("../workers/uploadJobWorker.ts", import.meta.url);
-    const worker = new Worker(WorkerCtor, { type: "module" });
+    const worker = new Worker(new URL("../workers/uploadJobWorker.ts?worker", import.meta.url), {
+      type: "module",
+    });
     workerRef.current = worker;
 
     worker.onmessage = (event: MessageEvent<WorkerOutMessage>) => {
