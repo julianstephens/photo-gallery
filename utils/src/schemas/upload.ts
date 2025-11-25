@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Chunked upload schemas
 export const initiateUploadRequestSchema = z.object({
-  fileName: z.string().min(1),
+  fileName: z.string().min(1).max(255),
   fileType: z.string().min(1),
 });
 
