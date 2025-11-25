@@ -53,9 +53,19 @@ const guildRouter = Router();
 guildRouter.get("/guilds/default", handlers.getDefaultGuild);
 guildRouter.post("/guilds/default", handlers.setDefaultGuild);
 
+/**********************
+ * CHUNKED UPLOAD ROUTES
+ **********************/
+const uploadsRouter = Router();
+uploadsRouter.post("/uploads/initiate", handlers.initiateUpload);
+uploadsRouter.post("/uploads/chunk", handlers.uploadChunk);
+uploadsRouter.post("/uploads/finalize", handlers.finalizeUpload);
+uploadsRouter.post("/uploads/cleanup", handlers.cleanupExpiredUploads);
+
 export default {
   healthRouter,
   authRouter,
   galleryRouter,
   guildRouter,
+  uploadsRouter,
 };
