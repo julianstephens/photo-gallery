@@ -3,7 +3,7 @@ import { z } from "zod";
 // Chunked upload schemas
 export const initiateUploadRequestSchema = z.object({
   fileName: z.string().min(1).max(255),
-  fileType: z.string().min(1),
+  fileType: z.string().regex(/^[a-z]+\/[a-z0-9\-\+\.]+$/i, { message: "Invalid MIME type format" }),
 });
 
 export const initiateUploadResponseSchema = z.object({
