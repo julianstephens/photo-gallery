@@ -19,8 +19,8 @@ export function setupMetrics(app: Express) {
     next();
   });
 
-  // Expose /metrics
-  app.get("/metrics", async (_req: Request, res: Response) => {
+  // Expose /api/metrics
+  app.get("/api/metrics", async (_req: Request, res: Response) => {
     res.set("Content-Type", client.register.contentType);
     res.end(await client.register.metrics());
   });
