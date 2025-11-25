@@ -143,7 +143,7 @@ export class BucketService {
   };
 
   createPresignedUrl = async (key: string): Promise<string> => {
-    return getSignedUrl(
+    const url = await getSignedUrl(
       // @ts-expect-error getSignedUrl accepts S3Client despite generic constraints
       this.#s3,
       new GetObjectCommand({
@@ -152,6 +152,7 @@ export class BucketService {
       }),
       { expiresIn: 3600 },
     );
+    return url.replace(/^http:/, "https:");
   };
 
   getBucketFolderContents = async (
