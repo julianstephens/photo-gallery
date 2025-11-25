@@ -89,6 +89,21 @@ export const finalizeUpload = async (req: Request, res: Response) => {
   }
 };
 
+// Cancel and cleanup a specific upload session
+export const cancelUpload = async (req: Request, res: Response) => {
+  try {
+    const { uploadId } = req.params;
+    if (!uploadId) {
+      return res.status(400).json({ error: "Missing uploadId parameter" });
+    }
+    await chunkedUploadService.cleanupUpload(uploadId);
+    res.status(200).json({ success: true });
+  } catch (err: unknown) {
+    appLogger.error({ err }, "[cancelUpload] error");
+    res.status(500).json({ error: "Failed to cancel upload" });
+  }
+};
+
 // Cleanup endpoint (could be called by a cron job or manually)
 export const cleanupExpiredUploads = async (_req: Request, res: Response) => {
   try {

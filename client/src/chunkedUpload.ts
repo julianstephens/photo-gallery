@@ -59,7 +59,8 @@ async function uploadChunkWithRetry(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       // Use Blob directly to reduce memory overhead
-      await uploadHttpClient.post(`uploads/chunk?uploadId=${uploadId}&index=${index}`, chunk, {
+      await uploadHttpClient.post("uploads/chunk", chunk, {
+        params: { uploadId, index },
         headers: {
           "Content-Type": "application/octet-stream",
         },
@@ -237,6 +238,22 @@ export class ChunkedUploader {
 
   abort(): void {
     this.aborted = true;
+    if (this.uploadId) {
+      this.cleanupServerSession();
+    }
+  }
+
+  /**
+   * Clean up the server-side upload session when aborting.
+   * This prevents orphaned temporary files from consuming disk space.
+   */
+  private async cleanupServerSession(): Promise<void> {
+    if (!this.uploadId) return;
+    try {
+      await uploadHttpClient.delete(`uploads/${this.uploadId}`);
+    } catch {
+      // Ignore errors during cleanup - the session will be cleaned up by TTL
+    }
   }
 
   getProgress(): ChunkedUploadProgress | null {

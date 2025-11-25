@@ -5,6 +5,7 @@ const serviceMocks = vi.hoisted(() => ({
   initiateUpload: vi.fn(),
   saveChunk: vi.fn(),
   finalizeUpload: vi.fn(),
+  cleanupUpload: vi.fn(),
   cleanupExpiredUploads: vi.fn(),
 }));
 
@@ -22,7 +23,8 @@ vi.mock("../middleware/logger.ts", () => ({
 }));
 
 const handlers = await import("./chunkedUpload.ts");
-const { initiateUpload, uploadChunk, finalizeUpload, cleanupExpiredUploads } = handlers;
+const { initiateUpload, uploadChunk, finalizeUpload, cancelUpload, cleanupExpiredUploads } =
+  handlers;
 
 const createRes = () => {
   const res: Partial<Response> = {};
@@ -145,6 +147,23 @@ describe("chunked upload handlers", () => {
       expect(res.status).toHaveBeenCalledWith(413);
     });
 
+    it("returns 413 when streamed chunk data exceeds limit", async () => {
+      // Create multiple small chunks that together exceed MAX_CHUNK_SIZE (10MB)
+      const chunkSize = 3 * 1024 * 1024; // 3MB each
+      const smallChunks = [
+        Buffer.alloc(chunkSize, "a"),
+        Buffer.alloc(chunkSize, "b"),
+        Buffer.alloc(chunkSize, "c"),
+        Buffer.alloc(chunkSize, "d"), // Total: 12MB > 10MB limit
+      ];
+      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, smallChunks);
+      const res = createRes();
+
+      await uploadChunk(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(413);
+    });
+
     it("returns 400 for empty chunk data", async () => {
       const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, []);
       const res = createRes();
@@ -205,6 +224,41 @@ describe("chunked upload handlers", () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: "Upload session not found" });
+    });
+  });
+
+  describe("cancelUpload", () => {
+    it("returns 200 on successful cancel", async () => {
+      const req = createReq({ params: { uploadId: "test-id" } });
+      const res = createRes();
+      serviceMocks.cleanupUpload.mockResolvedValue(undefined);
+
+      await cancelUpload(req, res);
+
+      expect(serviceMocks.cleanupUpload).toHaveBeenCalledWith("test-id");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ success: true });
+    });
+
+    it("returns 400 when uploadId is missing", async () => {
+      const req = createReq({ params: {} });
+      const res = createRes();
+
+      await cancelUpload(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing uploadId parameter" });
+    });
+
+    it("returns 500 on error", async () => {
+      const req = createReq({ params: { uploadId: "test-id" } });
+      const res = createRes();
+      serviceMocks.cleanupUpload.mockRejectedValue(new Error("Cleanup failed"));
+
+      await cancelUpload(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to cancel upload" });
     });
   });
 

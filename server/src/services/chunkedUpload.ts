@@ -11,12 +11,18 @@ const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 /**
  * Sanitize a filename to prevent path traversal attacks.
  * Removes directory separators and keeps only the base name.
+ * Returns a safe fallback if the sanitized name is empty or invalid.
  */
 function sanitizeFileName(fileName: string): string {
   // Get only the base name, removing any directory components
   const baseName = path.basename(fileName);
   // Replace any remaining potentially dangerous characters (excluding control chars to satisfy linter)
-  return baseName.replace(/[<>:"|?*]/g, "_");
+  const sanitized = baseName.replace(/[<>:"|?*]/g, "_");
+  // If the sanitized name is empty, ".", or "..", use a safe fallback
+  if (!sanitized || sanitized === "." || sanitized === "..") {
+    return `upload-${randomUUID()}`;
+  }
+  return sanitized;
 }
 
 export interface ChunkedUploadMetadata {
@@ -87,9 +93,14 @@ export class ChunkedUploadService {
 
   /**
    * Finalize the upload by reassembling all chunks into a single file.
+   *
+   * **Note:** The returned `filePath` points to a file in `os.tmpdir()`. The caller
+   * is responsible for moving this file to a permanent location or cleaning it up
+   * after processing to prevent disk space issues.
+   *
    * @param uploadId - The unique upload session identifier.
    * @returns The finalization result containing success status and file path.
-   * @throws Error if the upload session is not found or no chunks exist.
+   * @throws Error if the upload session is not found, no chunks exist, or chunks are not contiguous.
    */
   async finalizeUpload(uploadId: string): Promise<FinalizeUploadResponse> {
     const metadata = uploadMetadata.get(uploadId);
@@ -112,6 +123,17 @@ export class ChunkedUploadService {
 
       if (chunkFiles.length === 0) {
         throw new Error(`No chunks found for upload: ${uploadId}`);
+      }
+
+      // Validate that chunk indices are contiguous (0, 1, 2, ..., N-1)
+      for (let i = 0; i < chunkFiles.length; i++) {
+        const expectedIndex = i;
+        const actualIndex = parseInt(chunkFiles[i].replace(CHUNK_FILE_PREFIX, ""), 10);
+        if (actualIndex !== expectedIndex) {
+          throw new Error(
+            `Missing or out-of-order chunk: expected index ${expectedIndex}, found ${actualIndex}`,
+          );
+        }
       }
 
       // Create final file path (fileName is already sanitized during initiation)

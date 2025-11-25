@@ -61,6 +61,7 @@ const uploadsRouter = Router();
 uploadsRouter.post("/uploads/initiate", requiresAuth, handlers.initiateUpload);
 uploadsRouter.post("/uploads/chunk", requiresAuth, handlers.uploadChunk);
 uploadsRouter.post("/uploads/finalize", requiresAuth, handlers.finalizeUpload);
+uploadsRouter.delete("/uploads/:uploadId", requiresAuth, handlers.cancelUpload);
 uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUploads);
 
 export default {
