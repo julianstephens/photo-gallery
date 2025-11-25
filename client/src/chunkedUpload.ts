@@ -58,16 +58,12 @@ async function uploadChunkWithRetry(
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      const arrayBuffer = await chunk.arrayBuffer();
-      await uploadHttpClient.post(
-        `uploads/chunk?uploadId=${uploadId}&index=${index}`,
-        arrayBuffer,
-        {
-          headers: {
-            "Content-Type": "application/octet-stream",
-          },
+      // Use Blob directly to reduce memory overhead
+      await uploadHttpClient.post(`uploads/chunk?uploadId=${uploadId}&index=${index}`, chunk, {
+        headers: {
+          "Content-Type": "application/octet-stream",
         },
-      );
+      });
       return;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));

@@ -3,16 +3,19 @@ import { z } from "zod";
 // Chunked upload schemas
 export const initiateUploadRequestSchema = z.object({
   fileName: z.string().min(1).max(255),
-  fileType: z.string().regex(/^[a-z]+\/[a-z0-9\-\+\.]+$/i, { message: "Invalid MIME type format" }),
+  fileType: z.string().regex(/^[a-z]+\/[a-z0-9\-+.]+$/i, { message: "Invalid MIME type format" }),
 });
 
 export const initiateUploadResponseSchema = z.object({
   uploadId: z.string(),
 });
 
+// Maximum chunk index to prevent abuse (supports files up to ~100GB with 10MB chunks)
+const MAX_CHUNK_INDEX = 10000;
+
 export const uploadChunkQuerySchema = z.object({
   uploadId: z.string().min(1),
-  index: z.coerce.number().int().min(0),
+  index: z.coerce.number().int().min(0).max(MAX_CHUNK_INDEX),
 });
 
 export const finalizeUploadRequestSchema = z.object({

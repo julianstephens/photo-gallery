@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import * as handlers from "./handlers/index.ts";
+import { requiresAuth, requiresAdmin } from "./middleware/auth.ts";
 import env from "./schemas/env.ts";
 
 /**********************
@@ -57,10 +58,10 @@ guildRouter.post("/guilds/default", handlers.setDefaultGuild);
  * CHUNKED UPLOAD ROUTES
  **********************/
 const uploadsRouter = Router();
-uploadsRouter.post("/uploads/initiate", handlers.initiateUpload);
-uploadsRouter.post("/uploads/chunk", handlers.uploadChunk);
-uploadsRouter.post("/uploads/finalize", handlers.finalizeUpload);
-uploadsRouter.post("/uploads/cleanup", handlers.cleanupExpiredUploads);
+uploadsRouter.post("/uploads/initiate", requiresAuth, handlers.initiateUpload);
+uploadsRouter.post("/uploads/chunk", requiresAuth, handlers.uploadChunk);
+uploadsRouter.post("/uploads/finalize", requiresAuth, handlers.finalizeUpload);
+uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUploads);
 
 export default {
   healthRouter,

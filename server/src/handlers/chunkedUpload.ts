@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { ZodError } from "zod";
 import {
   initiateUploadRequestSchema,
   finalizeUploadRequestSchema,
@@ -11,6 +12,7 @@ const chunkedUploadService = new ChunkedUploadService();
 
 // Maximum allowed chunk size (10MB) to prevent memory exhaustion
 const MAX_CHUNK_SIZE = 10 * 1024 * 1024;
+const CHUNK_SIZE_ERROR = `Chunk size exceeds maximum allowed (${MAX_CHUNK_SIZE / (1024 * 1024)}MB)`;
 
 export const initiateUpload = async (req: Request, res: Response) => {
   try {
@@ -18,7 +20,7 @@ export const initiateUpload = async (req: Request, res: Response) => {
     const result = await chunkedUploadService.initiateUpload(body);
     res.status(201).json(result);
   } catch (err: unknown) {
-    if ((err as { name?: string })?.name === "ZodError") {
+    if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request body" });
     }
     appLogger.error({ err }, "[initiateUpload] error");
@@ -36,9 +38,7 @@ export const uploadChunk = async (req: Request, res: Response) => {
     if (contentLength) {
       const length = parseInt(contentLength, 10);
       if (length > MAX_CHUNK_SIZE) {
-        return res.status(413).json({
-          error: `Chunk size exceeds maximum allowed (${MAX_CHUNK_SIZE / (1024 * 1024)}MB)`,
-        });
+        return res.status(413).json({ error: CHUNK_SIZE_ERROR });
       }
     }
 
@@ -48,9 +48,7 @@ export const uploadChunk = async (req: Request, res: Response) => {
     for await (const chunk of req) {
       totalSize += chunk.length;
       if (totalSize > MAX_CHUNK_SIZE) {
-        return res.status(413).json({
-          error: `Chunk size exceeds maximum allowed (${MAX_CHUNK_SIZE / (1024 * 1024)}MB)`,
-        });
+        return res.status(413).json({ error: CHUNK_SIZE_ERROR });
       }
       chunks.push(chunk);
     }
@@ -63,7 +61,7 @@ export const uploadChunk = async (req: Request, res: Response) => {
     await chunkedUploadService.saveChunk(uploadId, index, chunkBuffer);
     res.status(200).json({ success: true, index });
   } catch (err: unknown) {
-    if ((err as { name?: string })?.name === "ZodError") {
+    if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid query parameters" });
     }
     if ((err as Error)?.message?.includes("not found")) {
@@ -80,7 +78,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     const result = await chunkedUploadService.finalizeUpload(body.uploadId);
     res.status(200).json(result);
   } catch (err: unknown) {
-    if ((err as { name?: string })?.name === "ZodError") {
+    if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request body" });
     }
     if ((err as Error)?.message?.includes("not found")) {

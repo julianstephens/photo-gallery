@@ -8,6 +8,17 @@ const CHUNK_DIR_PREFIX = "chunked-upload-";
 const CHUNK_FILE_PREFIX = "chunk-";
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/**
+ * Sanitize a filename to prevent path traversal attacks.
+ * Removes directory separators and keeps only the base name.
+ */
+function sanitizeFileName(fileName: string): string {
+  // Get only the base name, removing any directory components
+  const baseName = path.basename(fileName);
+  // Replace any remaining potentially dangerous characters (excluding control chars to satisfy linter)
+  return baseName.replace(/[<>:"|?*]/g, "_");
+}
+
 export interface ChunkedUploadMetadata {
   uploadId: string;
   fileName: string;
@@ -24,7 +35,9 @@ const uploadMetadata = new Map<string, ChunkedUploadMetadata>();
 
 export class ChunkedUploadService {
   /**
-   * Initiate a new chunked upload session
+   * Initiate a new chunked upload session.
+   * @param request - The upload initiation request containing fileName and fileType.
+   * @returns The upload session response containing the unique uploadId.
    */
   async initiateUpload(request: InitiateUploadRequest): Promise<InitiateUploadResponse> {
     const uploadId = randomUUID();
@@ -32,9 +45,12 @@ export class ChunkedUploadService {
 
     await fs.mkdir(tempDir, { recursive: true });
 
+    // Sanitize the file name to prevent path traversal attacks
+    const safeFileName = sanitizeFileName(request.fileName);
+
     const metadata: ChunkedUploadMetadata = {
       uploadId,
-      fileName: request.fileName,
+      fileName: safeFileName,
       fileType: request.fileType,
       tempDir,
       createdAt: Date.now(),
@@ -46,7 +62,11 @@ export class ChunkedUploadService {
   }
 
   /**
-   * Save a chunk to the temporary directory
+   * Save a chunk to the temporary directory.
+   * @param uploadId - The unique upload session identifier.
+   * @param chunkIndex - The zero-based index of this chunk.
+   * @param chunkBuffer - The chunk data as a Buffer.
+   * @throws Error if the upload session is not found or has expired.
    */
   async saveChunk(uploadId: string, chunkIndex: number, chunkBuffer: Buffer): Promise<void> {
     const metadata = uploadMetadata.get(uploadId);
@@ -66,13 +86,18 @@ export class ChunkedUploadService {
   }
 
   /**
-   * Finalize the upload by reassembling all chunks
+   * Finalize the upload by reassembling all chunks into a single file.
+   * @param uploadId - The unique upload session identifier.
+   * @returns The finalization result containing success status and file path.
+   * @throws Error if the upload session is not found or no chunks exist.
    */
   async finalizeUpload(uploadId: string): Promise<FinalizeUploadResponse> {
     const metadata = uploadMetadata.get(uploadId);
     if (!metadata) {
       throw new Error(`Upload session not found: ${uploadId}`);
     }
+
+    let writeStream: ReturnType<typeof createWriteStream> | null = null;
 
     try {
       // Read all chunk files and sort them numerically
@@ -89,18 +114,18 @@ export class ChunkedUploadService {
         throw new Error(`No chunks found for upload: ${uploadId}`);
       }
 
-      // Create final file path
+      // Create final file path (fileName is already sanitized during initiation)
       const finalPath = path.join(os.tmpdir(), `${uploadId}-${metadata.fileName}`);
 
       // Create writable stream for final file
-      const writeStream = createWriteStream(finalPath);
+      writeStream = createWriteStream(finalPath);
 
       // Write each chunk in order to the final file
       for (const chunkFile of chunkFiles) {
         const chunkPath = path.join(metadata.tempDir, chunkFile);
         const chunkData = await fs.readFile(chunkPath);
         await new Promise<void>((resolve, reject) => {
-          writeStream.write(chunkData, (err) => {
+          writeStream!.write(chunkData, (err) => {
             if (err) reject(err);
             else resolve();
           });
@@ -110,26 +135,29 @@ export class ChunkedUploadService {
       // Close the write stream
       writeStream.end();
       await new Promise<void>((resolve, reject) => {
-        writeStream.on("finish", resolve);
-        writeStream.on("error", reject);
+        writeStream!.on("finish", resolve);
+        writeStream!.on("error", reject);
       });
-
-      // Cleanup: remove temp directory
-      await this.cleanupUpload(uploadId);
 
       return {
         success: true,
         filePath: finalPath,
       };
     } catch (error) {
-      // Cleanup on error
-      await this.cleanupUpload(uploadId);
+      // Destroy stream on error to prevent resource leaks
+      if (writeStream) {
+        writeStream.destroy();
+      }
       throw error;
+    } finally {
+      // Always cleanup the upload session
+      await this.cleanupUpload(uploadId);
     }
   }
 
   /**
-   * Clean up a specific upload session
+   * Clean up a specific upload session and its temporary files.
+   * @param uploadId - The unique upload session identifier.
    */
   async cleanupUpload(uploadId: string): Promise<void> {
     const metadata = uploadMetadata.get(uploadId);
@@ -147,7 +175,8 @@ export class ChunkedUploadService {
   }
 
   /**
-   * Clean up all expired upload sessions
+   * Clean up all expired upload sessions.
+   * @returns The number of sessions that were cleaned up.
    */
   async cleanupExpiredUploads(): Promise<number> {
     const now = Date.now();
@@ -164,7 +193,9 @@ export class ChunkedUploadService {
   }
 
   /**
-   * Get upload metadata (for testing/debugging)
+   * Get upload metadata (for testing/debugging).
+   * @param uploadId - The unique upload session identifier.
+   * @returns The metadata for the upload session, or undefined if not found.
    */
   getMetadata(uploadId: string): ChunkedUploadMetadata | undefined {
     return uploadMetadata.get(uploadId);
