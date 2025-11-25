@@ -19,6 +19,7 @@ export const generateSessionId = (byteLength: number = 32): string => {
   const bytes = randomBytes(byteLength);
   return toBase64Url(bytes);
 };
+
 export const validateString = (value: string, errorMessage?: string) => {
   if (!value || value.trim() === "") {
     throw new InvalidInputError(errorMessage ?? "Input string cannot be empty");

@@ -7,10 +7,10 @@ import env from "./schemas/env.ts";
  * HEALTH ROUTES
  **********************/
 const healthRouter = Router();
-healthRouter.get("/healthz", (_, res) => {
+healthRouter.get("/api/healthz", (_, res) => {
   res.json({ status: "ok" });
 });
-healthRouter.get("/readyz", (_, res) => {
+healthRouter.get("/api/readyz", (_, res) => {
   res.json({ status: "ready" });
 });
 
