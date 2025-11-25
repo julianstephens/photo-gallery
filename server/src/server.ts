@@ -91,7 +91,7 @@ export const createApp = () => {
 
   app.use(session(sess));
 
-  app.use(routers.healthRouter);
+  app.use("/api", routers.healthRouter);
 
   // API routes with scoped rate limits
   app.use("/api/auth", authRateLimiter);
