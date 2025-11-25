@@ -89,7 +89,8 @@ export const removeGallery = async (req: RemoveGalleryRequest): Promise<void> =>
 };
 
 export const login = () => {
-  window.location.assign("/api/auth");
+  const authUrl = new URL("auth", httpClient.defaults.baseURL).toString();
+  window.location.assign(authUrl);
 };
 
 export const logout = async () => {
