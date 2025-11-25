@@ -9,6 +9,9 @@ import { appLogger } from "../middleware/logger.ts";
 
 const chunkedUploadService = new ChunkedUploadService();
 
+// Maximum allowed chunk size (10MB) to prevent memory exhaustion
+const MAX_CHUNK_SIZE = 10 * 1024 * 1024;
+
 export const initiateUpload = async (req: Request, res: Response) => {
   try {
     const body = initiateUploadRequestSchema.parse(req.body);
@@ -28,9 +31,27 @@ export const uploadChunk = async (req: Request, res: Response) => {
     const query = uploadChunkQuerySchema.parse(req.query);
     const { uploadId, index } = query;
 
-    // Get the chunk data from request body (raw buffer)
+    // Validate Content-Length header if present
+    const contentLength = req.headers["content-length"];
+    if (contentLength) {
+      const length = parseInt(contentLength, 10);
+      if (length > MAX_CHUNK_SIZE) {
+        return res.status(413).json({
+          error: `Chunk size exceeds maximum allowed (${MAX_CHUNK_SIZE / (1024 * 1024)}MB)`,
+        });
+      }
+    }
+
+    // Get the chunk data from request body (raw buffer) with size limit
     const chunks: Buffer[] = [];
+    let totalSize = 0;
     for await (const chunk of req) {
+      totalSize += chunk.length;
+      if (totalSize > MAX_CHUNK_SIZE) {
+        return res.status(413).json({
+          error: `Chunk size exceeds maximum allowed (${MAX_CHUNK_SIZE / (1024 * 1024)}MB)`,
+        });
+      }
       chunks.push(chunk);
     }
     const chunkBuffer = Buffer.concat(chunks);

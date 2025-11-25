@@ -189,10 +189,12 @@ export class ChunkedUploader {
       this.uploadId = initiateResponse.uploadId;
 
       // Slice file into chunks
-      this.chunks = sliceFile(this.file, this.options.chunkSize!);
+      const chunkSize = this.options.chunkSize ?? DEFAULT_CHUNK_SIZE;
+      this.chunks = sliceFile(this.file, chunkSize);
       const totalChunks = this.chunks.length;
 
       // Step 2: Upload each chunk
+      const maxRetries = this.options.maxRetries ?? MAX_RETRIES;
       for (let i = 0; i < this.chunks.length; i++) {
         if (this.aborted) {
           return { success: false, error: "Upload was aborted" };
@@ -202,7 +204,7 @@ export class ChunkedUploader {
           this.uploadId,
           i,
           this.chunks[i],
-          this.options.maxRetries!,
+          maxRetries,
           this.options.onError,
         );
 

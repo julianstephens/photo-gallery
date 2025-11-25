@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
-import { createReadStream, createWriteStream, promises as fs } from "fs";
+import { createWriteStream, promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import { pipeline } from "stream/promises";
 import type { InitiateUploadRequest, InitiateUploadResponse, FinalizeUploadResponse } from "utils";
 
 const CHUNK_DIR_PREFIX = "chunked-upload-";
@@ -18,7 +17,9 @@ export interface ChunkedUploadMetadata {
 }
 
 // In-memory store for upload metadata
-// In production, this should be stored in Redis for persistence across restarts
+// Note: This will lose sessions on restart, leaving orphaned temp files.
+// In production, consider using Redis for persistence, or add a startup
+// cleanup routine that scans os.tmpdir() for stale "chunked-upload-*" directories.
 const uploadMetadata = new Map<string, ChunkedUploadMetadata>();
 
 export class ChunkedUploadService {
@@ -94,11 +95,16 @@ export class ChunkedUploadService {
       // Create writable stream for final file
       const writeStream = createWriteStream(finalPath);
 
-      // Pipe each chunk in order to the final file
+      // Write each chunk in order to the final file
       for (const chunkFile of chunkFiles) {
         const chunkPath = path.join(metadata.tempDir, chunkFile);
-        const readStream = createReadStream(chunkPath);
-        await pipeline(readStream, writeStream, { end: false });
+        const chunkData = await fs.readFile(chunkPath);
+        await new Promise<void>((resolve, reject) => {
+          writeStream.write(chunkData, (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
       }
 
       // Close the write stream

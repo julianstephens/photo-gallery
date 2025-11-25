@@ -46,16 +46,18 @@ export const FilePickerModal = ({ open, closeModal, onUploadComplete }: FilePick
     });
     uploaderRef.current = uploader;
 
-    const result = await uploader.start();
+    try {
+      const result = await uploader.start();
 
-    setUploading(false);
-    uploaderRef.current = null;
-
-    if (result.success && result.filePath) {
-      onUploadComplete?.(result.filePath);
-      handleClose();
-    } else {
-      setError(result.error || "Upload failed");
+      if (result.success && result.filePath) {
+        onUploadComplete?.(result.filePath);
+        handleClose();
+      } else {
+        setError(result.error || "Upload failed");
+      }
+    } finally {
+      setUploading(false);
+      uploaderRef.current = null;
     }
   };
 

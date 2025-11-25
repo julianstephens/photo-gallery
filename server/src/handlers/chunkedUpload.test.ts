@@ -36,6 +36,7 @@ const createReq = (overrides: Partial<Request> = {}) => {
     query: {},
     body: {},
     params: {},
+    headers: {},
     ...overrides,
   };
   return req as Request;
@@ -85,17 +86,33 @@ describe("chunked upload handlers", () => {
   });
 
   describe("uploadChunk", () => {
+    const createAsyncIterableReq = (
+      query: Record<string, string>,
+      chunks: Buffer[],
+      headers: Record<string, string> = {},
+    ) => {
+      const req = createReq({ query });
+      req.headers = { ...req.headers, ...headers };
+      // Create a proper async iterable
+      const iterator = {
+        current: 0,
+        chunks,
+        async next() {
+          if (this.current < this.chunks.length) {
+            return { value: this.chunks[this.current++], done: false };
+          }
+          return { value: undefined, done: true };
+        },
+      };
+      Object.assign(req, {
+        [Symbol.asyncIterator]: () => iterator,
+      });
+      return req;
+    };
+
     it("returns 200 on successful chunk upload", async () => {
       const chunkData = Buffer.from("test data");
-      const req = createReq({
-        query: { uploadId: "test-id", index: "0" },
-      });
-      // Make the request iterable to simulate reading the body
-      Object.assign(req, {
-        [Symbol.asyncIterator]: async function* () {
-          yield chunkData;
-        },
-      });
+      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, [chunkData]);
       const res = createRes();
       serviceMocks.saveChunk.mockResolvedValue(undefined);
 
@@ -107,12 +124,7 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 400 for invalid query parameters", async () => {
-      const req = createReq({ query: {} });
-      Object.assign(req, {
-        [Symbol.asyncIterator]: async function* () {
-          // No data
-        },
-      });
+      const req = createAsyncIterableReq({}, []);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -120,15 +132,21 @@ describe("chunked upload handlers", () => {
       expect(res.status).toHaveBeenCalledWith(400);
     });
 
+    it("returns 413 when content-length exceeds limit", async () => {
+      const req = createAsyncIterableReq(
+        { uploadId: "test-id", index: "0" },
+        [Buffer.from("test")],
+        { "content-length": String(15 * 1024 * 1024) },
+      );
+      const res = createRes();
+
+      await uploadChunk(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(413);
+    });
+
     it("returns 400 for empty chunk data", async () => {
-      const req = createReq({
-        query: { uploadId: "test-id", index: "0" },
-      });
-      Object.assign(req, {
-        [Symbol.asyncIterator]: async function* () {
-          // Empty data
-        },
-      });
+      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, []);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -139,14 +157,7 @@ describe("chunked upload handlers", () => {
 
     it("returns 404 for non-existent upload session", async () => {
       const chunkData = Buffer.from("test data");
-      const req = createReq({
-        query: { uploadId: "non-existent", index: "0" },
-      });
-      Object.assign(req, {
-        [Symbol.asyncIterator]: async function* () {
-          yield chunkData;
-        },
-      });
+      const req = createAsyncIterableReq({ uploadId: "non-existent", index: "0" }, [chunkData]);
       const res = createRes();
       serviceMocks.saveChunk.mockRejectedValue(new Error("Upload session not found"));
 
