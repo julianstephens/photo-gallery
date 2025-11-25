@@ -20,6 +20,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check for changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'server/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - '.github/workflows/deploy.yml'
+            client:
+              - 'client/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - '.github/workflows/deploy.yml'
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -31,6 +47,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Server image
+        if: steps.filter.outputs.server == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -41,6 +58,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push Client image
+        if: steps.filter.outputs.client == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -54,7 +72,7 @@ jobs:
             VITE_UPLOAD_BASE_URL=${{ secrets.VITE_UPLOAD_BASE_URL || 'https://api-direct.cyborgdev.cloud/api' }}
 
       - name: Deploy Server to Coolify
-        if: ${{ env.COOLIFY_SERVER_WEBHOOK != '' }}
+        if: ${{ steps.filter.outputs.server == 'true' && env.COOLIFY_SERVER_WEBHOOK != '' }}
         env:
           COOLIFY_SERVER_WEBHOOK: ${{ secrets.COOLIFY_SERVER_WEBHOOK }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -63,7 +81,7 @@ jobs:
                --header "Authorization: Bearer $COOLIFY_TOKEN"
 
       - name: Deploy Client to Coolify
-        if: ${{ env.COOLIFY_CLIENT_WEBHOOK != '' }}
+        if: ${{ steps.filter.outputs.client == 'true' && env.COOLIFY_CLIENT_WEBHOOK != '' }}
         env:
           COOLIFY_CLIENT_WEBHOOK: ${{ secrets.COOLIFY_CLIENT_WEBHOOK }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
