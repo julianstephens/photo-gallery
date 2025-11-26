@@ -33,15 +33,34 @@ const createResponse = () => {
 };
 
 const createRequest = (overrides: Partial<Request> = {}) => {
-  const req: Partial<Request> = {
-    query: {},
-    session: {} as Request["session"],
-    ...overrides,
+  // Extract session from overrides before spreading
+  const { session: overrideSession, ...otherOverrides } = overrides;
+
+  const defaultSession = {
+    save: vi.fn().mockImplementation((cb: (err?: Error | null) => void) => {
+      cb(null);
+    }),
   };
-  if (!req.session) {
-    req.session = {} as Request["session"];
-  }
-  return req as Request;
+
+  // Merge session: defaults first, then overrides
+  const session = { ...defaultSession, ...overrideSession };
+
+  return {
+    query: {},
+    app: {
+      get: vi.fn(),
+    },
+    headers: {
+      "x-forwarded-proto": "https",
+      "x-forwarded-for": "127.0.0.1",
+      host: "localhost",
+    },
+    secure: true,
+    protocol: "https",
+    sessionID: "test-session",
+    ...otherOverrides,
+    session,
+  } as unknown as Request;
 };
 
 describe("auth handlers", () => {
@@ -75,7 +94,6 @@ describe("auth handlers", () => {
     });
     expect(res.redirect).toHaveBeenCalledWith(envMock.CLIENT_URL);
   });
-
   it("returns the upstream error when Discord login fails", async () => {
     const req = createRequest({ query: { code: "bad" } as Request["query"] });
     const res = createResponse();
