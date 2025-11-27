@@ -239,7 +239,7 @@ export class ChunkedUploader {
   abort(): void {
     this.aborted = true;
     if (this.uploadId) {
-      this.cleanupServerSession();
+      void this.cleanupServerSession();
     }
   }
 
