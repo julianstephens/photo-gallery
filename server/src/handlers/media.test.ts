@@ -124,6 +124,30 @@ describe("media handlers", () => {
         expect(htmlContent).not.toContain('"><script>');
         expect(htmlContent).toContain("&quot;&gt;&lt;script&gt;");
       });
+
+      it("correctly encodes legitimate presigned URLs with query parameters", async () => {
+        const req = createReq({
+          params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
+          headers: { accept: "text/html" },
+        });
+        const res = createRes();
+        // Simulate a typical S3 presigned URL with multiple query parameters
+        const presignedUrl =
+          "https://s3.example.com/bucket/photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE&X-Amz-Date=20231215T120000Z&X-Amz-Expires=3600&X-Amz-Signature=abc123";
+        bucketServiceMocks.createPresignedUrl.mockResolvedValue(presignedUrl);
+
+        await streamMedia(req, res);
+
+        const htmlContent = (res.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+        // Ampersands in URLs should be HTML-encoded as &amp; for valid HTML
+        // The browser will correctly decode them when parsing the HTML
+        expect(htmlContent).toContain("X-Amz-Algorithm=AWS4-HMAC-SHA256&amp;X-Amz-Credential=");
+        expect(htmlContent).toContain("&amp;X-Amz-Date=");
+        expect(htmlContent).toContain("&amp;X-Amz-Expires=");
+        expect(htmlContent).toContain("&amp;X-Amz-Signature=");
+        // Verify the URL is properly embedded in an img src attribute
+        expect(htmlContent).toMatch(/<img src="[^"]+X-Amz-/);
+      });
     });
 
     describe("direct image serving path", () => {
