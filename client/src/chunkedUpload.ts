@@ -94,6 +94,8 @@ export async function chunkedUpload(
     onError,
   } = options;
 
+  let uploadId: string | null = null;
+
   try {
     // Step 1: Initiate upload
     const initiateRequest: InitiateUploadRequest = {
@@ -106,7 +108,7 @@ export async function chunkedUpload(
       initiateRequest,
     );
 
-    const { uploadId } = initiateResponse;
+    uploadId = initiateResponse.uploadId;
 
     // Slice file into chunks
     const chunks = sliceFile(file, chunkSize);
@@ -138,6 +140,14 @@ export async function chunkedUpload(
       filePath: finalizeResponse.filePath,
     };
   } catch (error) {
+    // Cleanup server session on error to prevent orphaned temporary files
+    if (uploadId) {
+      try {
+        await uploadHttpClient.delete(`uploads/${uploadId}`);
+      } catch {
+        // Ignore cleanup errors - the session will be cleaned up by TTL
+      }
+    }
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       success: false,
@@ -228,6 +238,14 @@ export class ChunkedUploader {
         filePath: finalizeResponse.filePath,
       };
     } catch (error) {
+      // Cleanup server session on error to prevent orphaned temporary files
+      if (this.uploadId) {
+        try {
+          await uploadHttpClient.delete(`uploads/${this.uploadId}`);
+        } catch {
+          // Ignore cleanup errors - the session will be cleaned up by TTL
+        }
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
