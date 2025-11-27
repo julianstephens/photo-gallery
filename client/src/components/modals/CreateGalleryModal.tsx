@@ -8,6 +8,7 @@ export interface CreateGalleryModalProps extends ModalProps {
 
 export const CreateGalleryModal = ({ open, closeModal, guildId }: CreateGalleryModalProps) => {
   const [doSubmit, setDoSubmit] = useState(false);
+  const [loading, setLoading] = useState(false);
   return (
     <BaseModal
       open={open}
@@ -16,12 +17,14 @@ export const CreateGalleryModal = ({ open, closeModal, guildId }: CreateGalleryM
       actionButtonOnClick={() => {
         setDoSubmit(true);
       }}
+      actionButtonLoading={loading}
     >
       <CreateGalleryForm
         guildId={guildId}
         closeModal={closeModal}
         doSubmit={doSubmit}
         setDoSubmit={setDoSubmit}
+        setLoading={setLoading}
       />
     </BaseModal>
   );

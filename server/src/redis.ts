@@ -5,6 +5,7 @@ import env from "./schemas/env.ts";
 const redisClient = createClient({
   url: `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`,
 });
+redisClient.on("error", (err) => console.error("Redis Client Error", err));
 redisClient.connect().catch(console.error);
 
 const redisStore = new RedisStore({ client: redisClient, prefix: "pg:sess:" });

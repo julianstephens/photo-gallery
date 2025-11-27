@@ -17,7 +17,7 @@ const AdminDashboard = () => {
   const defaultGuild = useDefaultGuild();
   const [showCreateGalleryModal, setShowCreateGalleryModal] = useState(false);
   const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
-  const [selectedGallery, setSelectedGallery] = useState<string | null>(null);
+  const [deleteKey, setDeleteKey] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const [guild, setGuild] = useState<string>("");
@@ -41,7 +41,7 @@ const AdminDashboard = () => {
   };
 
   const openConfirmDeleteModal = (gallery: string) => {
-    setSelectedGallery(gallery);
+    setDeleteKey(gallery);
     setShowConfirmDeleteModal(true);
   };
 
@@ -50,24 +50,33 @@ const AdminDashboard = () => {
   };
 
   const deleteGallery = async () => {
-    setDeleteLoading(true);
+    if (!guildId || !deleteKey) {
+      toaster.error({
+        title: "Deletion Error",
+        description: "Guild ID or Gallery Name is missing.",
+      });
+      return;
+    }
+
     try {
+      setDeleteLoading(true);
       await deleteGalleryMutation.mutateAsync({
         guildId: guildId ?? "",
-        galleryName: selectedGallery ?? "",
+        galleryName: deleteKey ?? "",
       });
       toaster.success({
         title: "Gallery Deleted",
-        description: `Gallery "${selectedGallery}" has been deleted.`,
+        description: `Gallery "${deleteKey}" has been deleted.`,
       });
     } catch (err) {
       console.error("Error deleting gallery:", err);
       toaster.error({
         title: "Deletion Error",
-        description: `Failed to delete gallery "${selectedGallery}".`,
+        description: `Failed to delete gallery "${deleteKey}".`,
       });
+    } finally {
+      setDeleteLoading(false);
     }
-    setDeleteLoading(false);
   };
 
   const onGuildChange = (selectedGuild: string) => {
@@ -110,7 +119,8 @@ const AdminDashboard = () => {
               <GalleryCard
                 key={gallery.name}
                 info={gallery}
-                guildId={guild}
+                showDeleteLoading={deleteLoading}
+                deleteKey={deleteKey}
                 openConfirmDeleteModal={() => {
                   openConfirmDeleteModal(gallery.name);
                 }}
@@ -127,7 +137,6 @@ const AdminDashboard = () => {
       <ConfirmDeleteModal
         open={showConfirmDeleteModal}
         closeModal={closeConfirmDeleteModal}
-        actionButtonLoading={deleteLoading}
         actionButtonOnClick={deleteGallery}
       />
     </>

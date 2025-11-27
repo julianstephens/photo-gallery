@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { createWriteStream, promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import type { InitiateUploadRequest, InitiateUploadResponse, FinalizeUploadResponse } from "utils";
+import type { FinalizeUploadResponse, InitiateUploadRequest, InitiateUploadResponse } from "utils";
 
 const CHUNK_DIR_PREFIX = "chunked-upload-";
 const CHUNK_FILE_PREFIX = "chunk-";
@@ -29,6 +29,7 @@ export interface ChunkedUploadMetadata {
   uploadId: string;
   fileName: string;
   fileType: string;
+  galleryName: string;
   tempDir: string;
   createdAt: number;
 }
@@ -58,6 +59,7 @@ export class ChunkedUploadService {
       uploadId,
       fileName: safeFileName,
       fileType: request.fileType,
+      galleryName: request.galleryName,
       tempDir,
       createdAt: Date.now(),
     };
@@ -125,9 +127,9 @@ export class ChunkedUploadService {
         throw new Error(`No chunks found for upload: ${uploadId}`);
       }
 
-      // Validate that chunk indices are contiguous (0, 1, 2, ..., N-1)
+      // Validate that chunk indices are contiguous (1, 2, 3, ..., N)
       for (let i = 0; i < chunkFiles.length; i++) {
-        const expectedIndex = i;
+        const expectedIndex = i + 1;
         const actualIndex = parseInt(chunkFiles[i].replace(CHUNK_FILE_PREFIX, ""), 10);
         if (actualIndex !== expectedIndex) {
           throw new Error(

@@ -14,6 +14,7 @@ import { toaster } from "../ui/toaster";
 export interface CreateGalleryFormProps {
   doSubmit: boolean;
   setDoSubmit: (value: boolean) => void;
+  setLoading: (value: boolean) => void;
   closeModal: () => void;
   guildId: string;
 }
@@ -21,6 +22,7 @@ export interface CreateGalleryFormProps {
 export const CreateGalleryForm = ({
   doSubmit,
   setDoSubmit,
+  setLoading,
   closeModal,
   guildId,
 }: CreateGalleryFormProps) => {
@@ -50,11 +52,14 @@ export const CreateGalleryForm = ({
   const isAuthenticated = Boolean(currentUser);
 
   const onSubmit = async (data: CreateGalleryRequest) => {
+    setLoading(true);
     try {
       await createGalleryMutation.mutateAsync(data);
+      setLoading(false);
       toaster.success({ title: "Gallery created successfully" });
       closeModal();
     } catch (error) {
+      setLoading(false);
       toaster.error({ title: "Error creating gallery", description: toErrorMessage(error) });
     }
   };

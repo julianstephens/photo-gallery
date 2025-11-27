@@ -1,7 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
 import * as handlers from "./handlers/index.ts";
-import { requiresAuth, requiresAdmin } from "./middleware/auth.ts";
+import { streamMedia } from "./handlers/media.ts";
+import { requiresAdmin, requiresAuth } from "./middleware/auth.ts";
 import env from "./schemas/env.ts";
 
 /**********************
@@ -64,10 +65,17 @@ uploadsRouter.post("/uploads/finalize", requiresAuth, handlers.finalizeUpload);
 uploadsRouter.delete("/uploads/:uploadId", requiresAuth, handlers.cancelUpload);
 uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUploads);
 
+/**********************
+ * MEDIA PROXY ROUTE
+ **********************/
+const mediaRouter = Router();
+mediaRouter.get("/:galleryName/*objectName", streamMedia);
+
 export default {
   healthRouter,
   authRouter,
   galleryRouter,
   guildRouter,
   uploadsRouter,
+  mediaRouter,
 };

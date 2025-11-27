@@ -4,6 +4,7 @@ import { z } from "zod";
 export const initiateUploadRequestSchema = z.object({
   fileName: z.string().min(1).max(255),
   fileType: z.string().regex(/^[a-z]+\/[a-z0-9\-+.]+$/i, { message: "Invalid MIME type format" }),
+  galleryName: z.string().min(1),
 });
 
 export const initiateUploadResponseSchema = z.object({
