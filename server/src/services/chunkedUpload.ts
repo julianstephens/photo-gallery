@@ -10,6 +10,7 @@ import type {
   UploadProgressPhase,
   UploadProgressStatus,
 } from "utils";
+import { appLogger } from "../middleware/logger.ts";
 
 const CHUNK_DIR_PREFIX = "chunked-upload-";
 const CHUNK_FILE_PREFIX = "chunk-";
@@ -189,24 +190,82 @@ export class ChunkedUploadService {
       // Create writable stream for final file
       writeStream = createWriteStream(finalPath);
 
+      // Track stream errors - use a single handler for the entire operation
+      let streamError: Error | null = null;
+      const handleStreamError = (error: Error) => {
+        streamError = error;
+      };
+      writeStream.on("error", handleStreamError);
+
       // Write each chunk in order to the final file
+      let totalBytesWritten = 0;
       for (const chunkFile of chunkFiles) {
+        // Check if a stream error occurred in a previous iteration
+        if (streamError) {
+          throw streamError;
+        }
+
         const chunkPath = path.join(metadata.tempDir, chunkFile);
         const chunkData = await fs.readFile(chunkPath);
-        await new Promise<void>((resolve, reject) => {
-          writeStream!.write(chunkData, (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
+        totalBytesWritten += chunkData.length;
+
+        await new Promise<void>((resolve, _reject) => {
+          // Use a single-use handler for this write operation
+          const drainHandler = () => {
+            resolve();
+          };
+
+          const canContinue = writeStream!.write(chunkData);
+          if (canContinue) {
+            // Data was written to the buffer immediately, resolve asynchronously
+            // to ensure proper event ordering and prevent synchronous resolution
+            setImmediate(resolve);
+          } else {
+            // Stream buffer full, wait for drain event before continuing
+            writeStream!.once("drain", drainHandler);
+          }
         });
       }
 
-      // Close the write stream
-      await new Promise<void>((resolve, reject) => {
-        writeStream!.once("finish", resolve);
-        writeStream!.once("error", reject);
+      // Close the write stream and ensure all data is flushed to disk
+      await new Promise<void>((resolve, _reject) => {
+        writeStream!.once("finish", () => {
+          appLogger.debug({ uploadId, totalBytesWritten }, "[finalizeUpload] Stream finished");
+          resolve();
+        });
+        // Error handler already registered above, so just end the stream
         writeStream!.end();
       });
+
+      // Validate that the assembled file size matches the expected total size
+      const stats = await fs.stat(finalPath);
+      if (stats.size !== metadata.totalSize) {
+        throw new Error(
+          `Assembled file size (${stats.size} bytes) does not match expected total size (${metadata.totalSize} bytes). Upload may be incomplete or corrupted.`,
+        );
+      }
+
+      // For zip files, validate the file signature
+      if (metadata.fileName.toLowerCase().endsWith(".zip")) {
+        const buffer = Buffer.alloc(4);
+        const fd = await fs.open(finalPath, "r");
+        try {
+          await fd.read(buffer, 0, 4, 0);
+          // ZIP files start with PK\x03\x04 or PK\x05\x06 or PK\x07\x08
+          if (
+            buffer[0] !== 0x50 ||
+            buffer[1] !== 0x4b ||
+            (buffer[2] !== 0x03 && buffer[2] !== 0x05 && buffer[2] !== 0x07) ||
+            (buffer[3] !== 0x04 && buffer[3] !== 0x06 && buffer[3] !== 0x08)
+          ) {
+            throw new Error(
+              "File does not appear to be a valid ZIP archive. The file signature is invalid.",
+            );
+          }
+        } finally {
+          await fd.close();
+        }
+      }
 
       return {
         success: true,

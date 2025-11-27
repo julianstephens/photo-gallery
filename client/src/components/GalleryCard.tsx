@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { HiTrash, HiUpload } from "react-icons/hi";
 import type { Gallery } from "utils";
 import { toaster } from "./ui/toaster";
+import { AxiosError } from "axios";
 
 export interface GalleryCardProps {
   info: Gallery;
@@ -52,9 +53,13 @@ export const GalleryCard = ({
         description: "File uploaded successfully.",
       });
     } catch (error) {
+      let errMsg = "An error occurred during the upload.";
+      if (error instanceof AxiosError) {
+        errMsg = error.response?.data?.error || errMsg;
+      }
       toaster.error({
         title: "Upload Failed",
-        description: "An error occurred during the upload.",
+        description: errMsg,
       });
       console.error(error);
     } finally {

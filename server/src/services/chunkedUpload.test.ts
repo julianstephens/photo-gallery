@@ -2,6 +2,11 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mockEnvModule } from "../utils/test-mocks.ts";
+
+// Mock env to prevent dotenv loading
+vi.mock("../schemas/env.ts", () => mockEnvModule());
+
 import { ChunkedUploadService } from "./chunkedUpload.ts";
 
 describe("ChunkedUploadService", () => {
@@ -128,7 +133,7 @@ describe("ChunkedUploadService", () => {
         fileName: "test.txt",
         fileType: "text/plain",
         galleryName: "test-gallery",
-        totalSize: 1024,
+        totalSize: 23, // "Hello, Beautiful World!" is 23 bytes
       });
 
       // Save chunks out of order
@@ -154,7 +159,7 @@ describe("ChunkedUploadService", () => {
         fileName: "test.txt",
         fileType: "text/plain",
         galleryName: "test-gallery",
-        totalSize: 1024,
+        totalSize: 4, // "data" is 4 bytes
       });
 
       const metadata = service.getMetadata(uploadId);
@@ -308,7 +313,7 @@ describe("ChunkedUploadService", () => {
         fileName: "test.txt",
         fileType: "text/plain",
         galleryName: "test-gallery",
-        totalSize: 1024,
+        totalSize: 9, // "test data" is 9 bytes
       });
 
       await service.saveChunk(uploadId, 0, Buffer.from("test data"));

@@ -210,6 +210,7 @@ describe("media handlers", () => {
 
     describe("error handling", () => {
       it("returns 500 when presigned URL creation fails", async () => {
+        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
         const req = createReq({
           params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
           headers: { accept: "text/html" },
@@ -221,9 +222,11 @@ describe("media handlers", () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.send).toHaveBeenCalledWith("Error streaming media");
+        consoleSpy.mockRestore();
       });
 
       it("returns 500 when object retrieval fails", async () => {
+        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
         const req = createReq({
           params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
           headers: { accept: "image/*" },
@@ -235,6 +238,7 @@ describe("media handlers", () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.send).toHaveBeenCalledWith("Error streaming media");
+        consoleSpy.mockRestore();
       });
 
       it("logs errors to console", async () => {

@@ -119,7 +119,9 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       } catch (error) {
         chunkedUploadService.markFailed(uploadId, error);
         appLogger.error({ err: error, uploadId }, "Single file upload failed");
-        return res.status(500).json({ error: "Failed to upload file", details: error?.message || error });
+        return res
+          .status(500)
+          .json({ error: "Failed to upload file", details: error?.message || error });
       }
     }
 
@@ -131,6 +133,32 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     chunkedUploadService.updateProgress(uploadId, "processing", "server-zip-extract");
 
     try {
+      // Pre-validate ZIP file structure before extraction
+      try {
+        const zipFile = await unzipper.Open.file(finalizedPath);
+        const fileCount = Object.keys(zipFile.files).length;
+        appLogger.debug(
+          { uploadId, fileCount },
+          "[finalizeUpload] ZIP file structure validation passed",
+        );
+      } catch (validationErr) {
+        appLogger.warn(
+          { err: validationErr, uploadId },
+          "[finalizeUpload] ZIP file structure validation failed",
+        );
+        // Check if this is a stream corruption issue (incomplete write)
+        const errorMsg =
+          validationErr instanceof Error ? validationErr.message : String(validationErr);
+        if (errorMsg.includes("unexpected end") || errorMsg.includes("Z_BUF_ERROR")) {
+          throw new Error(
+            "The ZIP file was corrupted during upload. This may be due to network instability or server issues. Please try uploading again.",
+          );
+        }
+        throw new Error(
+          "The ZIP file structure is corrupted. Please try re-creating the ZIP file.",
+        );
+      }
+
       // Track discovered files during extraction
       const discoveredFiles: string[] = [];
 
@@ -219,9 +247,37 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       // Mark upload as completed
       chunkedUploadService.updateProgress(uploadId, "completed", "server-upload");
     } catch (zipErr) {
-      appLogger.error({ err: zipErr }, "[finalizeUpload] error while processing zip upload");
-      chunkedUploadService.markFailed(uploadId, "Failed to process zip upload");
-      return res.status(500).json({ error: "Failed to process zip upload" });
+      appLogger.error(
+        { err: zipErr, uploadId, metadata },
+        "[finalizeUpload] error while processing zip upload",
+      );
+
+      // Check for specific zip corruption errors
+      const errorMessage = zipErr instanceof Error ? zipErr.message : String(zipErr);
+      let userFriendlyMessage = "Failed to process zip upload";
+
+      if (errorMessage.includes("unexpected end of file") || errorMessage.includes("Z_BUF_ERROR")) {
+        userFriendlyMessage =
+          "The uploaded zip file appears to be corrupted during transfer. This may be due to network issues or file size limits. Please try uploading a smaller zip file or check your internet connection.";
+        appLogger.warn(
+          { uploadId, fileName: metadata.fileName, totalSize: metadata.totalSize },
+          "[finalizeUpload] ZIP decompression failed - possible data corruption during chunked upload",
+        );
+      } else if (errorMessage.includes("invalid signature") || errorMessage.includes("not a zip")) {
+        userFriendlyMessage = "The uploaded file is not a valid zip archive.";
+      } else if (
+        errorMessage.includes("Unsupported compression method") ||
+        errorMessage.includes("compression method")
+      ) {
+        userFriendlyMessage =
+          "The zip file uses an unsupported compression method. Please try creating the zip file with standard compression.";
+      } else if (errorMessage.includes("encrypted") || errorMessage.includes("password")) {
+        userFriendlyMessage =
+          "Password-protected zip files are not supported. Please upload an uncompressed zip file.";
+      }
+
+      chunkedUploadService.markFailed(uploadId, userFriendlyMessage);
+      return res.status(400).json({ error: userFriendlyMessage });
     } finally {
       await rm(finalizedPath, { force: true }).catch(() => {});
       await rm(extractDir, { recursive: true, force: true }).catch(() => {});

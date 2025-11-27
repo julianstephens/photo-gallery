@@ -1,15 +1,9 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mockRedisModule } from "../utils/test-mocks.ts";
 import { GuildController } from "./guild.ts";
 
 // Mock redis
-vi.mock("../redis.ts", () => ({
-  default: {
-    client: {
-      get: vi.fn(),
-      set: vi.fn(),
-    },
-  },
-}));
+vi.mock("../redis.ts", () => mockRedisModule());
 
 describe("GuildController", () => {
   let controller: GuildController;
@@ -18,7 +12,7 @@ describe("GuildController", () => {
   beforeEach(async () => {
     controller = new GuildController();
     const redis = (await import("../redis.ts")).default;
-    mockRedisClient = redis.client as typeof mockRedisClient;
+    mockRedisClient = redis.client as unknown as typeof mockRedisClient;
     vi.clearAllMocks();
   });
 

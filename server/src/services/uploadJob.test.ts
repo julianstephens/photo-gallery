@@ -1,23 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UploadJobProgress } from "utils";
-import redis from "../redis.ts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockRedisModule } from "../utils/test-mocks.ts";
 import { UploadJobService } from "./uploadJob.ts";
 
 // Mock redis
-vi.mock("../redis.ts", () => ({
-  default: {
-    client: {
-      hSet: vi.fn(),
-      hGetAll: vi.fn(),
-      hGet: vi.fn(),
-      expire: vi.fn(),
-      rPush: vi.fn(),
-      del: vi.fn(),
-      lRem: vi.fn(),
-      exists: vi.fn(),
-    },
-  },
-}));
+vi.mock("../redis.ts", () => mockRedisModule());
+
+// Import redis after mock
+import redis from "../redis.ts";
 
 describe("UploadJobService", () => {
   let service: UploadJobService;
