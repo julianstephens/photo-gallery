@@ -1,4 +1,5 @@
 import { httpClient } from "@/clients.ts";
+import type { UploadProgress } from "utils";
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -33,6 +34,11 @@ export const finalizeUpload = async (uploadId: string) => {
 
 export const cancelUpload = async (uploadId: string) => {
   await httpClient.delete(`/uploads/${uploadId}`);
+};
+
+export const getUploadProgress = async (uploadId: string): Promise<UploadProgress> => {
+  const { data } = await httpClient.get<UploadProgress>(`/uploads/${uploadId}/progress`);
+  return data;
 };
 
 export const uploadFileInChunks = async (

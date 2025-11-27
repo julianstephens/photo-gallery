@@ -4,7 +4,9 @@ import type {
   FinalizeUploadResponse,
   InitiateUploadRequest,
   InitiateUploadResponse,
+  UploadProgress,
 } from "utils";
+import type { WorkerInMessage, WorkerOutMessage } from "./uploadJobWorker";
 
 const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_RETRIES = 3;
@@ -17,6 +19,10 @@ export interface ChunkedUploadOptions {
   onProgress?: (progress: ChunkedUploadProgress) => void;
   onChunkComplete?: (index: number, total: number) => void;
   onError?: (error: Error, chunk: number) => void;
+  /** Called when server-side processing progress is updated */
+  onServerProgress?: (progress: UploadProgress) => void;
+  /** Base URL for API calls (used by worker) */
+  baseUrl?: string;
 }
 
 export interface ChunkedUploadResult {
@@ -43,6 +49,59 @@ function sliceFile(file: File, chunkSize: number): Blob[] {
  */
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Poll for server-side upload progress using a web worker
+ */
+function pollServerProgressWithWorker(
+  uploadId: string,
+  onServerProgress?: (progress: UploadProgress) => void,
+  baseUrl?: string,
+): Promise<UploadProgress> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./uploadJobWorker.ts", import.meta.url), { type: "module" });
+
+    const cleanup = () => {
+      worker.postMessage({ type: "stop" } satisfies WorkerInMessage);
+      worker.terminate();
+    };
+
+    worker.onmessage = (event: MessageEvent<WorkerOutMessage>) => {
+      const msg = event.data;
+
+      if (msg.type === "progress_update" && msg.progress) {
+        onServerProgress?.(msg.progress);
+      } else if (msg.type === "progress_complete" && msg.progress) {
+        cleanup();
+        resolve(msg.progress);
+      } else if (msg.type === "progress_failed" && msg.progress) {
+        cleanup();
+        reject(new Error(msg.progress.error || "Server-side processing failed"));
+      } else if (msg.type === "timeout") {
+        cleanup();
+        reject(new Error("Server-side processing timed out"));
+      } else if (msg.type === "not_found") {
+        cleanup();
+        reject(new Error("Upload session not found"));
+      } else if (msg.type === "error") {
+        cleanup();
+        reject(new Error(msg.error));
+      }
+    };
+
+    worker.onerror = (error) => {
+      cleanup();
+      reject(new Error(`Worker error: ${error.message}`));
+    };
+
+    // Start polling
+    worker.postMessage({
+      type: "start_progress",
+      uploadId,
+      baseUrl: baseUrl ?? "/api",
+    } satisfies WorkerInMessage);
+  });
 }
 
 /**
@@ -93,6 +152,7 @@ export async function chunkedUpload(
     onProgress,
     onChunkComplete,
     onError,
+    onServerProgress,
   } = options;
 
   let uploadId: string | null = null;
@@ -137,6 +197,11 @@ export async function chunkedUpload(
       "uploads/finalize",
       { uploadId },
     );
+
+    // Step 4: Poll for server-side progress using worker (for zip extraction and bucket uploads)
+    if (onServerProgress) {
+      await pollServerProgressWithWorker(uploadId, onServerProgress, options.baseUrl);
+    }
 
     return {
       success: finalizeResponse.success,
@@ -237,6 +302,15 @@ export class ChunkedUploader {
         "uploads/finalize",
         { uploadId: this.uploadId },
       );
+
+      // Step 4: Poll for server-side progress using worker (for zip extraction and bucket uploads)
+      if (this.options.onServerProgress && this.uploadId) {
+        await pollServerProgressWithWorker(
+          this.uploadId,
+          this.options.onServerProgress,
+          this.options.baseUrl,
+        );
+      }
 
       return {
         success: finalizeResponse.success,

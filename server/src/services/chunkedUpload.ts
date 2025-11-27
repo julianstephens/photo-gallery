@@ -14,6 +14,7 @@ import type {
 const CHUNK_DIR_PREFIX = "chunked-upload-";
 const CHUNK_FILE_PREFIX = "chunk-";
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const PROGRESS_TTL_MS = 5 * 60 * 1000; // 5 minutes for completed/failed progress states
 
 /**
  * Sanitize a filename to prevent path traversal attacks.
@@ -49,7 +50,12 @@ export interface ChunkedUploadMetadata {
 const uploadMetadata = new Map<string, ChunkedUploadMetadata>();
 
 // In-memory store for upload progress state
-const uploadProgressState = new Map<string, UploadProgress>();
+// Tracks completedAt timestamp for TTL-based cleanup
+interface ProgressStateEntry {
+  progress: UploadProgress;
+  completedAt: number | null;
+}
+const uploadProgressState = new Map<string, ProgressStateEntry>();
 
 export class ChunkedUploadService {
   /**
@@ -79,7 +85,7 @@ export class ChunkedUploadService {
     uploadMetadata.set(uploadId, metadata);
 
     // Initialize progress state
-    const progressState: UploadProgress = {
+    const progressData: UploadProgress = {
       uploadId,
       status: "pending",
       phase: "client-upload",
@@ -91,7 +97,7 @@ export class ChunkedUploadService {
       },
       error: null,
     };
-    uploadProgressState.set(uploadId, progressState);
+    uploadProgressState.set(uploadId, { progress: progressData, completedAt: null });
 
     return { uploadId };
   }
@@ -120,12 +126,12 @@ export class ChunkedUploadService {
     await fs.writeFile(chunkPath, chunkBuffer);
 
     // Update progress state
-    const progressState = uploadProgressState.get(uploadId);
-    if (progressState) {
-      progressState.status = "uploading";
-      progressState.phase = "client-upload";
-      progressState.progress.uploadedBytes =
-        (progressState.progress.uploadedBytes ?? 0) + chunkBuffer.length;
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = "uploading";
+      entry.progress.phase = "client-upload";
+      entry.progress.progress.uploadedBytes =
+        (entry.progress.progress.uploadedBytes ?? 0) + chunkBuffer.length;
     }
   }
 
@@ -241,6 +247,7 @@ export class ChunkedUploadService {
 
   /**
    * Clean up all expired upload sessions.
+   * Also cleans up completed/failed progress states that have exceeded their TTL.
    * @returns The number of sessions that were cleaned up.
    */
   async cleanupExpiredUploads(): Promise<number> {
@@ -253,6 +260,13 @@ export class ChunkedUploadService {
         // Also remove progress state for expired uploads
         uploadProgressState.delete(uploadId);
         cleanedCount++;
+      }
+    }
+
+    // Clean up completed/failed progress states that have exceeded their TTL
+    for (const [uploadId, entry] of uploadProgressState.entries()) {
+      if (entry.completedAt && now - entry.completedAt > PROGRESS_TTL_MS) {
+        uploadProgressState.delete(uploadId);
       }
     }
 
@@ -274,7 +288,8 @@ export class ChunkedUploadService {
    * @returns The current progress state, or undefined if not found.
    */
   getProgress(uploadId: string): UploadProgress | undefined {
-    return uploadProgressState.get(uploadId);
+    const entry = uploadProgressState.get(uploadId);
+    return entry?.progress;
   }
 
   /**
@@ -290,12 +305,16 @@ export class ChunkedUploadService {
     phase: UploadProgressPhase,
     progressUpdate?: Partial<UploadProgress["progress"]>,
   ): void {
-    const progressState = uploadProgressState.get(uploadId);
-    if (progressState) {
-      progressState.status = status;
-      progressState.phase = phase;
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = status;
+      entry.progress.phase = phase;
       if (progressUpdate) {
-        Object.assign(progressState.progress, progressUpdate);
+        Object.assign(entry.progress.progress, progressUpdate);
+      }
+      // Set completedAt timestamp when status becomes completed or failed
+      if ((status === "completed" || status === "failed") && !entry.completedAt) {
+        entry.completedAt = Date.now();
       }
     }
   }
@@ -305,9 +324,12 @@ export class ChunkedUploadService {
    * @param uploadId - The unique upload session identifier.
    */
   markCompleted(uploadId: string): void {
-    const progressState = uploadProgressState.get(uploadId);
-    if (progressState) {
-      progressState.status = "completed";
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = "completed";
+      if (!entry.completedAt) {
+        entry.completedAt = Date.now();
+      }
     }
   }
 
@@ -317,10 +339,13 @@ export class ChunkedUploadService {
    * @param error - The error message.
    */
   markFailed(uploadId: string, error: string): void {
-    const progressState = uploadProgressState.get(uploadId);
-    if (progressState) {
-      progressState.status = "failed";
-      progressState.error = error;
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = "failed";
+      entry.progress.error = error;
+      if (!entry.completedAt) {
+        entry.completedAt = Date.now();
+      }
     }
   }
 
