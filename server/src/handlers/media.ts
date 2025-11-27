@@ -3,8 +3,8 @@ import { BucketService } from "../services/bucket.ts";
 
 const bucketService = await BucketService.create();
 
-const escapeHtml = (str: string): string =>
-  str
+const escapeHtml = (str: string | null | undefined): string =>
+  (str ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
