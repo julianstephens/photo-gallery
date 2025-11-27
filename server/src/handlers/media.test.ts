@@ -133,7 +133,7 @@ describe("media handlers", () => {
         const res = createRes();
         // Simulate a typical S3 presigned URL with multiple query parameters
         const presignedUrl =
-          "https://s3.example.com/bucket/photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE&X-Amz-Date=20231215T120000Z&X-Amz-Expires=3600&X-Amz-Signature=abc123";
+          "https://s3.example.com/bucket/photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLEFAKE123&X-Amz-Date=20231215T120000Z&X-Amz-Expires=3600&X-Amz-Signature=abc123";
         bucketServiceMocks.createPresignedUrl.mockResolvedValue(presignedUrl);
 
         await streamMedia(req, res);
