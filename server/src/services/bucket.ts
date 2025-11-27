@@ -150,6 +150,7 @@ export class BucketService {
       new GetObjectCommand({
         Bucket: this.#bucketName,
         Key: key,
+        ResponseContentDisposition: "inline",
       }),
       { expiresIn: 3600 },
     );
