@@ -100,21 +100,27 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     const shouldTreatAsZip = looksLikeZipByExt;
 
     if (!shouldTreatAsZip) {
-      // Update progress for single file upload
-      chunkedUploadService.updateProgress(uploadId, "processing", "server-upload", {
-        totalFiles: 1,
-        processedFiles: 0,
-      });
+      try {
+        // Update progress for single file upload
+        chunkedUploadService.updateProgress(uploadId, "processing", "server-upload", {
+          totalFiles: 1,
+          processedFiles: 0,
+        });
 
-      const objectName = uploadService.buildObjectName(uploadDatePrefix, metadata.fileName);
-      await bucketService.uploadToBucket(metadata.galleryName, objectName, finalizedPath);
-      await rm(finalizedPath, { force: true }).catch(() => {});
+        const objectName = uploadService.buildObjectName(uploadDatePrefix, metadata.fileName);
+        await bucketService.uploadToBucket(metadata.galleryName, objectName, finalizedPath);
+        await rm(finalizedPath, { force: true }).catch(() => {});
 
-      // Mark upload as completed
-      chunkedUploadService.updateProgress(uploadId, "completed", "server-upload", {
-        processedFiles: 1,
-      });
-      return res.status(200).json(result);
+        // Mark upload as completed
+        chunkedUploadService.updateProgress(uploadId, "completed", "server-upload", {
+          processedFiles: 1,
+        });
+        return res.status(200).json(result);
+      } catch (error) {
+        chunkedUploadService.markFailed(uploadId, error);
+        appLogger.error({ err: error, uploadId }, "Single file upload failed");
+        return res.status(500).json({ error: "Failed to upload file", details: error?.message || error });
+      }
     }
 
     // Zip handling path: extract to a temp directory and upload contained image files
