@@ -1,4 +1,4 @@
-import { uploadFileInChunks } from "@/services/upload";
+import { uploadFileInChunks } from "@/lib/upload/uploadService";
 import {
   Button,
   Card,

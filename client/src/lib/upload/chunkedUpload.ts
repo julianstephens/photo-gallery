@@ -4,7 +4,7 @@ import type {
   InitiateUploadRequest,
   InitiateUploadResponse,
 } from "utils";
-import { uploadHttpClient } from "./clients";
+import { uploadHttpClient } from "../../clients";
 
 const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_RETRIES = 3;

@@ -1,4 +1,4 @@
-import type { User } from "utils";
+import type { UploadJob, User } from "utils";
 
 export interface AuthStateShape {
   isAuthed: boolean;
@@ -12,4 +12,10 @@ export interface AuthContextValue extends AuthStateShape {
   login: () => void | Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+}
+
+export interface UploadJobWorkerState {
+  job: UploadJob | null;
+  status: "idle" | "running" | "completed" | "failed" | "timeout" | "not_found";
+  error: string | null;
 }

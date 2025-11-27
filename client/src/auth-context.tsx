@@ -1,3 +1,5 @@
+import type { AuthContextValue } from "@/lib/types";
+import { AuthContext } from "@/lib/utils";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { User } from "utils";
 import {
@@ -5,8 +7,6 @@ import {
   logout as doLogout,
   getCurrentUser as fetchCurrentUser,
 } from "./queries";
-import type { AuthContextValue } from "./types";
-import { AuthContext } from "./utils";
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
