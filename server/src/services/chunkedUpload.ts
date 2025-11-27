@@ -155,10 +155,10 @@ export class ChunkedUploadService {
       }
 
       // Close the write stream
-      writeStream.end();
       await new Promise<void>((resolve, reject) => {
         writeStream!.on("finish", resolve);
         writeStream!.on("error", reject);
+        writeStream!.end();
       });
 
       return {
