@@ -42,7 +42,7 @@ export const FilePickerModal = ({ open, closeModal, onUploadComplete }: FilePick
       onProgress: handleProgress,
       onError: (err) => {
         console.error("Chunk upload error:", err);
-        setError(typeof err === "string" ? err : err?.message || "A chunk failed to upload");
+        setError(err.message || "A chunk failed to upload");
       },
     });
     uploaderRef.current = uploader;
