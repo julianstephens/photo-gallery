@@ -1,10 +1,10 @@
-import { uploadHttpClient } from "./clients";
 import type {
   ChunkedUploadProgress,
+  FinalizeUploadResponse,
   InitiateUploadRequest,
   InitiateUploadResponse,
-  FinalizeUploadResponse,
 } from "utils";
+import { uploadHttpClient } from "./clients";
 
 const DEFAULT_CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_RETRIES = 3;
@@ -13,6 +13,7 @@ const RETRY_DELAY_MS = 1000;
 export interface ChunkedUploadOptions {
   chunkSize?: number;
   maxRetries?: number;
+  galleryName?: string;
   onProgress?: (progress: ChunkedUploadProgress) => void;
   onChunkComplete?: (index: number, total: number) => void;
   onError?: (error: Error, chunk: number) => void;
@@ -101,6 +102,8 @@ export async function chunkedUpload(
     const initiateRequest: InitiateUploadRequest = {
       fileName: file.name,
       fileType: file.type || "application/octet-stream",
+      totalSize: file.size,
+      galleryName: options.galleryName || "unknown",
     };
 
     const { data: initiateResponse } = await uploadHttpClient.post<InitiateUploadResponse>(
@@ -186,6 +189,8 @@ export class ChunkedUploader {
       const initiateRequest: InitiateUploadRequest = {
         fileName: this.file.name,
         fileType: this.file.type || "application/octet-stream",
+        totalSize: this.file.size,
+        galleryName: this.options.galleryName || "unknown",
       };
 
       const { data: initiateResponse } = await uploadHttpClient.post<InitiateUploadResponse>(
