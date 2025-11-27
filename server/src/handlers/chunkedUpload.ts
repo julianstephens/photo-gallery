@@ -211,7 +211,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       await walkAndUpload(extractDir);
 
       // Mark upload as completed
-      chunkedUploadService.markCompleted(uploadId);
+      chunkedUploadService.updateProgress(uploadId, "completed", "server-upload");
     } catch (zipErr) {
       appLogger.error({ err: zipErr }, "[finalizeUpload] error while processing zip upload");
       chunkedUploadService.markFailed(uploadId, "Failed to process zip upload");
