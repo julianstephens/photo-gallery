@@ -35,3 +35,16 @@ export const normalizeGalleryFolderName = (value: string) => {
     .replace(/-{2,}/g, "-");
   return slug || "gallery";
 };
+
+/**
+ * Escapes HTML entities to prevent XSS attacks.
+ * Covers the most common characters that could be used in XSS payloads.
+ */
+export const escapeHtml = (str: string): string => {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};

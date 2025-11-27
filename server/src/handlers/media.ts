@@ -1,8 +1,7 @@
 import type { Request, Response } from "express";
 import { BucketService } from "../services/bucket.ts";
-
+import { escapeHtml } from "../utils.ts";
 const bucketService = await BucketService.create();
-
 export const streamMedia = async (req: Request, res: Response) => {
   const { galleryName } = req.params;
   const objectName = req.params.objectName as string | string[];
@@ -16,11 +15,13 @@ export const streamMedia = async (req: Request, res: Response) => {
       // Serve HTML page for viewing
       const presignedUrl = await bucketService.createPresignedUrl(key);
       const fileName = objectPath.split("/").pop() || "image";
+      // Escape user-controlled values to prevent XSS
+      const safeFileName = escapeHtml(fileName);
       const html = `
 <!DOCTYPE html>
 <html>
 <head>
-  <title>${fileName}</title>
+  <title>${safeFileName}</title>
   <style>
     body {
       margin: 0;
@@ -39,7 +40,7 @@ export const streamMedia = async (req: Request, res: Response) => {
   </style>
 </head>
 <body>
-  <img src="${presignedUrl}" alt="${fileName}" />
+  <img src="${presignedUrl}" alt="${safeFileName}" />
 </body>
 </html>`;
       res.setHeader("Content-Type", "text/html");
