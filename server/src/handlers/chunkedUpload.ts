@@ -114,8 +114,6 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       chunkedUploadService.updateProgress(uploadId, "completed", "server-upload", {
         processedFiles: 1,
       });
-      chunkedUploadService.markCompleted(uploadId);
-
       return res.status(200).json(result);
     }
 
