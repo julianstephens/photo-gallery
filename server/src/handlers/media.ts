@@ -3,6 +3,14 @@ import { BucketService } from "../services/bucket.ts";
 
 const bucketService = await BucketService.create();
 
+const escapeHtml = (str: string): string =>
+  str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 export const streamMedia = async (req: Request, res: Response) => {
   const { galleryName } = req.params;
   const objectName = req.params.objectName as string | string[];
@@ -16,11 +24,12 @@ export const streamMedia = async (req: Request, res: Response) => {
       // Serve HTML page for viewing
       const presignedUrl = await bucketService.createPresignedUrl(key);
       const fileName = objectPath.split("/").pop() || "image";
+      const escapedFileName = escapeHtml(fileName);
       const html = `
 <!DOCTYPE html>
 <html>
 <head>
-  <title>${fileName}</title>
+  <title>${escapedFileName}</title>
   <style>
     body {
       margin: 0;
@@ -39,7 +48,7 @@ export const streamMedia = async (req: Request, res: Response) => {
   </style>
 </head>
 <body>
-  <img src="${presignedUrl}" alt="${fileName}" />
+  <img src="${presignedUrl}" alt="${escapedFileName}" />
 </body>
 </html>`;
       res.setHeader("Content-Type", "text/html");
