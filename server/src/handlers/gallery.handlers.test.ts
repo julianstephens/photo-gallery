@@ -25,6 +25,15 @@ vi.mock("../controllers/index.ts", () => ({
   }),
 }));
 
+vi.mock("../middleware/logger.ts", () => ({
+  appLogger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 vi.mock("utils", () => schemaMocks);
 
 const handlers = await import("./gallery.ts");

@@ -1,5 +1,16 @@
 import { PassThrough } from "stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock logger before any imports that might use it
+vi.mock("../middleware/logger.ts", () => ({
+  appLogger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 import { GalleryController } from "./gallery.ts";
 
 const uploadJobServiceMocks = vi.hoisted(() => ({

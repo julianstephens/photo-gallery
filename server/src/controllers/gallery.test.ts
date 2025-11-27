@@ -1,4 +1,46 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// Mock logger before any imports that might use it
+vi.mock("../middleware/logger.ts", () => ({
+  appLogger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
+// Mock bucket service to avoid env.ts being loaded
+vi.mock("../services/bucket.ts", () => ({
+  BucketService: vi.fn().mockImplementation(function MockBucketService() {
+    return {
+      uploadToBucket: vi.fn(),
+      uploadStreamToBucket: vi.fn(),
+      uploadBufferToBucket: vi.fn(),
+      createBucketFolder: vi.fn(),
+      renameBucketFolder: vi.fn(),
+      emptyBucketFolder: vi.fn(),
+      deleteBucketFolder: vi.fn(),
+      getBucketFolderContents: vi.fn(),
+      getObject: vi.fn(),
+      createPresignedUrl: vi.fn(),
+    };
+  }),
+}));
+
+// Mock upload job service
+vi.mock("../services/uploadJob.ts", () => ({
+  UploadJobService: vi.fn().mockImplementation(function MockUploadJobService() {
+    return {
+      createJob: vi.fn(),
+      updateJobStatus: vi.fn(),
+      updateJobProgress: vi.fn(),
+      finalizeJob: vi.fn(),
+      getJob: vi.fn(),
+    };
+  }),
+}));
+
 import { UploadService } from "../services/upload.ts";
 import { GalleryController } from "./gallery.ts";
 
