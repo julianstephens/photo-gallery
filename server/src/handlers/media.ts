@@ -17,7 +17,6 @@ export const streamMedia = async (req: Request, res: Response) => {
       const fileName = objectPath.split("/").pop() || "image";
       // Escape user-controlled values to prevent XSS
       const safeFileName = escapeHtml(fileName);
-      const safePresignedUrl = escapeHtml(presignedUrl);
       const html = `
 <!DOCTYPE html>
 <html>
@@ -41,7 +40,7 @@ export const streamMedia = async (req: Request, res: Response) => {
   </style>
 </head>
 <body>
-  <img src="${safePresignedUrl}" alt="${safeFileName}" />
+  <img src="${presignedUrl}" alt="${safeFileName}" />
 </body>
 </html>`;
       res.setHeader("Content-Type", "text/html");

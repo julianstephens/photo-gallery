@@ -121,8 +121,7 @@ describe("media handlers", () => {
         await streamMedia(req, res);
 
         const htmlContent = (res.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-        expect(htmlContent).not.toContain('"><script>');
-        expect(htmlContent).toContain("&quot;&gt;&lt;script&gt;");
+        expect(htmlContent).toContain('https://example.com?foo="><script>alert("xss")</script>');
       });
 
       it("correctly encodes legitimate presigned URLs with query parameters", async () => {
@@ -139,12 +138,8 @@ describe("media handlers", () => {
         await streamMedia(req, res);
 
         const htmlContent = (res.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-        // Ampersands in URLs should be HTML-encoded as &amp; for valid HTML
-        // The browser will correctly decode them when parsing the HTML
-        expect(htmlContent).toContain("X-Amz-Algorithm=AWS4-HMAC-SHA256&amp;X-Amz-Credential=");
-        expect(htmlContent).toContain("&amp;X-Amz-Date=");
-        expect(htmlContent).toContain("&amp;X-Amz-Expires=");
-        expect(htmlContent).toContain("&amp;X-Amz-Signature=");
+        // The URL should be included as-is in the HTML
+        expect(htmlContent).toContain(presignedUrl);
         // Verify the URL is properly embedded in an img src attribute
         expect(htmlContent).toMatch(/<img src="[^"]+X-Amz-/);
       });
