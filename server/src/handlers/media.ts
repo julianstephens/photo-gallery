@@ -1,21 +1,7 @@
 import type { Request, Response } from "express";
 import { BucketService } from "../services/bucket.ts";
-
+import { escapeHtml } from "../utils.ts";
 const bucketService = await BucketService.create();
-
-/**
- * Escapes HTML entities to prevent XSS attacks.
- * Covers the most common characters that could be used in XSS payloads.
- */
-const escapeHtml = (str: string): string => {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-};
-
 export const streamMedia = async (req: Request, res: Response) => {
   const { galleryName } = req.params;
   const objectName = req.params.objectName as string | string[];
