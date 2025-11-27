@@ -127,9 +127,9 @@ export class ChunkedUploadService {
         throw new Error(`No chunks found for upload: ${uploadId}`);
       }
 
-      // Validate that chunk indices are contiguous (1, 2, 3, ..., N)
+      // Validate that chunk indices are contiguous (0, 1, 2, ..., N-1)
       for (let i = 0; i < chunkFiles.length; i++) {
-        const expectedIndex = i + 1;
+        const expectedIndex = i;
         const actualIndex = parseInt(chunkFiles[i].replace(CHUNK_FILE_PREFIX, ""), 10);
         if (actualIndex !== expectedIndex) {
           throw new Error(
@@ -158,8 +158,8 @@ export class ChunkedUploadService {
 
       // Close the write stream
       await new Promise<void>((resolve, reject) => {
-        writeStream!.on("finish", resolve);
-        writeStream!.on("error", reject);
+        writeStream!.once("finish", resolve);
+        writeStream!.once("error", reject);
         writeStream!.end();
       });
 

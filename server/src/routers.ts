@@ -69,7 +69,7 @@ uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUpl
  * MEDIA PROXY ROUTE
  **********************/
 const mediaRouter = Router();
-mediaRouter.get("/:galleryName/*objectName", streamMedia);
+mediaRouter.get("/:galleryName/:objectName+", streamMedia);
 
 export default {
   healthRouter,

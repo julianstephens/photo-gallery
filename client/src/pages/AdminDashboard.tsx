@@ -62,7 +62,7 @@ const AdminDashboard = () => {
       setDeleteLoading(true);
       await deleteGalleryMutation.mutateAsync({
         guildId: guildId ?? "",
-        galleryName: deleteKey ?? "",
+        galleryName: deleteKey,
       });
       toaster.success({
         title: "Gallery Deleted",
@@ -137,6 +137,7 @@ const AdminDashboard = () => {
       <ConfirmDeleteModal
         open={showConfirmDeleteModal}
         closeModal={closeConfirmDeleteModal}
+        actionButtonLoading={deleteLoading && deleteKey !== null}
         actionButtonOnClick={deleteGallery}
       />
     </>

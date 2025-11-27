@@ -16,6 +16,24 @@ vi.mock("../services/chunkedUpload.ts", () => ({
   }),
 }));
 
+vi.mock("../services/bucket.ts", () => ({
+  BucketService: vi.fn().mockImplementation(function MockBucketService() {
+    return {
+      uploadToBucket: vi.fn().mockResolvedValue(undefined),
+      createPresignedUrl: vi.fn().mockResolvedValue("https://example.com/presigned"),
+    };
+  }),
+}));
+
+vi.mock("../services/upload.ts", () => ({
+  UploadService: vi.fn().mockImplementation(function MockUploadService() {
+    return {
+      buildObjectName: vi.fn().mockImplementation((prefix, name) => `${prefix}/${name}`),
+      sanitizeKeySegment: vi.fn().mockImplementation((name) => name),
+    };
+  }),
+}));
+
 vi.mock("../middleware/logger.ts", () => ({
   appLogger: {
     error: vi.fn(),
@@ -207,16 +225,13 @@ describe("chunked upload handlers", () => {
       const req = createReq({ body: { uploadId: "test-id" } });
       const res = createRes();
       // Simulate existing metadata so handler does not return 404
-      // and ensure non-zip path so bucketService is not involved in this unit test
       serviceMocks.getMetadata.mockReturnValue({
         fileName: "test.txt",
         fileType: "text/plain",
         galleryName: "test-gallery",
       });
-      serviceMocks.finalizeUpload.mockResolvedValue({
-        success: true,
-        filePath: "/tmp/final-file.txt",
-      });
+      // Make finalizeUpload reject to trigger error handling
+      serviceMocks.finalizeUpload.mockRejectedValue(new Error("Finalization failed"));
 
       await finalizeUpload(req, res);
 

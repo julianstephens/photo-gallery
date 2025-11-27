@@ -112,7 +112,9 @@ export const finalizeUpload = async (req: Request, res: Response) => {
 
     try {
       await new Promise<void>((resolve, reject) => {
-        const stream = createReadStream(finalizedPath)
+        const sourceStream = createReadStream(finalizedPath);
+        sourceStream.on("error", (e) => reject(e));
+        const stream = sourceStream
           .pipe(unzipper.Parse())
           .on("entry", async (entry) => {
             const fileName = entry.path || "";

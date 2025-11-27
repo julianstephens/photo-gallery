@@ -21,6 +21,8 @@ describe("ChunkedUploadService", () => {
       const result = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       expect(result.uploadId).toBeDefined();
@@ -35,6 +37,8 @@ describe("ChunkedUploadService", () => {
       const result = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       const metadata = service.getMetadata(result.uploadId);
@@ -53,6 +57,8 @@ describe("ChunkedUploadService", () => {
       const result = await service.initiateUpload({
         fileName: "myfile.zip",
         fileType: "application/zip",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       const metadata = service.getMetadata(result.uploadId);
@@ -70,13 +76,15 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       const chunkData = Buffer.from("Hello, World!");
-      await service.saveChunk(uploadId, 1, chunkData);
+      await service.saveChunk(uploadId, 0, chunkData);
 
       const metadata = service.getMetadata(uploadId);
-      const chunkPath = path.join(metadata!.tempDir, "chunk-1");
+      const chunkPath = path.join(metadata!.tempDir, "chunk-0");
       const savedData = await fs.readFile(chunkPath);
 
       expect(savedData.toString()).toBe("Hello, World!");
@@ -89,17 +97,19 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
+      await service.saveChunk(uploadId, 0, Buffer.from("Chunk 0"));
       await service.saveChunk(uploadId, 1, Buffer.from("Chunk 1"));
       await service.saveChunk(uploadId, 2, Buffer.from("Chunk 2"));
-      await service.saveChunk(uploadId, 3, Buffer.from("Chunk 3"));
 
       const metadata = service.getMetadata(uploadId);
       const files = await fs.readdir(metadata!.tempDir);
 
       expect(files).toHaveLength(3);
-      expect(files.sort()).toEqual(["chunk-1", "chunk-2", "chunk-3"]);
+      expect(files.sort()).toEqual(["chunk-0", "chunk-1", "chunk-2"]);
 
       // Cleanup
       await service.cleanupUpload(uploadId);
@@ -117,12 +127,14 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       // Save chunks out of order
-      await service.saveChunk(uploadId, 3, Buffer.from("World!"));
-      await service.saveChunk(uploadId, 1, Buffer.from("Hello, "));
-      await service.saveChunk(uploadId, 2, Buffer.from("Beautiful "));
+      await service.saveChunk(uploadId, 2, Buffer.from("World!"));
+      await service.saveChunk(uploadId, 0, Buffer.from("Hello, "));
+      await service.saveChunk(uploadId, 1, Buffer.from("Beautiful "));
 
       const result = await service.finalizeUpload(uploadId);
 
@@ -141,12 +153,14 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       const metadata = service.getMetadata(uploadId);
       const tempDir = metadata!.tempDir;
 
-      await service.saveChunk(uploadId, 1, Buffer.from("data"));
+      await service.saveChunk(uploadId, 0, Buffer.from("data"));
       await service.finalizeUpload(uploadId);
 
       // Verify temp directory is removed
@@ -171,6 +185,8 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       await expect(service.finalizeUpload(uploadId)).rejects.toThrow("No chunks found");
@@ -182,6 +198,8 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       const metadata = service.getMetadata(uploadId);
@@ -206,6 +224,8 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       // Mock the creation time to be old
@@ -224,6 +244,8 @@ describe("ChunkedUploadService", () => {
       const { uploadId } = await service.initiateUpload({
         fileName: "test.txt",
         fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
       });
 
       const cleaned = await service.cleanupExpiredUploads();
