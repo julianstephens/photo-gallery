@@ -151,6 +151,16 @@ export const getUploadJob = async (req: Request, res: Response) => {
   }
 };
 
+export const getAllUploadJobs = async (req: Request, res: Response) => {
+  try {
+    const jobs = await galleryController.getAllUploadJobs();
+    res.json(jobs);
+  } catch (err: unknown) {
+    appLogger.error({ err }, "[getAllUploadJobs] error");
+    res.status(500).json({ error: "Failed to get upload jobs" });
+  }
+};
+
 export const getImage = async (req: Request, res: Response) => {
   const galleryName = req.params.galleryName;
   const rawImagePath = req.params.imagePath;

@@ -1,31 +1,42 @@
-import { uploadFileInChunks } from "@/lib/upload/uploadService";
+import { uploadToGallery } from "@/lib/upload/uploadService";
 import {
   Button,
   Card,
+  DataList,
   FileUpload,
-  Flex,
+  HStack,
   Icon,
+  IconButton,
   Progress,
+  Text,
+  VStack,
   type FileUploadFileAcceptDetails,
 } from "@chakra-ui/react";
+import { AxiosError } from "axios";
 import { useEffect, useState } from "react";
-import { HiTrash, HiUpload } from "react-icons/hi";
+import { HiOutlineUpload, HiTrash } from "react-icons/hi";
+import { HiOutlineEye, HiPencil } from "react-icons/hi2";
 import type { Gallery } from "utils";
 import { toaster } from "./ui/toaster";
-import { AxiosError } from "axios";
 
 export interface GalleryCardProps {
   info: Gallery;
+  guildId: string;
   openConfirmDeleteModal?: (key: string) => void;
   showDeleteLoading: boolean;
   deleteKey: string | null;
+  onUploadJobCreated?: (jobId: string) => void;
+  openDetailedGalleryView: (gallery: Gallery) => void;
 }
 
 export const GalleryCard = ({
   info,
+  guildId,
   showDeleteLoading,
   deleteKey,
   openConfirmDeleteModal,
+  onUploadJobCreated,
+  openDetailedGalleryView,
 }: GalleryCardProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -45,13 +56,22 @@ export const GalleryCard = ({
     const file = details.files[0];
 
     try {
-      await uploadFileInChunks(file, info.name, (progress) => {
-        setUploadProgress(progress);
-      });
-      toaster.success({
-        title: "Upload Completed",
-        description: "File uploaded successfully.",
-      });
+      const result = await uploadToGallery(file, info.name, guildId);
+
+      if (result.type === "async" && result.jobId) {
+        // Async upload - job created
+        onUploadJobCreated?.(result.jobId);
+        toaster.success({
+          title: "Upload Started",
+          description: "Your ZIP file is being processed. Check the upload monitor for progress.",
+        });
+      } else {
+        // Sync upload - completed immediately
+        toaster.success({
+          title: "Upload Completed",
+          description: "File uploaded successfully.",
+        });
+      }
     } catch (error) {
       let errMsg = "An error occurred during the upload.";
       if (error instanceof AxiosError) {
@@ -69,18 +89,32 @@ export const GalleryCard = ({
   };
 
   return (
-    <Card.Root>
-      <Card.Header>
+    <Card.Root id={`gallery-card-${info.name}`}>
+      <Card.Header id={`gallery-card-header-${info.name}`}>
         <Card.Title>{info.name}</Card.Title>
       </Card.Header>
-      <Card.Body>
-        <Flex direction="row" justify="space-between" align="center" gap={2}>
-          <Flex h="full" direction="column" gap={2}>
-            <p>Created At: {new Date(info.meta.createdAt).toLocaleDateString()}</p>
-            <p>Expires In: {info.meta.ttlWeeks} week(s)</p>
-            <p>Created By: {info.meta.createdBy}</p>
-          </Flex>
-          <Flex direction="column" h="full" gap="2">
+      <Card.Body id={`gallery-card-body-${info.name}`}>
+        <VStack align="start" gap={2}>
+          <VStack align="start" gap="4" id={`gallery-card-info-${info.name}`}>
+            <DataList.Root orientation="horizontal">
+              <DataList.Item>
+                <DataList.ItemLabel>Created At</DataList.ItemLabel>
+                <DataList.ItemValue>
+                  {new Date(info.meta.createdAt).toLocaleDateString()}
+                </DataList.ItemValue>
+              </DataList.Item>
+              <DataList.Item>
+                <DataList.ItemLabel>Expires In</DataList.ItemLabel>
+                <DataList.ItemValue>{info.meta.ttlWeeks} week(s)</DataList.ItemValue>
+              </DataList.Item>
+              <DataList.Item>
+                <DataList.ItemLabel>Created By</DataList.ItemLabel>
+                <DataList.ItemValue>{info.meta.createdBy}</DataList.ItemValue>
+              </DataList.Item>
+            </DataList.Root>
+            <Text color="blue.400">{info.meta.totalItems} photos</Text>
+          </VStack>
+          <HStack id={`gallery-card-actions-${info.name}`} w="full" gap="2" mt="4">
             {isLoading && uploadProgress !== null && (
               <Progress.Root value={uploadProgress} size="sm" striped animated>
                 <Progress.Track>
@@ -88,7 +122,20 @@ export const GalleryCard = ({
                 </Progress.Track>
               </Progress.Root>
             )}
+            <Button
+              w="45%"
+              colorPalette="blue"
+              onClick={() => {
+                openDetailedGalleryView(info);
+              }}
+            >
+              <Icon>
+                <HiOutlineEye />
+              </Icon>
+              View Gallery
+            </Button>
             <FileUpload.Root
+              w="45%"
               accept={["application/zip", "application/x-zip-compressed", "image/*"]}
               onFileReject={(details) => {
                 console.error("Rejected files:", details.files);
@@ -105,25 +152,25 @@ export const GalleryCard = ({
                   loading={isLoading}
                   disabled={isLoading || deleteLoading}
                 >
-                  <HiUpload />
+                  <HiOutlineUpload />
                   Upload
                 </Button>
               </FileUpload.Trigger>
             </FileUpload.Root>
-            <Button
+            <IconButton variant="outline">
+              <HiPencil />
+            </IconButton>
+            <IconButton
               variant="subtle"
               colorPalette="red"
               loading={deleteLoading && deleteKey === info.name}
               disabled={(deleteLoading && deleteKey !== info.name) || isLoading}
               onClick={openModalWithLoading}
             >
-              <Icon>
-                <HiTrash />
-              </Icon>
-              Delete gallery
-            </Button>
-          </Flex>
-        </Flex>
+              <HiTrash />
+            </IconButton>
+          </HStack>
+        </VStack>
       </Card.Body>
     </Card.Root>
   );

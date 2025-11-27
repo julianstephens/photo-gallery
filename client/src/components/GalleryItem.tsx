@@ -17,7 +17,7 @@ export const GalleryItem = ({ item }: GalleryItemProps) => {
   return (
     <Tooltip content={name}>
       <Link
-        display="block"
+        display="inline-block"
         w="full"
         href={`/media/${item.url}`}
         target="_blank"

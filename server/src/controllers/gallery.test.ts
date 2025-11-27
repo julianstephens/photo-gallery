@@ -195,6 +195,7 @@ describe("GalleryAPI Unit Tests", () => {
             expiresAt: now + 10_000,
             ttlWeeks: 1,
             createdBy: "user-a",
+            totalItems: 0,
           },
         },
       ]);

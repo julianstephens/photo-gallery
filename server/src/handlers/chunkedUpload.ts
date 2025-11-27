@@ -54,13 +54,33 @@ export const uploadChunk = async (req: Request, res: Response) => {
     // Get the chunk data from request body (raw buffer) with size limit
     const chunks: Buffer[] = [];
     let totalSize = 0;
-    for await (const chunk of req) {
-      totalSize += chunk.length;
-      if (totalSize > MAX_CHUNK_SIZE) {
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        req.on("data", (chunk: Buffer) => {
+          totalSize += chunk.length;
+          if (totalSize > MAX_CHUNK_SIZE) {
+            reject(new Error(CHUNK_SIZE_ERROR));
+            return;
+          }
+          chunks.push(chunk);
+        });
+
+        req.on("end", () => {
+          resolve();
+        });
+
+        req.on("error", (error) => {
+          reject(error);
+        });
+      });
+    } catch (error) {
+      if ((error as Error).message === CHUNK_SIZE_ERROR) {
         return res.status(413).json({ error: CHUNK_SIZE_ERROR });
       }
-      chunks.push(chunk);
+      throw error;
     }
+
     const chunkBuffer = Buffer.concat(chunks);
 
     if (chunkBuffer.length === 0) {

@@ -65,6 +65,7 @@ export class GalleryController {
       expiresAt: Number(record.expiresAt) || NaN,
       ttlWeeks: Number(record.ttlWeeks) || NaN,
       createdBy: record.createdBy || "",
+      totalItems: Number(record.totalItems) || 0,
     };
     if (record.folderName) {
       parsed.folderName = record.folderName;
@@ -76,6 +77,18 @@ export class GalleryController {
     }
 
     return result.data;
+  };
+
+  #incrementGalleryItemCount = async (guildId: string, galleryName: string) => {
+    const validGuildId = validateString(guildId, "Guild ID is required");
+    const validGalleryName = validateString(galleryName, GalleryNameError);
+
+    const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+    if (!metaKey) {
+      throw new Error("Internal error: missing meta key");
+    }
+
+    await redis.client.hIncrBy(metaKey, "totalItems", 1);
   };
 
   #galleryKeys = (guildId: string, galleryName?: string) => {
@@ -197,6 +210,7 @@ export class GalleryController {
       ttlWeeks: req.ttlWeeks,
       createdBy: validUserId,
       folderName,
+      totalItems: 0,
     });
 
     const multi = redis.client.multi();
@@ -206,6 +220,7 @@ export class GalleryController {
       expiresAt: String(meta.expiresAt),
       ttlWeeks: String(meta.ttlWeeks),
       createdBy: meta.createdBy,
+      totalItems: String(meta.totalItems),
     };
     if (meta.folderName) {
       metaPayload.folderName = meta.folderName;
@@ -248,6 +263,9 @@ export class GalleryController {
         Name: base,
       });
 
+      // Increment total items count
+      await this.#incrementGalleryItemCount(guildId, galleryName);
+
       return {
         type: "sync" as const,
         uploaded: [{ key: objectName, contentType }],
@@ -286,20 +304,22 @@ export class GalleryController {
 
       // Process ZIP file asynchronously (don't await)
       Promise.resolve().then(() => {
-        this.#processZipUpload(jobId, file.buffer, galleryName, folderName, objectPath).catch(
-          async (err) => {
-            appLogger.error({ err, jobId }, "[uploadToGallery] Failed to process ZIP for job");
-            // Ensure job is marked as failed if async processing throws
-            try {
-              await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
-            } catch (updateErr) {
-              appLogger.error(
-                { updateErr, jobId },
-                "[uploadToGallery] Failed to update job status",
-              );
-            }
-          },
-        );
+        this.#processZipUpload(
+          jobId,
+          file.buffer,
+          galleryName,
+          folderName,
+          objectPath,
+          guildId,
+        ).catch(async (err) => {
+          appLogger.error({ err, jobId }, "[uploadToGallery] Failed to process ZIP for job");
+          // Ensure job is marked as failed if async processing throws
+          try {
+            await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
+          } catch (updateErr) {
+            appLogger.error({ updateErr, jobId }, "[uploadToGallery] Failed to update job status");
+          }
+        });
       });
 
       return {
@@ -317,6 +337,7 @@ export class GalleryController {
     galleryName: string,
     folderName: string,
     objectPath: string,
+    guildId: string,
   ) => {
     const timeoutError = new Error("ZIP processing timed out.");
     let watchdogTimer: NodeJS.Timeout | undefined;
@@ -425,6 +446,15 @@ export class GalleryController {
 
       const totalImageFiles = imageEntries.length;
 
+      // Set initial progress
+      const initialProgress: UploadJobProgress = {
+        processedFiles: 0,
+        totalFiles: totalImageFiles,
+        uploadedFiles: [],
+        failedFiles: [],
+      };
+      await this.#uploadJobService.updateJobProgress(jobId, initialProgress);
+
       let entriesSeen = 0;
       for (const entry of imageEntries) {
         throwIfWatchdogTriggered();
@@ -509,6 +539,9 @@ export class GalleryController {
           );
           trackStreamForWatchdog(null);
           throwIfWatchdogTriggered();
+
+          // Increment total items count for each uploaded file
+          await this.#incrementGalleryItemCount(guildId, galleryName);
 
           uploaded.push({ key: objectName, contentType });
           appLogger.info(
@@ -723,6 +756,10 @@ export class GalleryController {
       throw new InvalidInputError("Upload job not found");
     }
     return job;
+  };
+
+  getAllUploadJobs = async () => {
+    return this.#uploadJobService.getAllJobs();
   };
 
   getImage = async (guildId: string, galleryName: string, imagePath: string) => {

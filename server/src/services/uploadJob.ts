@@ -128,7 +128,23 @@ export class UploadJobService {
     if (!exists) {
       return;
     }
-    await redis.client.lRem(UPLOAD_JOBS_LIST, 0, jobId);
+    // For completed/failed jobs, keep them in the list for a short time so clients can see final state
+    // They will be automatically removed when the key expires
     await redis.client.expire(jobKey, TERMINAL_JOB_TTL_SECONDS);
+    // Don't remove from list immediately - let clients see the final state
+  };
+
+  getAllJobs = async (): Promise<UploadJob[]> => {
+    const jobIds = await redis.client.lRange(UPLOAD_JOBS_LIST, 0, -1);
+    const jobs: UploadJob[] = [];
+
+    for (const jobId of jobIds) {
+      const job = await this.getJob(jobId);
+      if (job) {
+        jobs.push(job);
+      }
+    }
+
+    return jobs;
   };
 }

@@ -1,9 +1,15 @@
 import { setDefaultGuild } from "@/queries";
-import { Button, Flex } from "@chakra-ui/react";
+import { Button, HStack, Icon } from "@chakra-ui/react";
 import { useMutation } from "@tanstack/react-query";
 import { toaster } from "./ui/toaster";
+import { HiOutlineStar } from "react-icons/hi2";
 
-export const SetDefaultGuildButton = ({ defaultGuild }: { defaultGuild: string }) => {
+export interface SetDefaultGuildButtonProps {
+  defaultGuild: string;
+  disabled?: boolean;
+}
+
+export const SetDefaultGuildButton = ({ defaultGuild, disabled }: SetDefaultGuildButtonProps) => {
   const setDefaultGuildMutation = useMutation({
     mutationFn: setDefaultGuild,
   });
@@ -19,14 +25,18 @@ export const SetDefaultGuildButton = ({ defaultGuild }: { defaultGuild: string }
   };
 
   return (
-    <Flex gap="4" justify="space-between" align="center">
-      <Button
-        onClick={() => {
-          void setGuild();
-        }}
-      >
+    <Button
+      disabled={disabled}
+      onClick={() => {
+        void setGuild();
+      }}
+    >
+      <HStack>
+        <Icon>
+          <HiOutlineStar />
+        </Icon>
         Set Default Guild
-      </Button>
-    </Flex>
+      </HStack>
+    </Button>
   );
 };

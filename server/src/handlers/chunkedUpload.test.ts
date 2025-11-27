@@ -132,33 +132,40 @@ describe("chunked upload handlers", () => {
   });
 
   describe("uploadChunk", () => {
-    const createAsyncIterableReq = (
+    const createDataEventReq = (
       query: Record<string, string>,
       chunks: Buffer[],
       headers: Record<string, string> = {},
     ) => {
       const req = createReq({ query });
       req.headers = { ...req.headers, ...headers };
-      // Create a proper async iterable
-      const iterator = {
-        current: 0,
-        chunks,
-        async next() {
-          if (this.current < this.chunks.length) {
-            return { value: this.chunks[this.current++], done: false };
-          }
-          return { value: undefined, done: true };
-        },
-      };
-      Object.assign(req, {
-        [Symbol.asyncIterator]: () => iterator,
+
+      // Mock EventEmitter behavior for req.on('data'), req.on('end'), req.on('error')
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      req.on = vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(listener);
+        return req;
       });
+
+      // Simulate emitting data events
+      setImmediate(() => {
+        try {
+          chunks.forEach((chunk) => {
+            listeners["data"]?.forEach((listener) => listener(chunk));
+          });
+          listeners["end"]?.forEach((listener) => listener());
+        } catch (error) {
+          listeners["error"]?.forEach((listener) => listener(error));
+        }
+      });
+
       return req;
     };
 
     it("returns 200 on successful chunk upload", async () => {
       const chunkData = Buffer.from("test data");
-      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, [chunkData]);
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, [chunkData]);
       const res = createRes();
       serviceMocks.saveChunk.mockResolvedValue(undefined);
 
@@ -170,7 +177,7 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 400 for invalid query parameters", async () => {
-      const req = createAsyncIterableReq({}, []);
+      const req = createDataEventReq({}, []);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -179,11 +186,9 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 413 when content-length exceeds limit", async () => {
-      const req = createAsyncIterableReq(
-        { uploadId: "test-id", index: "0" },
-        [Buffer.from("test")],
-        { "content-length": String(15 * 1024 * 1024) },
-      );
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, [Buffer.from("test")], {
+        "content-length": String(15 * 1024 * 1024),
+      });
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -200,7 +205,7 @@ describe("chunked upload handlers", () => {
         Buffer.alloc(chunkSize, "c"),
         Buffer.alloc(chunkSize, "d"), // Total: 12MB > 10MB limit
       ];
-      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, smallChunks);
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, smallChunks);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -209,7 +214,7 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 400 for empty chunk data", async () => {
-      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, []);
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, []);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -220,7 +225,7 @@ describe("chunked upload handlers", () => {
 
     it("returns 404 for non-existent upload session", async () => {
       const chunkData = Buffer.from("test data");
-      const req = createAsyncIterableReq({ uploadId: "non-existent", index: "0" }, [chunkData]);
+      const req = createDataEventReq({ uploadId: "non-existent", index: "0" }, [chunkData]);
       const res = createRes();
       serviceMocks.saveChunk.mockRejectedValue(new Error("Upload session not found"));
 
