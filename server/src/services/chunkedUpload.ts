@@ -2,7 +2,14 @@ import { randomUUID } from "crypto";
 import { createWriteStream, promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import type { FinalizeUploadResponse, InitiateUploadRequest, InitiateUploadResponse } from "utils";
+import type {
+  FinalizeUploadResponse,
+  InitiateUploadRequest,
+  InitiateUploadResponse,
+  UploadProgress,
+  UploadProgressPhase,
+  UploadProgressStatus,
+} from "utils";
 
 const CHUNK_DIR_PREFIX = "chunked-upload-";
 const CHUNK_FILE_PREFIX = "chunk-";
@@ -32,6 +39,7 @@ export interface ChunkedUploadMetadata {
   galleryName: string;
   tempDir: string;
   createdAt: number;
+  totalSize: number;
 }
 
 // In-memory store for upload metadata
@@ -39,6 +47,9 @@ export interface ChunkedUploadMetadata {
 // In production, consider using Redis for persistence, or add a startup
 // cleanup routine that scans os.tmpdir() for stale "chunked-upload-*" directories.
 const uploadMetadata = new Map<string, ChunkedUploadMetadata>();
+
+// In-memory store for upload progress state
+const uploadProgressState = new Map<string, UploadProgress>();
 
 export class ChunkedUploadService {
   /**
@@ -62,9 +73,25 @@ export class ChunkedUploadService {
       galleryName: request.galleryName,
       tempDir,
       createdAt: Date.now(),
+      totalSize: request.totalSize,
     };
 
     uploadMetadata.set(uploadId, metadata);
+
+    // Initialize progress state
+    const progressState: UploadProgress = {
+      uploadId,
+      status: "pending",
+      phase: "client-upload",
+      progress: {
+        totalBytes: request.totalSize,
+        uploadedBytes: 0,
+        totalFiles: null,
+        processedFiles: null,
+      },
+      error: null,
+    };
+    uploadProgressState.set(uploadId, progressState);
 
     return { uploadId };
   }
@@ -91,6 +118,15 @@ export class ChunkedUploadService {
 
     const chunkPath = path.join(metadata.tempDir, `${CHUNK_FILE_PREFIX}${chunkIndex}`);
     await fs.writeFile(chunkPath, chunkBuffer);
+
+    // Update progress state
+    const progressState = uploadProgressState.get(uploadId);
+    if (progressState) {
+      progressState.status = "uploading";
+      progressState.phase = "client-upload";
+      progressState.progress.uploadedBytes =
+        (progressState.progress.uploadedBytes ?? 0) + chunkBuffer.length;
+    }
   }
 
   /**
@@ -109,6 +145,9 @@ export class ChunkedUploadService {
     if (!metadata) {
       throw new Error(`Upload session not found: ${uploadId}`);
     }
+
+    // Update progress to processing/assembling phase
+    this.updateProgress(uploadId, "processing", "server-assemble");
 
     let writeStream: ReturnType<typeof createWriteStream> | null = null;
 
@@ -196,6 +235,8 @@ export class ChunkedUploadService {
     }
 
     uploadMetadata.delete(uploadId);
+    // Note: We don't delete progress state here - it's cleaned up separately
+    // so clients can poll for completion status after finalization
   }
 
   /**
@@ -209,6 +250,8 @@ export class ChunkedUploadService {
     for (const [uploadId, metadata] of uploadMetadata.entries()) {
       if (now - metadata.createdAt > UPLOAD_TTL_MS) {
         await this.cleanupUpload(uploadId);
+        // Also remove progress state for expired uploads
+        uploadProgressState.delete(uploadId);
         cleanedCount++;
       }
     }
@@ -223,5 +266,70 @@ export class ChunkedUploadService {
    */
   getMetadata(uploadId: string): ChunkedUploadMetadata | undefined {
     return uploadMetadata.get(uploadId);
+  }
+
+  /**
+   * Get the current progress state for an upload.
+   * @param uploadId - The unique upload session identifier.
+   * @returns The current progress state, or undefined if not found.
+   */
+  getProgress(uploadId: string): UploadProgress | undefined {
+    return uploadProgressState.get(uploadId);
+  }
+
+  /**
+   * Update the progress state for an upload.
+   * @param uploadId - The unique upload session identifier.
+   * @param status - The new status.
+   * @param phase - The new phase.
+   * @param progressUpdate - Optional partial progress updates.
+   */
+  updateProgress(
+    uploadId: string,
+    status: UploadProgressStatus,
+    phase: UploadProgressPhase,
+    progressUpdate?: Partial<UploadProgress["progress"]>,
+  ): void {
+    const progressState = uploadProgressState.get(uploadId);
+    if (progressState) {
+      progressState.status = status;
+      progressState.phase = phase;
+      if (progressUpdate) {
+        Object.assign(progressState.progress, progressUpdate);
+      }
+    }
+  }
+
+  /**
+   * Mark an upload as completed.
+   * @param uploadId - The unique upload session identifier.
+   */
+  markCompleted(uploadId: string): void {
+    const progressState = uploadProgressState.get(uploadId);
+    if (progressState) {
+      progressState.status = "completed";
+    }
+  }
+
+  /**
+   * Mark an upload as failed with an error message.
+   * @param uploadId - The unique upload session identifier.
+   * @param error - The error message.
+   */
+  markFailed(uploadId: string, error: string): void {
+    const progressState = uploadProgressState.get(uploadId);
+    if (progressState) {
+      progressState.status = "failed";
+      progressState.error = error;
+    }
+  }
+
+  /**
+   * Clean up progress state for a specific upload.
+   * Called after the client has retrieved the final status or after a timeout.
+   * @param uploadId - The unique upload session identifier.
+   */
+  cleanupProgress(uploadId: string): void {
+    uploadProgressState.delete(uploadId);
   }
 }

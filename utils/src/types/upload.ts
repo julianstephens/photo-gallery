@@ -6,6 +6,9 @@ import type {
   uploadChunkQuerySchema,
   finalizeUploadRequestSchema,
   finalizeUploadResponseSchema,
+  uploadProgressSchema,
+  uploadProgressStatusSchema,
+  uploadProgressPhaseSchema,
 } from "../schemas/upload.ts";
 
 export type UploadJobStatus = "pending" | "processing" | "completed" | "failed";
@@ -32,3 +35,8 @@ export interface ChunkedUploadProgress {
   uploadedChunks: number;
   percentage: number;
 }
+
+// Upload progress tracking types
+export type UploadProgressStatus = z.infer<typeof uploadProgressStatusSchema>;
+export type UploadProgressPhase = z.infer<typeof uploadProgressPhaseSchema>;
+export type UploadProgress = z.infer<typeof uploadProgressSchema>;

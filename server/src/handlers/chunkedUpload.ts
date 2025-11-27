@@ -100,9 +100,22 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     const shouldTreatAsZip = looksLikeZipByExt;
 
     if (!shouldTreatAsZip) {
+      // Update progress for single file upload
+      chunkedUploadService.updateProgress(uploadId, "processing", "server-upload", {
+        totalFiles: 1,
+        processedFiles: 0,
+      });
+
       const objectName = uploadService.buildObjectName(uploadDatePrefix, metadata.fileName);
       await bucketService.uploadToBucket(metadata.galleryName, objectName, finalizedPath);
       await rm(finalizedPath, { force: true }).catch(() => {});
+
+      // Mark upload as completed
+      chunkedUploadService.updateProgress(uploadId, "completed", "server-upload", {
+        processedFiles: 1,
+      });
+      chunkedUploadService.markCompleted(uploadId);
+
       return res.status(200).json(result);
     }
 
@@ -110,7 +123,13 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     const tempRoot = tmpdir();
     const extractDir = join(tempRoot, `gallery-upload-${uploadId}-${Date.now()}`);
 
+    // Update progress for zip extraction phase
+    chunkedUploadService.updateProgress(uploadId, "processing", "server-zip-extract");
+
     try {
+      // Track discovered files during extraction
+      const discoveredFiles: string[] = [];
+
       await new Promise<void>((resolve, reject) => {
         const sourceStream = createReadStream(finalizedPath);
         sourceStream.on("error", (e) => reject(e));
@@ -137,6 +156,8 @@ export const finalizeUpload = async (req: Request, res: Response) => {
               return;
             }
 
+            discoveredFiles.push(safeName);
+
             const destPath = join(extractDir, safeName);
             const lastSlash = destPath.lastIndexOf("/");
             const destDir = lastSlash === -1 ? extractDir : destPath.slice(0, lastSlash);
@@ -153,9 +174,17 @@ export const finalizeUpload = async (req: Request, res: Response) => {
         stream.on("error", (e) => reject(e));
       });
 
+      // Update progress with total files discovered
+      chunkedUploadService.updateProgress(uploadId, "processing", "server-upload", {
+        totalFiles: discoveredFiles.length,
+        processedFiles: 0,
+      });
+
       // Now walk the extracted directory and upload files
       // Lazy import to avoid top-level dependency for recursion
       const { readdir, stat } = await import("fs/promises");
+
+      let processedCount = 0;
 
       const walkAndUpload = async (dir: string) => {
         const entries = await readdir(dir, { withFileTypes: true });
@@ -172,12 +201,22 @@ export const finalizeUpload = async (req: Request, res: Response) => {
           const relPath = fullPath.replace(extractDir + "/", "");
           const objectName = uploadService.buildObjectName(uploadDatePrefix, relPath);
           await bucketService.uploadToBucket(metadata.galleryName, objectName, fullPath);
+
+          // Update progress after each file upload
+          processedCount++;
+          chunkedUploadService.updateProgress(uploadId, "processing", "server-upload", {
+            processedFiles: processedCount,
+          });
         }
       };
 
       await walkAndUpload(extractDir);
+
+      // Mark upload as completed
+      chunkedUploadService.markCompleted(uploadId);
     } catch (zipErr) {
       appLogger.error({ err: zipErr }, "[finalizeUpload] error while processing zip upload");
+      chunkedUploadService.markFailed(uploadId, "Failed to process zip upload");
       return res.status(500).json({ error: "Failed to process zip upload" });
     } finally {
       await rm(finalizedPath, { force: true }).catch(() => {});
@@ -197,6 +236,26 @@ export const finalizeUpload = async (req: Request, res: Response) => {
   }
 };
 
+// Get upload progress
+export const getUploadProgress = async (req: Request, res: Response) => {
+  try {
+    const { uploadId } = req.params;
+    if (!uploadId) {
+      return res.status(400).json({ error: "Missing uploadId parameter" });
+    }
+
+    const progress = chunkedUploadService.getProgress(uploadId);
+    if (!progress) {
+      return res.status(404).json({ error: "Upload session not found" });
+    }
+
+    res.status(200).json(progress);
+  } catch (err: unknown) {
+    appLogger.error({ err }, "[getUploadProgress] error");
+    res.status(500).json({ error: "Failed to get upload progress" });
+  }
+};
+
 // Cancel and cleanup a specific upload session
 export const cancelUpload = async (req: Request, res: Response) => {
   try {
@@ -205,6 +264,7 @@ export const cancelUpload = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Missing uploadId parameter" });
     }
     await chunkedUploadService.cleanupUpload(uploadId);
+    chunkedUploadService.cleanupProgress(uploadId);
     res.status(200).json({ success: true });
   } catch (err: unknown) {
     appLogger.error({ err }, "[cancelUpload] error");

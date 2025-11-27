@@ -8,6 +8,11 @@ const serviceMocks = vi.hoisted(() => ({
   cleanupUpload: vi.fn(),
   cleanupExpiredUploads: vi.fn(),
   getMetadata: vi.fn(),
+  getProgress: vi.fn(),
+  updateProgress: vi.fn(),
+  markCompleted: vi.fn(),
+  markFailed: vi.fn(),
+  cleanupProgress: vi.fn(),
 }));
 
 vi.mock("../services/chunkedUpload.ts", () => ({
@@ -42,8 +47,14 @@ vi.mock("../middleware/logger.ts", () => ({
 }));
 
 const handlers = await import("./chunkedUpload.ts");
-const { initiateUpload, uploadChunk, finalizeUpload, cancelUpload, cleanupExpiredUploads } =
-  handlers;
+const {
+  initiateUpload,
+  uploadChunk,
+  finalizeUpload,
+  cancelUpload,
+  cleanupExpiredUploads,
+  getUploadProgress,
+} = handlers;
 
 const createRes = () => {
   const res: Partial<Response> = {};
@@ -318,6 +329,53 @@ describe("chunked upload handlers", () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: "Failed to cleanup expired uploads" });
+    });
+  });
+
+  describe("getUploadProgress", () => {
+    it("returns 200 with progress data", async () => {
+      const req = createReq({ params: { uploadId: "test-id" } });
+      const res = createRes();
+      const mockProgress = {
+        uploadId: "test-id",
+        status: "uploading",
+        phase: "client-upload",
+        progress: {
+          totalBytes: 1000,
+          uploadedBytes: 500,
+          totalFiles: null,
+          processedFiles: null,
+        },
+        error: null,
+      };
+      serviceMocks.getProgress.mockReturnValue(mockProgress);
+
+      await getUploadProgress(req, res);
+
+      expect(serviceMocks.getProgress).toHaveBeenCalledWith("test-id");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockProgress);
+    });
+
+    it("returns 400 when uploadId is missing", async () => {
+      const req = createReq({ params: {} });
+      const res = createRes();
+
+      await getUploadProgress(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing uploadId parameter" });
+    });
+
+    it("returns 404 when progress not found", async () => {
+      const req = createReq({ params: { uploadId: "non-existent" } });
+      const res = createRes();
+      serviceMocks.getProgress.mockReturnValue(undefined);
+
+      await getUploadProgress(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Upload session not found" });
     });
   });
 });

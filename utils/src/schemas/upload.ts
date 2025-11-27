@@ -59,3 +59,32 @@ export const uploadJobSchema = z.object({
     .optional(),
   error: z.string().optional(),
 });
+
+// Upload progress tracking schemas
+export const uploadProgressStatusSchema = z.enum([
+  "pending",
+  "uploading",
+  "processing",
+  "completed",
+  "failed",
+]);
+
+export const uploadProgressPhaseSchema = z.enum([
+  "client-upload",
+  "server-assemble",
+  "server-zip-extract",
+  "server-upload",
+]);
+
+export const uploadProgressSchema = z.object({
+  uploadId: z.string(),
+  status: uploadProgressStatusSchema,
+  phase: uploadProgressPhaseSchema,
+  progress: z.object({
+    totalBytes: z.number().nullable(),
+    uploadedBytes: z.number().nullable(),
+    totalFiles: z.number().nullable(),
+    processedFiles: z.number().nullable(),
+  }),
+  error: z.string().nullable(),
+});
