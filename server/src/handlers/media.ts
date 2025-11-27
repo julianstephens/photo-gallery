@@ -3,6 +3,19 @@ import { BucketService } from "../services/bucket.ts";
 
 const bucketService = await BucketService.create();
 
+/**
+ * Escapes HTML entities to prevent XSS attacks.
+ * Covers the most common characters that could be used in XSS payloads.
+ */
+const escapeHtml = (str: string): string => {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};
+
 export const streamMedia = async (req: Request, res: Response) => {
   const { galleryName } = req.params;
   const objectName = req.params.objectName as string | string[];
@@ -16,11 +29,14 @@ export const streamMedia = async (req: Request, res: Response) => {
       // Serve HTML page for viewing
       const presignedUrl = await bucketService.createPresignedUrl(key);
       const fileName = objectPath.split("/").pop() || "image";
+      // Escape user-controlled values to prevent XSS
+      const safeFileName = escapeHtml(fileName);
+      const safePresignedUrl = escapeHtml(presignedUrl);
       const html = `
 <!DOCTYPE html>
 <html>
 <head>
-  <title>${fileName}</title>
+  <title>${safeFileName}</title>
   <style>
     body {
       margin: 0;
@@ -39,7 +55,7 @@ export const streamMedia = async (req: Request, res: Response) => {
   </style>
 </head>
 <body>
-  <img src="${presignedUrl}" alt="${fileName}" />
+  <img src="${safePresignedUrl}" alt="${safeFileName}" />
 </body>
 </html>`;
       res.setHeader("Content-Type", "text/html");
