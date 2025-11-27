@@ -20,6 +20,7 @@
   "packageManager": "pnpm@10.18.3",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.922.0",
+    "@aws-sdk/lib-storage": "^3.940.0",
     "@aws-sdk/s3-request-presigner": "^3.931.0",
     "axios": "^1.13.2",
     "compression": "^1.8.1",
@@ -30,6 +31,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.2",
+    "file-type": "^16.5.4",
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
     "mime-types": "^3.0.1",

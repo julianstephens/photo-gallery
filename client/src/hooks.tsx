@@ -1,7 +1,7 @@
+import { AuthContext, getGuildIdFromUser } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useContext } from "react";
 import { getDefaultGuild, listGalleries, listGalleryItems } from "./queries";
-import { AuthContext, getGuildIdFromUser } from "./utils";
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);

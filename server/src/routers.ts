@@ -1,6 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
 import * as handlers from "./handlers/index.ts";
+import { streamMedia } from "./handlers/media.ts";
+import { requiresAdmin, requiresAuth } from "./middleware/auth.ts";
 import env from "./schemas/env.ts";
 
 /**********************
@@ -53,9 +55,27 @@ const guildRouter = Router();
 guildRouter.get("/guilds/default", handlers.getDefaultGuild);
 guildRouter.post("/guilds/default", handlers.setDefaultGuild);
 
+/**********************
+ * CHUNKED UPLOAD ROUTES
+ **********************/
+const uploadsRouter = Router();
+uploadsRouter.post("/uploads/initiate", requiresAuth, handlers.initiateUpload);
+uploadsRouter.post("/uploads/chunk", requiresAuth, handlers.uploadChunk);
+uploadsRouter.post("/uploads/finalize", requiresAuth, handlers.finalizeUpload);
+uploadsRouter.delete("/uploads/:uploadId", requiresAuth, handlers.cancelUpload);
+uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUploads);
+
+/**********************
+ * MEDIA PROXY ROUTE
+ **********************/
+const mediaRouter = Router();
+mediaRouter.get("/:galleryName/:objectName+", streamMedia);
+
 export default {
   healthRouter,
   authRouter,
   galleryRouter,
   guildRouter,
+  uploadsRouter,
+  mediaRouter,
 };

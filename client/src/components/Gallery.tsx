@@ -1,6 +1,6 @@
 import { Loader } from "@/components/Loader";
 import { useListGalleryItems } from "@/hooks";
-import { Box, Flex, Text } from "@chakra-ui/react";
+import { Box, Flex, HStack, Text } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import type { GalleryItem as GI } from "utils";
 import { GalleryItem } from "./GalleryItem";
@@ -27,6 +27,11 @@ export const Gallery = ({ guildId, galleryName }: { guildId: string; galleryName
         <Loader text="Loading gallery..." full={true} />
       ) : data?.count && data.count > 0 ? (
         <Flex direction="column" gap="4" w="full">
+          <HStack justify="center" px="4">
+            <Text fontSize="lg" fontWeight="bold">
+              {galleryName} ({data.count} items)
+            </Text>
+          </HStack>
           <Box padding="2" w="full" mx="auto" maxW="90%" columnCount={[1, 2, 3]} columnGap="8px">
             {data?.contents.map((item: GI) => (
               <GalleryItem key={item.name} item={item} />

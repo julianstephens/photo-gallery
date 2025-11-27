@@ -16,7 +16,13 @@ export const GalleryItem = ({ item }: GalleryItemProps) => {
 
   return (
     <Tooltip content={name}>
-      <Link display="block" w="full" href={item.url} target="_blank" rel="noopener noreferrer">
+      <Link
+        display="block"
+        w="full"
+        href={`/media/${item.url}`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         <AspectRatio ratio={1} w="full" mb="2">
           <Box position="relative" borderRadius="xl" overflow="hidden">
             <Skeleton
@@ -34,7 +40,7 @@ export const GalleryItem = ({ item }: GalleryItemProps) => {
                 w="100%"
                 h="100%"
                 objectFit="cover"
-                src={item.url}
+                src={`/media/${item.url}`}
                 alt={name}
                 loading="lazy"
                 opacity={isLoaded ? 1 : 0}

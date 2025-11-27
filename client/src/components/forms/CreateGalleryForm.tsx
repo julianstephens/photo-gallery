@@ -1,19 +1,20 @@
 import { queryClient } from "@/clients";
 import { Input } from "@/components/forms/Fields";
+import { toaster } from "@/components/ui/toaster";
 import { useAuth } from "@/hooks";
+import { toErrorMessage } from "@/lib/utils";
 import { createGallery } from "@/queries";
-import { toErrorMessage } from "@/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import React, { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Navigate } from "react-router";
 import { type CreateGalleryRequest, createGallerySchema } from "utils";
-import { toaster } from "../ui/toaster";
 
 export interface CreateGalleryFormProps {
   doSubmit: boolean;
   setDoSubmit: (value: boolean) => void;
+  setLoading: (value: boolean) => void;
   closeModal: () => void;
   guildId: string;
 }
@@ -21,6 +22,7 @@ export interface CreateGalleryFormProps {
 export const CreateGalleryForm = ({
   doSubmit,
   setDoSubmit,
+  setLoading,
   closeModal,
   guildId,
 }: CreateGalleryFormProps) => {
@@ -50,11 +52,14 @@ export const CreateGalleryForm = ({
   const isAuthenticated = Boolean(currentUser);
 
   const onSubmit = async (data: CreateGalleryRequest) => {
+    setLoading(true);
     try {
       await createGalleryMutation.mutateAsync(data);
+      setLoading(false);
       toaster.success({ title: "Gallery created successfully" });
       closeModal();
     } catch (error) {
+      setLoading(false);
       toaster.error({ title: "Error creating gallery", description: toErrorMessage(error) });
     }
   };

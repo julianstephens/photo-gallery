@@ -12,6 +12,7 @@ import {
   type PutObjectCommandInput,
   type _Object as S3Object,
 } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
 import type { Readable } from "stream";
@@ -174,7 +175,7 @@ export class BucketService {
         return {
           name: relative,
           size: o.Size,
-          url: await this.createPresignedUrl(key),
+          url: key,
           metadata: await this.#getObjectMetadata(key),
         };
       }),
@@ -190,15 +191,19 @@ export class BucketService {
   ) => {
     await this.ensureBucket();
     const { ["Content-Type"]: contentType, ...metadata } = meta ?? {};
-    await this.#s3.send(
-      new PutObjectCommand({
+
+    const upload = new Upload({
+      client: this.#s3,
+      params: {
         Bucket: this.#bucketName,
         Key: this.#buildKey(bucketName, objectName),
         Body: createReadStream(filePath),
         ContentType: contentType,
         Metadata: Object.keys(metadata).length ? metadata : undefined,
-      }),
-    );
+      },
+    });
+
+    await upload.done();
   };
 
   uploadBufferToBucket = async (

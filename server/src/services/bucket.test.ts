@@ -116,7 +116,8 @@ describe("BucketService", () => {
       expect(result).toHaveLength(2);
       expect(result[0]).toMatchObject({ name: "file1.jpg", size: 1024 });
       expect(result[1]).toMatchObject({ name: "file2.jpg", size: 2048 });
-      expect(result[0].url).toBe("https://presigned-url.example.com/test");
+      // url now returns the raw key, not a presigned URL
+      expect(result[0].url).toBe("test-bucket/file1.jpg");
     });
 
     it("should propagate list errors", async () => {

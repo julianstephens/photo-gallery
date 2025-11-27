@@ -98,6 +98,10 @@ export const createApp = () => {
   app.use("/api", routers.authRouter);
   app.use("/api", apiRateLimiter, routers.galleryRouter);
   app.use("/api", apiRateLimiter, routers.guildRouter);
+  app.use("/api", apiRateLimiter, routers.uploadsRouter);
+
+  // Media streaming proxy
+  app.use("/media", routers.mediaRouter);
 
   // 404 and centralized error handling
   app.use(notFoundHandler);
