@@ -1,5 +1,5 @@
+import { CreateGalleryForm } from "@/components/forms/CreateGalleryForm";
 import { useState } from "react";
-import { CreateGalleryForm } from "../forms/CreateGalleryForm";
 import { BaseModal, type ModalProps } from "./base";
 
 export interface CreateGalleryModalProps extends ModalProps {

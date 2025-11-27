@@ -1,7 +1,7 @@
+import { ChunkedUploader } from "@/lib/upload/chunkedUpload";
 import { Box, Input, Progress, Text, VStack } from "@chakra-ui/react";
 import { useCallback, useRef, useState } from "react";
 import type { ChunkedUploadProgress } from "utils";
-import { ChunkedUploader } from "../../lib/upload/chunkedUpload";
 import { BaseModal, type ModalProps } from "./base";
 
 export interface FilePickerModalProps extends ModalProps {
