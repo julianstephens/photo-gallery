@@ -81,23 +81,29 @@ export const uploadFileInChunks = async (
     }
   };
 
-  for (let i = 0; i < totalParts; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
-    const chunk = file.slice(start, end);
+  try {
+    for (let i = 0; i < totalParts; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
 
-    uploadPromises.push(
-      uploadChunk(uploadId, i, chunk, (bytesLoaded: number) => {
-        chunkBytesLoaded[i] = bytesLoaded;
-        updateTotalProgress();
-      }),
-    );
+      uploadPromises.push(
+        uploadChunk(uploadId, i, chunk, (bytesLoaded: number) => {
+          chunkBytesLoaded[i] = bytesLoaded;
+          updateTotalProgress();
+        }),
+      );
+    }
+
+    await Promise.all(uploadPromises);
+
+    // Always report 100% completion
+    onProgress(100);
+
+    return finalizeUpload(uploadId);
+  } catch (error) {
+    // Set progress to 100% on error to show 'complete but errored' state
+    onProgress(100);
+    throw error;
   }
-
-  await Promise.all(uploadPromises);
-
-  // Always report 100% completion
-  onProgress(100);
-
-  return finalizeUpload(uploadId);
 };
