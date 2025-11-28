@@ -35,15 +35,19 @@ export const initiateUpload = async (req: Request, res: Response) => {
     if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request body" });
     }
-    appLogger.error({ err }, "[initiateUpload] error");
+    appLogger.error({ err, body: req.body }, "[initiateUpload] error");
     res.status(500).json({ error: "Failed to initiate upload" });
   }
 };
 
 export const uploadChunk = async (req: Request, res: Response) => {
+  let uploadId: string | undefined;
+  let chunkIndex: number | undefined;
   try {
     const query = uploadChunkQuerySchema.parse(req.query);
-    const { uploadId, index } = query;
+    const { uploadId: parsedUploadId, index } = query;
+    uploadId = parsedUploadId;
+    chunkIndex = index;
 
     // Validate Content-Length header if present
     const contentLength = req.headers["content-length"];
@@ -90,7 +94,7 @@ export const uploadChunk = async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Empty chunk data" });
     }
 
-    await chunkedUploadService.saveChunk(uploadId, index, chunkBuffer);
+    await chunkedUploadService.saveChunk(parsedUploadId, index, chunkBuffer);
     res.status(200).json({ success: true, index });
   } catch (err: unknown) {
     if (err instanceof ZodError) {
@@ -99,15 +103,16 @@ export const uploadChunk = async (req: Request, res: Response) => {
     if ((err as Error)?.message?.includes("not found")) {
       return res.status(404).json({ error: "Upload session not found" });
     }
-    appLogger.error({ err }, "[uploadChunk] error");
+    appLogger.error({ err, uploadId, chunkIndex }, "[uploadChunk] error");
     res.status(500).json({ error: "Failed to upload chunk" });
   }
 };
 
 export const finalizeUpload = async (req: Request, res: Response) => {
+  let uploadId: string | undefined;
   try {
     const body = finalizeUploadRequestSchema.parse(req.body);
-    const { uploadId } = body;
+    uploadId = body.uploadId;
     const metadata = chunkedUploadService.getMetadata(uploadId);
     if (!metadata) {
       return res.status(404).json({ error: "Upload session not found" });
@@ -160,6 +165,16 @@ export const finalizeUpload = async (req: Request, res: Response) => {
 
         const objectName = uploadService.buildObjectName(uploadDatePrefix, metadata.fileName);
         const storageKey = `${galleryFolderName}/${objectName}`;
+        appLogger.debug(
+          {
+            uploadId,
+            storageKey,
+            fileType: metadata.fileType,
+            expectedSize: metadata.totalSize,
+            finalizedPath,
+          },
+          "[finalizeUpload] Uploading assembled file to bucket",
+        );
         await bucketService.uploadToBucket(galleryFolderName, objectName, finalizedPath);
         await rm(finalizedPath, { force: true }).catch(() => {});
 
@@ -192,11 +207,20 @@ export const finalizeUpload = async (req: Request, res: Response) => {
 
         return res.status(200).json(result);
       } catch (error) {
-        chunkedUploadService.markFailed(uploadId, error);
-        appLogger.error({ err: error, uploadId }, "Single file upload failed");
-        return res
-          .status(500)
-          .json({ error: "Failed to upload file", details: error?.message || error });
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        chunkedUploadService.markFailed(uploadId, errorMessage);
+        appLogger.error(
+          {
+            err: error,
+            uploadId,
+            guildId: metadata.guildId,
+            galleryName: metadata.galleryName,
+            fileType: metadata.fileType,
+            fileSize: metadata.totalSize,
+          },
+          "Single file upload failed",
+        );
+        return res.status(500).json({ error: "Failed to upload file", details: errorMessage });
       }
     }
 
@@ -245,7 +269,6 @@ export const finalizeUpload = async (req: Request, res: Response) => {
             discoveredFiles.push(safeName);
 
             const destPath = join(extractDir, safeName);
-            const lastSlash = destPath.lastIndexOf("/");
             const destDir = lastSlash === -1 ? extractDir : destPath.slice(0, lastSlash);
 
             // Create a promise for this file extraction
@@ -391,7 +414,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     if ((err as Error)?.message?.includes("not found")) {
       return res.status(404).json({ error: "Upload session not found" });
     }
-    appLogger.error({ err }, "[finalizeUpload] error");
+    appLogger.error({ err, uploadId }, "[finalizeUpload] error");
     res.status(500).json({ error: "Failed to finalize upload" });
   }
 };

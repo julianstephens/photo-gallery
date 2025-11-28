@@ -17,6 +17,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
 import type { Readable } from "stream";
 import type { GalleryItem } from "utils";
+import { appLogger } from "../middleware/logger.ts";
 import env from "../schemas/env.ts";
 
 class BucketMissingError extends Error {
@@ -198,19 +199,28 @@ export class BucketService {
   ) => {
     await this.ensureBucket();
     const { ["Content-Type"]: contentType, ...metadata } = meta ?? {};
+    const key = this.#buildKey(bucketName, objectName);
 
     const upload = new Upload({
       client: this.#s3,
       params: {
         Bucket: this.#bucketName,
-        Key: this.#buildKey(bucketName, objectName),
+        Key: key,
         Body: createReadStream(filePath),
         ContentType: contentType,
         Metadata: Object.keys(metadata).length ? metadata : undefined,
       },
     });
 
-    await upload.done();
+    try {
+      await upload.done();
+    } catch (err) {
+      appLogger.error(
+        { err, masterBucket: this.#bucketName, galleryName: bucketName, objectName, filePath, key },
+        "[bucketService] uploadToBucket failed",
+      );
+      throw err;
+    }
   };
 
   uploadBufferToBucket = async (
@@ -230,7 +240,15 @@ export class BucketService {
       ContentType: contentType,
       Metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     };
-    await this.#s3.send(new PutObjectCommand(putObjectData));
+    try {
+      await this.#s3.send(new PutObjectCommand(putObjectData));
+    } catch (err) {
+      appLogger.error(
+        { err, masterBucket: this.#bucketName, galleryName, objectName, size: buffer.length, key },
+        "[bucketService] uploadBufferToBucket failed",
+      );
+      throw err;
+    }
   };
 
   uploadStreamToBucket = async (
@@ -242,17 +260,25 @@ export class BucketService {
   ) => {
     await this.ensureBucket();
     const { ["Content-Type"]: contentType, ...metadata } = meta ?? {};
-    const res = await this.#s3.send(
-      new PutObjectCommand({
-        Bucket: this.#bucketName,
-        Key: this.#buildKey(galleryName, objectName),
-        Body: stream,
-        // ContentLength: typeof size === "number" ? size : undefined,
-        ContentType: contentType,
-        Metadata: Object.keys(metadata).length ? metadata : undefined,
-      }),
-    );
-    console.log("Upload stream result:", res);
+    const key = this.#buildKey(galleryName, objectName);
+    try {
+      await this.#s3.send(
+        new PutObjectCommand({
+          Bucket: this.#bucketName,
+          Key: key,
+          Body: stream,
+          // ContentLength: typeof size === "number" ? size : undefined,
+          ContentType: contentType,
+          Metadata: Object.keys(metadata).length ? metadata : undefined,
+        }),
+      );
+    } catch (err) {
+      appLogger.error(
+        { err, masterBucket: this.#bucketName, galleryName, objectName, size, key },
+        "[bucketService] uploadStreamToBucket failed",
+      );
+      throw err;
+    }
   };
 
   deleteObjectFromBucket = async (bucketName: string, objectName: string) => {
