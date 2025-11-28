@@ -67,8 +67,8 @@ const mockGenerateGradient = vi.fn().mockResolvedValue({
   placeholder: "data:image/jpeg;base64,test",
 });
 
-vi.mock("utils", async () => {
-  const actual = await vi.importActual("utils");
+vi.mock("utils/server", async () => {
+  const actual = await vi.importActual("utils/server");
   return {
     ...actual,
     generateGradientWithPlaceholder: mockGenerateGradient,

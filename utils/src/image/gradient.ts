@@ -1,9 +1,10 @@
 import sharp from "sharp";
 
 // `quantize` is the median-cut quantizer used by color-thief / vibrant.
-// It has no bundled TypeScript types; we use a require with ts-ignore for simplicity.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const quantize = require("quantize");
+// It ships as CommonJS without types, so we import it with an explicit ts-ignore.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - quantize has no type definitions
+import quantize from "quantize";
 
 type RGB = [number, number, number];
 

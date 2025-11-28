@@ -109,7 +109,7 @@ vi.mock("../services/gradientMeta.ts", () => ({
 }));
 
 // Mock utils gradient generation - must use inline function to avoid hoisting issues
-vi.mock("utils", async (importOriginal) => {
+vi.mock("utils/server", async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...(actual as object),
@@ -118,7 +118,7 @@ vi.mock("utils", async (importOriginal) => {
 });
 
 // Import after mocks - get access to the mocked function
-import { generateGradientWithPlaceholder } from "utils";
+import { generateGradientWithPlaceholder } from "utils/server";
 const mockGenerateGradient = vi.mocked(generateGradientWithPlaceholder);
 
 // Import the function under test AFTER all mocks are set up

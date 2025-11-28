@@ -1,9 +1,5 @@
-import {
-  generateGradientJobSchema,
-  generateGradientWithPlaceholder,
-  type GenerateGradientJobData,
-  type ImageGradient,
-} from "utils";
+import { generateGradientJobSchema, type GenerateGradientJobData, type ImageGradient } from "utils";
+import { generateGradientWithPlaceholder } from "utils/server";
 import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 import env from "../schemas/env.ts";

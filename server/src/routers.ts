@@ -25,13 +25,15 @@ authRouter.get("/auth", (_, res) => {
   );
 });
 authRouter.get("/auth/discord", handlers.discordCallback);
-authRouter.get("/auth/logout", handlers.logout);
-authRouter.get("/auth/me", handlers.getCurrentUser);
+authRouter.get("/auth/logout", requiresAuth, handlers.logout);
+authRouter.get("/auth/me", requiresAuth, handlers.getCurrentUser);
 
 /**********************
  * GALLERY ROUTES
  **********************/
 const galleryRouter = Router();
+galleryRouter.use(requiresAuth);
+galleryRouter.use(requiresGuildMembership);
 galleryRouter.get("/galleries", handlers.listGalleries);
 galleryRouter.get("/galleries/single", handlers.getSingleGallery);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
@@ -44,6 +46,8 @@ galleryRouter.delete("/galleries", requiresAdmin, handlers.removeGallery);
  * GUILD ROUTES
  **********************/
 const guildRouter = Router();
+guildRouter.use(requiresAuth);
+guildRouter.use(requiresGuildMembership);
 guildRouter.get("/guilds/default", handlers.getDefaultGuild);
 guildRouter.post("/guilds/default", handlers.setDefaultGuild);
 
@@ -51,23 +55,23 @@ guildRouter.post("/guilds/default", handlers.setDefaultGuild);
  * UPLOAD ROUTES
  **********************/
 const uploadsRouter = Router();
-uploadsRouter.post("/uploads/initiate", requiresAuth, handlers.initiateUpload);
-uploadsRouter.post("/uploads/chunk", requiresAuth, handlers.uploadChunk);
-uploadsRouter.post("/uploads/finalize", requiresAuth, handlers.finalizeUpload);
-uploadsRouter.get("/uploads/:uploadId/progress", requiresAuth, handlers.getUploadProgress);
-uploadsRouter.delete("/uploads/:uploadId", requiresAdmin, handlers.cancelUpload);
-uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUploads);
+uploadsRouter.use(requiresAuth);
+uploadsRouter.use(requiresGuildMembership);
+uploadsRouter.use(requiresAdmin);
+uploadsRouter.post("/uploads/initiate", handlers.initiateUpload);
+uploadsRouter.post("/uploads/chunk", handlers.uploadChunk);
+uploadsRouter.post("/uploads/finalize", handlers.finalizeUpload);
+uploadsRouter.get("/uploads/:uploadId/progress", handlers.getUploadProgress);
+uploadsRouter.delete("/uploads/:uploadId", handlers.cancelUpload);
+uploadsRouter.post("/uploads/cleanup", handlers.cleanupExpiredUploads);
 
 /**********************
  * MEDIA PROXY ROUTE
  **********************/
 const mediaRouter = Router();
-mediaRouter.get(
-  "/:galleryName/:year-:month-:day/*splat",
-  requiresAuth,
-  requiresGuildMembership,
-  streamMedia,
-);
+mediaRouter.use(requiresAuth);
+mediaRouter.use(requiresGuildMembership);
+mediaRouter.get("/:galleryName/:year-:month-:day/*splat", streamMedia);
 
 export default {
   healthRouter,
