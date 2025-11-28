@@ -1,5 +1,6 @@
+import { BlurredImage } from "@/components/BlurredImage";
 import { Tooltip } from "@/components/ui/tooltip";
-import { AspectRatio, Box, Image, Link } from "@chakra-ui/react";
+import { AspectRatio, Link } from "@chakra-ui/react";
 import type { GalleryItem as GI } from "utils";
 
 export interface GalleryItemProps {
@@ -26,9 +27,7 @@ export const GalleryItem = ({ item, guildId, galleryName }: GalleryItemProps) =>
         rel="noopener noreferrer"
       >
         <AspectRatio ratio={1} w="full" mb="2">
-          <Box position="relative" borderRadius="xl" overflow="hidden" bg="gray.800">
-            <Image w="100%" h="100%" objectFit="cover" src={imageSrc} alt={name} loading="lazy" />
-          </Box>
+          <BlurredImage src={imageSrc} alt={name} gradient={item.gradient} borderRadius="xl" />
         </AspectRatio>
       </Link>
     </Tooltip>

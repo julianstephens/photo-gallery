@@ -8,15 +8,15 @@ import {
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
+  type HeadObjectCommandOutput,
   type ListObjectsV2CommandOutput,
   type PutObjectCommandInput,
   type _Object as S3Object,
 } from "@aws-sdk/client-s3";
-import { Upload } from "@aws-sdk/lib-storage";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { createReadStream } from "fs";
+import { createReadStream, statSync } from "fs";
 import type { Readable } from "stream";
-import type { GalleryItem } from "utils";
+import type { FileChecksum, GalleryItem } from "utils";
 import { appLogger } from "../middleware/logger.ts";
 import env from "../schemas/env.ts";
 
@@ -85,6 +85,38 @@ export class BucketService {
       // If HEAD fails (permission denied, not found, etc.), silently return empty metadata
       // This is expected behavior - metadata is optional for displaying gallery items
       return {};
+    }
+  }
+
+  async getObjectChecksums(key: string) {
+    try {
+      await this.ensureBucket();
+      const resp: HeadObjectCommandOutput = await this.#s3.send(
+        new HeadObjectCommand({
+          Bucket: this.#bucketName,
+          Key: key,
+          ChecksumMode: "ENABLED",
+        }),
+      );
+      return {
+        ChecksumCRC32: resp.ChecksumCRC32,
+        ChecksumCRC32C: resp.ChecksumCRC32C,
+        ChecksumCRC64NVME: resp.ChecksumCRC64NVME,
+        ChecksumSHA1: resp.ChecksumSHA1,
+        ChecksumSHA256: resp.ChecksumSHA256,
+      };
+    } catch (err) {
+      appLogger.warn(
+        { err, key },
+        "Failed to get object checksums (object may not exist or S3 does not support checksums)",
+      );
+      return {
+        ChecksumCRC32: undefined,
+        ChecksumCRC32C: undefined,
+        ChecksumCRC64NVME: undefined,
+        ChecksumSHA1: undefined,
+        ChecksumSHA256: undefined,
+      };
     }
   }
 
@@ -195,25 +227,34 @@ export class BucketService {
     bucketName: string,
     objectName: string,
     filePath: string,
-    meta?: Record<string, string>,
+    options?: {
+      meta?: Record<string, string>;
+      checksums?: FileChecksum;
+    },
   ) => {
     await this.ensureBucket();
+    const meta = options?.meta;
     const { ["Content-Type"]: contentType, ...metadata } = meta ?? {};
     const key = this.#buildKey(bucketName, objectName);
+    const { size } = statSync(filePath);
+    const putParams: PutObjectCommandInput = {
+      Bucket: this.#bucketName,
+      Key: key,
+      Body: createReadStream(filePath),
+      ContentLength: size,
+      ContentType: contentType,
+      Metadata: Object.keys(metadata).length ? metadata : undefined,
+    };
 
-    const upload = new Upload({
-      client: this.#s3,
-      params: {
-        Bucket: this.#bucketName,
-        Key: key,
-        Body: createReadStream(filePath),
-        ContentType: contentType,
-        Metadata: Object.keys(metadata).length ? metadata : undefined,
-      },
-    });
+    if (options?.checksums?.crc32Base64) {
+      putParams.ChecksumCRC32 = options.checksums.crc32Base64;
+    }
+    if (options?.checksums?.md5Base64) {
+      putParams.ContentMD5 = options.checksums.md5Base64;
+    }
 
     try {
-      await upload.done();
+      await this.#s3.send(new PutObjectCommand(putParams));
     } catch (err) {
       appLogger.error(
         { err, masterBucket: this.#bucketName, galleryName: bucketName, objectName, filePath, key },

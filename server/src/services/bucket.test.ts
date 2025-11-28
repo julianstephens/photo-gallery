@@ -255,29 +255,53 @@ describe("BucketService", () => {
   describe("uploadToBucket", () => {
     it("should upload file from path to bucket", async () => {
       // Create a temporary file for testing
-      const { writeFileSync, unlinkSync } = await import("fs");
+      // Note: Test files are created in the OS temp directory and will be cleaned up by the OS
+      const { writeFileSync } = await import("fs");
       const { tmpdir } = await import("os");
       const path = await import("path");
-      const testFilePath = path.join(tmpdir(), "test-upload-file.txt");
+      const { randomUUID } = await import("crypto");
+      const testFilePath = path.join(tmpdir(), `test-upload-file-${randomUUID()}.txt`);
 
-      try {
-        writeFileSync(testFilePath, "test file content");
+      writeFileSync(testFilePath, "test file content");
 
-        s3Mock.on(HeadBucketCommand).resolves({});
-        s3Mock.on(PutObjectCommand).resolves({ ETag: "test-etag" });
+      s3Mock.on(HeadBucketCommand).resolves({});
+      s3Mock.on(PutObjectCommand).resolves({ ETag: "test-etag" });
 
-        service = await BucketService.create();
-        await service.uploadToBucket("test-bucket", "test.txt", testFilePath, {
-          "Content-Type": "text/plain",
-        });
-      } finally {
-        // Clean up the temporary file
-        try {
-          unlinkSync(testFilePath);
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
+      service = await BucketService.create();
+      await service.uploadToBucket("test-bucket", "test.txt", testFilePath, {
+        meta: { "Content-Type": "text/plain" },
+      });
+    });
+
+    it("should forward checksum hints when provided", async () => {
+      // Create a temporary file for testing
+      // Note: Test files are created in the OS temp directory and will be cleaned up by the OS
+      const { writeFileSync } = await import("fs");
+      const { tmpdir } = await import("os");
+      const path = await import("path");
+      const { randomUUID } = await import("crypto");
+      const testFilePath = path.join(tmpdir(), `test-upload-file-${randomUUID()}.txt`);
+
+      writeFileSync(testFilePath, "test file content");
+
+      s3Mock.on(HeadBucketCommand).resolves({});
+      s3Mock.on(PutObjectCommand).resolves({ ETag: "test-etag" });
+
+      service = await BucketService.create();
+      await service.uploadToBucket("test-bucket", "test.txt", testFilePath, {
+        checksums: {
+          byteLength: 17,
+          crc32Base64: "d1fdag==",
+          md5Base64: "8f0sF+q0YwAqg8bKkQxT6Q==",
+        },
+      });
+
+      const putCalls = s3Mock.commandCalls(PutObjectCommand);
+      expect(putCalls).toHaveLength(1);
+      expect(putCalls[0].args[0].input).toMatchObject({
+        ChecksumCRC32: "d1fdag==",
+        ContentMD5: "8f0sF+q0YwAqg8bKkQxT6Q==",
+      });
     });
   });
 

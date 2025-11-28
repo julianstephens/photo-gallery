@@ -25,9 +25,16 @@ export const finalizeUploadRequestSchema = z.object({
   uploadId: z.string().min(1),
 });
 
+export const fileChecksumSchema = z.object({
+  byteLength: z.number().int().nonnegative(),
+  crc32Base64: z.string(),
+  md5Base64: z.string(),
+});
+
 export const finalizeUploadResponseSchema = z.object({
   success: z.boolean(),
   filePath: z.string(),
+  checksums: fileChecksumSchema.optional(),
 });
 
 export const uploadJobSchema = z.object({
