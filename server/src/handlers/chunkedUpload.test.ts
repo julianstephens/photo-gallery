@@ -91,6 +91,7 @@ describe("chunked upload handlers", () => {
           fileType: "text/plain",
           totalSize: 123,
           galleryName: "test-gallery",
+          guildId: "test-guild-id",
         },
       });
       const res = createRes();
@@ -119,6 +120,7 @@ describe("chunked upload handlers", () => {
           fileType: "text/plain",
           totalSize: 123,
           galleryName: "test-gallery",
+          guildId: "test-guild-id",
         },
       });
       const res = createRes();

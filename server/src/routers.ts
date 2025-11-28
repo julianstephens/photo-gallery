@@ -1,5 +1,4 @@
 import { Router } from "express";
-import multer from "multer";
 import * as handlers from "./handlers/index.ts";
 import { streamMedia } from "./handlers/media.ts";
 import { requiresAdmin, requiresAuth } from "./middleware/auth.ts";
@@ -32,22 +31,14 @@ authRouter.get("/auth/me", handlers.getCurrentUser);
 /**********************
  * GALLERY ROUTES
  **********************/
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 500 * 1024 * 1024, // 500 MB - allow larger zip archives
-  },
-});
 const galleryRouter = Router();
 galleryRouter.get("/galleries", handlers.listGalleries);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
-galleryRouter.get("/galleries/upload/:jobId", handlers.getUploadJob);
-galleryRouter.get("/galleries/uploads", handlers.getAllUploadJobs);
 galleryRouter.get("/images/:galleryName/{*imagePath}", handlers.getImage);
 galleryRouter.post("/galleries", handlers.createGallery);
-galleryRouter.post("/galleries/upload", upload.single("file"), handlers.uploadToGallery);
 galleryRouter.post("/galleries/default", handlers.setDefaultGallery);
-galleryRouter.delete("/galleries", handlers.removeGallery);
+galleryRouter.put("/galleries", requiresAdmin, handlers.updateGalleryName);
+galleryRouter.delete("/galleries", requiresAdmin, handlers.removeGallery);
 
 /**********************
  * GUILD ROUTES
@@ -57,14 +48,14 @@ guildRouter.get("/guilds/default", handlers.getDefaultGuild);
 guildRouter.post("/guilds/default", handlers.setDefaultGuild);
 
 /**********************
- * CHUNKED UPLOAD ROUTES
+ * UPLOAD ROUTES
  **********************/
 const uploadsRouter = Router();
 uploadsRouter.post("/uploads/initiate", requiresAuth, handlers.initiateUpload);
 uploadsRouter.post("/uploads/chunk", requiresAuth, handlers.uploadChunk);
 uploadsRouter.post("/uploads/finalize", requiresAuth, handlers.finalizeUpload);
 uploadsRouter.get("/uploads/:uploadId/progress", requiresAuth, handlers.getUploadProgress);
-uploadsRouter.delete("/uploads/:uploadId", requiresAuth, handlers.cancelUpload);
+uploadsRouter.delete("/uploads/:uploadId", requiresAdmin, handlers.cancelUpload);
 uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUploads);
 
 /**********************

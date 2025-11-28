@@ -1,5 +1,10 @@
 import type { Request, Response } from "express";
-import { createGallerySchema, removeGallerySchema, setDefaultGallerySchema } from "utils";
+import {
+  createGallerySchema,
+  removeGallerySchema,
+  setDefaultGallerySchema,
+  updateGalleryNameSchema,
+} from "utils";
 import z from "zod";
 import { appLogger } from "../middleware/logger.ts";
 
@@ -35,6 +40,10 @@ export const listGalleryItems = async (req: Request, res: Response) => {
 
   try {
     const items = await galleryController.getGalleryContents(guildId, galleryName);
+    appLogger.debug(
+      { guildId, galleryName, count: items.count },
+      "[listGalleryItems] Retrieved gallery contents",
+    );
     res.json(items);
   } catch (err: unknown) {
     console.error("[listGalleryItems] error:", err);
@@ -59,43 +68,6 @@ export const createGallery = async (req: Request, res: Response) => {
     }
     console.error("[createGallery] error:", err);
     res.status(500).json({ error: "Failed to create gallery" });
-  }
-};
-
-export const uploadToGallery = async (req: Request, res: Response) => {
-  const file = req.file;
-  if (!file) return res.status(400).json({ error: "Missing 'file' form field" });
-
-  const galleryName = String(req.body.galleryName || "");
-  if (!galleryName) {
-    return res.status(400).json({ error: "Missing galleryName parameter" });
-  }
-
-  const guildId = String(req.body.guildId || "");
-  if (!guildId) {
-    return res.status(400).json({ error: "Missing guildId parameter" });
-  }
-
-  const objectName = `uploads/${new Date().toISOString().slice(0, 10)}`;
-
-  try {
-    const result = await galleryController.uploadToGallery(file, galleryName, guildId, objectName);
-    res.status(201).json(result);
-  } catch (err: unknown) {
-    const hasName = (e: unknown): e is { name?: string; message?: string } =>
-      typeof e === "object" && e !== null && ("name" in e || "message" in e);
-
-    if (
-      hasName(err) &&
-      (err.name === "UnsupportedMimeTypeError" || err.name === "InvalidInputError")
-    ) {
-      return res.status(400).json({ error: err.message ?? err.name });
-    }
-    if (hasName(err) && err.name === "BucketMissingError") {
-      return res.status(404).json({ error: "Bucket does not exist" });
-    }
-    console.error("[upload] error:", err);
-    return res.status(500).json({ error: "Upload failed" });
   }
 };
 
@@ -133,31 +105,26 @@ export const removeGallery = async (req: Request, res: Response) => {
   }
 };
 
-export const getUploadJob = async (req: Request, res: Response) => {
-  const jobId = req.params.jobId;
-  if (!jobId) {
-    return res.status(400).json({ error: "Missing jobId parameter" });
-  }
-
+export const updateGalleryName = async (req: Request, res: Response) => {
   try {
-    const job = await galleryController.getUploadJob(jobId);
-    res.json(job);
+    const body = updateGalleryNameSchema.parse(req.body);
+
+    if (body.galleryName === body.newGalleryName) {
+      return res.status(400).json({ error: "New gallery name is the same as current name" });
+    }
+
+    await galleryController.renameGallery(body.guildId, body.galleryName, body.newGalleryName);
+
+    res.json({ oldName: body.galleryName, newName: body.newGalleryName });
   } catch (err: unknown) {
     if ((err as Error)?.name === "InvalidInputError") {
-      return res.status(404).json({ error: (err as Error).message });
+      return res.status(400).json({ error: (err as Error).message });
     }
-    appLogger.error({ err, jobId }, "[getUploadJob] error");
-    res.status(500).json({ error: "Failed to get upload job" });
-  }
-};
-
-export const getAllUploadJobs = async (req: Request, res: Response) => {
-  try {
-    const jobs = await galleryController.getAllUploadJobs();
-    res.json(jobs);
-  } catch (err: unknown) {
-    appLogger.error({ err }, "[getAllUploadJobs] error");
-    res.status(500).json({ error: "Failed to get upload jobs" });
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
+    }
+    appLogger.error({ err }, "[updateGalleryName] error");
+    res.status(500).json({ error: "Failed to update gallery name" });
   }
 };
 

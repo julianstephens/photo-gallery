@@ -1,6 +1,6 @@
 import { Loader } from "@/components/Loader";
 import { useListGalleryItems } from "@/hooks";
-import { Box, Flex, HStack, Text } from "@chakra-ui/react";
+import { Flex, HStack, SimpleGrid, Text } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import type { GalleryItem as GI } from "utils";
 import { GalleryItem } from "./GalleryItem";
@@ -46,16 +46,11 @@ export const Gallery = ({
               </Text>
             </HStack>
           )}
-          <Box
-            id={`gallery-items-${galleryName}`}
-            w="full"
-            columnCount={columnCount}
-            columnGap="8px"
-          >
+          <SimpleGrid id={`gallery-items-${galleryName}`} w="full" columns={columnCount} gap="8px">
             {data?.contents.map((item: GI) => (
               <GalleryItem key={item.name} item={item} />
             ))}
-          </Box>
+          </SimpleGrid>
         </Flex>
       ) : (
         <Text m="auto">No items found in this gallery.</Text>

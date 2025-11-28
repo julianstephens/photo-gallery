@@ -6,10 +6,8 @@ const controllerMocks = vi.hoisted(() => ({
   listGalleries: vi.fn(),
   getGalleryContents: vi.fn(),
   createGallery: vi.fn(),
-  uploadToGallery: vi.fn(),
   setDefaultGallery: vi.fn(),
   removeGallery: vi.fn(),
-  getUploadJob: vi.fn(),
   getImage: vi.fn(),
 }));
 
@@ -41,10 +39,8 @@ const {
   listGalleries,
   listGalleryItems,
   createGallery,
-  uploadToGallery,
   setDefaultGallery,
   removeGallery,
-  getUploadJob,
   getImage,
 } = handlers;
 
@@ -198,69 +194,6 @@ describe("gallery handlers", () => {
     });
   });
 
-  describe("uploadToGallery", () => {
-    const baseReq = {
-      file: { originalname: "a.zip" },
-      body: { guildId: "g1", galleryName: "gal" },
-    } as Partial<Request>;
-
-    it("requires a file", async () => {
-      const res = createRes();
-      const req = createReq({ body: baseReq.body });
-
-      await uploadToGallery(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: "Missing 'file' form field" });
-    });
-
-    it("creates upload jobs", async () => {
-      const res = createRes();
-      const req = createReq({
-        file: { originalname: "photo.png" } as Express.Multer.File,
-        body: baseReq.body,
-      });
-      controllerMocks.uploadToGallery.mockResolvedValue({ type: "sync" });
-
-      await uploadToGallery(req, res);
-
-      expect(controllerMocks.uploadToGallery).toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(201);
-      expect(res.json).toHaveBeenCalledWith({ type: "sync" });
-    });
-
-    it("maps unsupported mime errors", async () => {
-      const res = createRes();
-      const req = createReq({
-        file: { originalname: "photo.png" } as Express.Multer.File,
-        body: baseReq.body,
-      });
-      controllerMocks.uploadToGallery.mockRejectedValue({
-        name: "UnsupportedMimeTypeError",
-        message: "Nope",
-      });
-
-      await uploadToGallery(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: "Nope" });
-    });
-
-    it("maps missing bucket errors", async () => {
-      const res = createRes();
-      const req = createReq({
-        file: { originalname: "photo.png" } as Express.Multer.File,
-        body: baseReq.body,
-      });
-      controllerMocks.uploadToGallery.mockRejectedValue({ name: "BucketMissingError" });
-
-      await uploadToGallery(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ error: "Bucket does not exist" });
-    });
-  });
-
   describe("setDefaultGallery", () => {
     it("persists the default gallery", async () => {
       const body = { guildId: "g", galleryName: "name" };
@@ -314,27 +247,6 @@ describe("gallery handlers", () => {
       await removeGallery(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-    });
-  });
-
-  describe("getUploadJob", () => {
-    it("requires jobId", async () => {
-      const res = createRes();
-
-      await getUploadJob(createReq(), res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it("maps not found errors", async () => {
-      const res = createRes();
-      const req = createReq({ params: { jobId: "123" } as Request["params"] });
-      controllerMocks.getUploadJob.mockRejectedValue({ name: "InvalidInputError", message: "no" });
-
-      await getUploadJob(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ error: "no" });
     });
   });
 

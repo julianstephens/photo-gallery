@@ -28,7 +28,7 @@ describe("UploadJobService", () => {
 
       expect(jobId).toBeTruthy();
       expect(typeof jobId).toBe("string");
-      expect(redis.client.hSet).toHaveBeenCalled();
+      expect(redis.client.set).toHaveBeenCalled();
       expect(redis.client.expire).toHaveBeenCalled();
       expect(redis.client.rPush).toHaveBeenCalled();
     });
@@ -36,7 +36,7 @@ describe("UploadJobService", () => {
 
   describe("getJob", () => {
     it("should return null for non-existent job", async () => {
-      vi.mocked(redis.client.hGetAll).mockResolvedValue({});
+      vi.mocked(redis.client.get).mockResolvedValue(null);
 
       const job = await service.getJob("non-existent");
 
@@ -44,17 +44,17 @@ describe("UploadJobService", () => {
     });
 
     it("should return job data for existing job", async () => {
-      const mockJobData = {
+      const mockJob = {
         jobId: "job123",
         status: "pending",
         galleryName: "test-gallery",
         guildId: "guild123",
         filename: "test.zip",
-        fileSize: "1024",
-        createdAt: String(Date.now()),
+        fileSize: 1024,
+        createdAt: Date.now(),
       };
 
-      vi.mocked(redis.client.hGetAll).mockResolvedValue(mockJobData);
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockJob));
 
       const job = await service.getJob("job123");
 
@@ -72,18 +72,18 @@ describe("UploadJobService", () => {
         failedFiles: [],
       };
 
-      const mockJobData = {
+      const mockJob = {
         jobId: "job123",
         status: "processing",
         galleryName: "test-gallery",
         guildId: "guild123",
         filename: "test.zip",
-        fileSize: "1024",
-        createdAt: String(Date.now()),
-        progress: JSON.stringify(progress),
+        fileSize: 1024,
+        createdAt: Date.now(),
+        progress,
       };
 
-      vi.mocked(redis.client.hGetAll).mockResolvedValue(mockJobData);
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockJob));
 
       const job = await service.getJob("job123");
 
@@ -95,49 +95,100 @@ describe("UploadJobService", () => {
 
   describe("updateJobStatus", () => {
     it("should update job status", async () => {
-      vi.mocked(redis.client.exists).mockResolvedValue(1);
+      const mockJob = {
+        jobId: "job123",
+        status: "pending",
+        galleryName: "test-gallery",
+        guildId: "guild123",
+        filename: "test.zip",
+        fileSize: 1024,
+        createdAt: Date.now(),
+      };
+
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockJob));
 
       await service.updateJobStatus("job123", "processing");
 
-      expect(redis.client.exists).toHaveBeenCalledWith("upload:job:job123");
-      expect(redis.client.hSet).toHaveBeenCalled();
-      const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
+      expect(redis.client.get).toHaveBeenCalledWith("upload:job:job123");
+      expect(redis.client.set).toHaveBeenCalled();
+      const callArgs = vi.mocked(redis.client.set).mock.calls[0];
       expect(callArgs[0]).toBe("upload:job:job123");
-      expect(callArgs[1]).toHaveProperty("status", "processing");
+      const updatedJob = JSON.parse(callArgs[1]);
+      expect(updatedJob.status).toBe("processing");
     });
 
     it("should set startedAt when status changes to processing", async () => {
-      vi.mocked(redis.client.exists).mockResolvedValue(1);
-      vi.mocked(redis.client.hGet).mockResolvedValue(null);
+      const mockJob = {
+        jobId: "job123",
+        status: "pending",
+        galleryName: "test-gallery",
+        guildId: "guild123",
+        filename: "test.zip",
+        fileSize: 1024,
+        createdAt: Date.now(),
+      };
+
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockJob));
 
       await service.updateJobStatus("job123", "processing");
 
-      const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
-      expect(callArgs[1]).toHaveProperty("startedAt");
+      const callArgs = vi.mocked(redis.client.set).mock.calls[0];
+      const updatedJob = JSON.parse(callArgs[1]);
+      expect(updatedJob.startedAt).toBeDefined();
     });
 
     it("should set completedAt when status is completed or failed", async () => {
-      vi.mocked(redis.client.exists).mockResolvedValue(1);
+      const mockJob = {
+        jobId: "job123",
+        status: "processing",
+        galleryName: "test-gallery",
+        guildId: "guild123",
+        filename: "test.zip",
+        fileSize: 1024,
+        createdAt: Date.now(),
+      };
+
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockJob));
 
       await service.updateJobStatus("job123", "completed");
 
-      const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
-      expect(callArgs[1]).toHaveProperty("completedAt");
+      const callArgs = vi.mocked(redis.client.set).mock.calls[0];
+      const updatedJob = JSON.parse(callArgs[1]);
+      expect(updatedJob.completedAt).toBeDefined();
     });
 
     it("should set error message when provided", async () => {
-      vi.mocked(redis.client.exists).mockResolvedValue(1);
+      const mockJob = {
+        jobId: "job123",
+        status: "processing",
+        galleryName: "test-gallery",
+        guildId: "guild123",
+        filename: "test.zip",
+        fileSize: 1024,
+        createdAt: Date.now(),
+      };
+
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockJob));
 
       await service.updateJobStatus("job123", "failed", "Test error");
 
-      const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
-      expect(callArgs[1]).toHaveProperty("error", "Test error");
+      const callArgs = vi.mocked(redis.client.set).mock.calls[0];
+      const updatedJob = JSON.parse(callArgs[1]);
+      expect(updatedJob.error).toBe("Test error");
     });
   });
 
   describe("updateJobProgress", () => {
     it("should update job progress", async () => {
-      vi.mocked(redis.client.exists).mockResolvedValue(1);
+      const mockJob = {
+        jobId: "job123",
+        status: "processing",
+        galleryName: "test-gallery",
+        guildId: "guild123",
+        filename: "test.zip",
+        fileSize: 1024,
+        createdAt: Date.now(),
+      };
 
       const progress: UploadJobProgress = {
         processedFiles: 5,
@@ -146,16 +197,19 @@ describe("UploadJobService", () => {
         failedFiles: [],
       };
 
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockJob));
+
       await service.updateJobProgress("job123", progress);
 
-      expect(redis.client.exists).toHaveBeenCalledWith("upload:job:job123");
-      expect(redis.client.hSet).toHaveBeenCalled();
-      const callArgs = vi.mocked(redis.client.hSet).mock.calls[0];
-      expect(callArgs[1]).toHaveProperty("progress");
+      expect(redis.client.get).toHaveBeenCalledWith("upload:job:job123");
+      expect(redis.client.set).toHaveBeenCalled();
+      const callArgs = vi.mocked(redis.client.set).mock.calls[0];
+      const updatedJob = JSON.parse(callArgs[1]);
+      expect(updatedJob.progress).toEqual(progress);
     });
 
     it("should throw error when job does not exist", async () => {
-      vi.mocked(redis.client.exists).mockResolvedValue(0);
+      vi.mocked(redis.client.get).mockResolvedValue(null);
 
       const progress: UploadJobProgress = {
         processedFiles: 5,

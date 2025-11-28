@@ -16,6 +16,7 @@ export interface ChunkedUploadOptions {
   chunkSize?: number;
   maxRetries?: number;
   galleryName?: string;
+  guildId?: string;
   onProgress?: (progress: ChunkedUploadProgress) => void;
   onChunkComplete?: (index: number, total: number) => void;
   onError?: (error: Error, chunk: number) => void;
@@ -164,6 +165,7 @@ export async function chunkedUpload(
       fileType: file.type || "application/octet-stream",
       totalSize: file.size,
       galleryName: options.galleryName || "unknown",
+      guildId: options.guildId || "unknown",
     };
 
     const { data: initiateResponse } = await uploadHttpClient.post<InitiateUploadResponse>(
@@ -256,6 +258,7 @@ export class ChunkedUploader {
         fileType: this.file.type || "application/octet-stream",
         totalSize: this.file.size,
         galleryName: this.options.galleryName || "unknown",
+        guildId: this.options.guildId || "unknown",
       };
 
       const { data: initiateResponse } = await uploadHttpClient.post<InitiateUploadResponse>(

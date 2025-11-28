@@ -6,7 +6,7 @@ import {
   login as doLogin,
   logout as doLogout,
   getCurrentUser as fetchCurrentUser,
-} from "./queries";
+} from "../queries";
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);

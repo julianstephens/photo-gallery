@@ -39,6 +39,7 @@ export interface ChunkedUploadMetadata {
   fileName: string;
   fileType: string;
   galleryName: string;
+  guildId: string;
   tempDir: string;
   createdAt: number;
   totalSize: number;
@@ -78,6 +79,7 @@ export class ChunkedUploadService {
       fileName: safeFileName,
       fileType: request.fileType,
       galleryName: request.galleryName,
+      guildId: request.guildId,
       tempDir,
       createdAt: Date.now(),
       totalSize: request.totalSize,

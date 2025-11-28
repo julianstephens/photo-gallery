@@ -1,49 +1,52 @@
-import { queryClient } from "@/clients";
 import { DetailedGallery } from "@/components/DetailedGallery";
 import { GuildSelect } from "@/components/forms/Fields";
 import { GalleryList } from "@/components/GalleryList";
-import { ConfirmDeleteModal } from "@/components/modals/ConfirmDelete";
 import { CreateGalleryModal } from "@/components/modals/CreateGalleryModal";
 import { SetDefaultGuildButton } from "@/components/SetDefaultGuild";
-import { toaster } from "@/components/ui/toaster";
 import { Tooltip } from "@/components/ui/tooltip";
 import { UploadMonitor } from "@/components/UploadMonitor";
-import { useDefaultGuild, useListGalleries } from "@/hooks";
-import { getAllUploadJobs } from "@/lib/upload/uploadService";
-import { removeGallery } from "@/queries";
-import { Flex, Heading, HStack, Icon, IconButton, Presence, Text, VStack } from "@chakra-ui/react";
-import { useMutation } from "@tanstack/react-query";
+import { useGalleryContext } from "@/contexts/GalleryContext";
+import { useUploadContext } from "@/contexts/UploadContext";
+import { useListGalleries } from "@/hooks";
+import {
+  Button,
+  Flex,
+  Heading,
+  HStack,
+  Icon,
+  IconButton,
+  Presence,
+  Spinner,
+  Text,
+  VStack,
+} from "@chakra-ui/react";
 import { useEffect, useState } from "react";
-import { HiOutlineHome } from "react-icons/hi";
+import { HiOutlineHome, HiOutlineUpload } from "react-icons/hi";
 import { HiStar } from "react-icons/hi2";
 import { useNavigate } from "react-router";
-import type { Gallery, UploadJob } from "utils";
+import type { Gallery } from "utils";
 
 const AdminDashboard = () => {
   const [guildId, setGuildId] = useState<string | undefined>(undefined);
-  const { data, error, isLoading } = useListGalleries(guildId);
-  const defaultGuild = useDefaultGuild();
+  const { data, error, isLoading } = useListGalleries(guildId || "");
   const [showCreateGalleryModal, setShowCreateGalleryModal] = useState(false);
-  const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
-  const [deleteKey, setDeleteKey] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const { uploadMonitorEverShown, hasActiveUploads } = useUploadContext();
+  const {
+    activeGalleryName,
+    isDefaultGuild,
+    setActiveGallery,
+    clearActiveGallery,
+    setActiveGuild,
+    defaultGuildId,
+  } = useGalleryContext();
+  const [isUploadMonitorVisible, setIsUploadMonitorVisible] = useState(true);
   const [guild, setGuild] = useState<string>("");
-  const [uploadJobs, setUploadJobs] = useState<UploadJob[]>([]);
-  const [showUploadMonitor, setShowUploadMonitor] = useState(false);
   const [galleryOpened, setGalleryOpened] = useState(false);
-  const [openedGallery, setOpenedGallery] = useState<Gallery | null>(null);
 
   const goto = useNavigate();
 
   const pageTitle = "Admin Dashboard";
   const pageSlug = pageTitle.toLowerCase().replace(/\s+/g, "-").toLowerCase();
-
-  const deleteGalleryMutation = useMutation({
-    mutationFn: removeGallery,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["galleries", { guildId }] });
-    },
-  });
 
   const openCreateGalleryModal = () => {
     setShowCreateGalleryModal(true);
@@ -53,92 +56,14 @@ const AdminDashboard = () => {
     setShowCreateGalleryModal(false);
   };
 
-  const openConfirmDeleteModal = (gallery: string) => {
-    setDeleteKey(gallery);
-    setShowConfirmDeleteModal(true);
-  };
-
-  const closeConfirmDeleteModal = () => {
-    setShowConfirmDeleteModal(false);
-  };
-
-  const handleUploadMonitorClose = () => {
-    setShowUploadMonitor(false);
-  };
-
   const openDetailedGalleryView = (gallery: Gallery) => {
-    console.log("Opening gallery:", gallery); // Debug log
-    setOpenedGallery(gallery);
+    setActiveGallery(gallery.name);
     setGalleryOpened(true);
   };
 
   const closeDetailedGalleryView = () => {
-    setOpenedGallery(null);
+    clearActiveGallery();
     setGalleryOpened(false);
-  };
-
-  // Fetch upload jobs when monitor is shown
-  useEffect(() => {
-    if (!showUploadMonitor) return;
-
-    const fetchJobs = async () => {
-      try {
-        const jobs = await getAllUploadJobs();
-        setUploadJobs(jobs);
-      } catch (error) {
-        console.error("Failed to fetch upload jobs:", error);
-      }
-    };
-
-    // Initial fetch
-    fetchJobs();
-
-    // Poll every 2 seconds
-    const interval = setInterval(fetchJobs, 2000);
-
-    return () => clearInterval(interval);
-  }, [showUploadMonitor]);
-
-  // Calculate upload job statistics
-  const activeUploads = uploadJobs.filter(
-    (job) => job.status === "pending" || job.status === "processing",
-  ).length;
-  const totalJobs = uploadJobs.length;
-
-  const handleUploadJobCreated = (jobId: string) => {
-    console.log("Upload job created with ID:", jobId);
-    // Show the monitor and it will fetch jobs
-    setShowUploadMonitor(true);
-  };
-
-  const deleteGallery = async () => {
-    if (!guildId || !deleteKey) {
-      toaster.error({
-        title: "Deletion Error",
-        description: "Guild ID or Gallery Name is missing.",
-      });
-      return;
-    }
-
-    try {
-      setDeleteLoading(true);
-      await deleteGalleryMutation.mutateAsync({
-        guildId: guildId ?? "",
-        galleryName: deleteKey,
-      });
-      toaster.success({
-        title: "Gallery Deleted",
-        description: `Gallery "${deleteKey}" has been deleted.`,
-      });
-    } catch (err) {
-      console.error("Error deleting gallery:", err);
-      toaster.error({
-        title: "Deletion Error",
-        description: `Failed to delete gallery "${deleteKey}".`,
-      });
-    } finally {
-      setDeleteLoading(false);
-    }
   };
 
   const onGuildChange = (selectedGuild: string) => {
@@ -147,11 +72,31 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    if (defaultGuild) {
-      setGuild(defaultGuild);
-      setGuildId(defaultGuild);
+    if (defaultGuildId) {
+      setGuild(defaultGuildId);
+      setGuildId(defaultGuildId);
+      // Immediately update context when default guild loads
+      setActiveGuild(defaultGuildId);
     }
-  }, [defaultGuild]);
+  }, [defaultGuildId, setActiveGuild]);
+
+  // Update GalleryContext when guild changes (for manual guild selection)
+  useEffect(() => {
+    if (guildId) {
+      setActiveGuild(guildId);
+    }
+  }, [guildId, setActiveGuild]);
+
+  // Check if gallery was deleted or renamed
+  useEffect(() => {
+    if (galleryOpened && activeGalleryName && data) {
+      const galleryExists = data.some((g) => g.name === activeGalleryName);
+      if (!galleryExists) {
+        // Gallery not found (e.g., deleted or renamed), close the detailed view
+        closeDetailedGalleryView();
+      }
+    }
+  }, [data, galleryOpened, activeGalleryName]);
 
   return (
     <>
@@ -187,15 +132,10 @@ const AdminDashboard = () => {
         >
           <VStack w="full" align="start">
             <HStack w="full" justify="space-between" align="last baseline" gap="4">
-              <GuildSelect
-                w="50%"
-                defaultGuild={defaultGuild ?? undefined}
-                value={guild}
-                onChange={onGuildChange}
-              />
-              <SetDefaultGuildButton defaultGuild={guild} disabled={defaultGuild === guild} />
+              <GuildSelect w="50%" value={guild} onChange={onGuildChange} />
+              <SetDefaultGuildButton defaultGuild={guild} disabled={defaultGuildId === guild} />
             </HStack>
-            {defaultGuild === guild && (
+            {isDefaultGuild && (
               <HStack>
                 <Icon fill="green.400">
                   <HiStar />
@@ -207,29 +147,25 @@ const AdminDashboard = () => {
             )}
           </VStack>
         </HStack>
-        <Presence present={!galleryOpened}>
+        <Presence
+          id={`${pageSlug}-gallery-list-presence`}
+          present={!galleryOpened}
+          w="full"
+          h="full"
+        >
           <GalleryList
             data={data || undefined}
             error={error}
             isLoading={isLoading}
             guildId={guildId}
-            deleteLoading={deleteLoading}
-            deleteKey={deleteKey}
-            openConfirmDeleteModal={openConfirmDeleteModal}
-            handleUploadJobCreated={handleUploadJobCreated}
             openCreateGalleryModal={openCreateGalleryModal}
             openDetailedGalleryView={openDetailedGalleryView}
-            uploadJobs={uploadJobs}
-            showUploadMonitor={showUploadMonitor}
-            setShowUploadMonitor={setShowUploadMonitor}
-            activeUploads={activeUploads}
-            totalJobs={totalJobs}
             pageSlug={pageSlug}
           />
         </Presence>
-        {galleryOpened && openedGallery && (
+        {galleryOpened && activeGalleryName && (
           <DetailedGallery
-            gallery={openedGallery}
+            galleryName={activeGalleryName}
             guildId={guild}
             pageSlug={pageSlug}
             closeGallery={closeDetailedGalleryView}
@@ -241,17 +177,33 @@ const AdminDashboard = () => {
         open={showCreateGalleryModal}
         closeModal={closeCreateGalleryModal}
       />
-      <ConfirmDeleteModal
-        open={showConfirmDeleteModal}
-        closeModal={closeConfirmDeleteModal}
-        actionButtonLoading={deleteLoading && deleteKey !== null}
-        actionButtonOnClick={deleteGallery}
-      />
       <UploadMonitor
-        jobs={uploadJobs}
-        isOpen={showUploadMonitor}
-        onClose={handleUploadMonitorClose}
+        isVisible={isUploadMonitorVisible}
+        onClose={() => setIsUploadMonitorVisible(false)}
       />
+      {uploadMonitorEverShown && !isUploadMonitorVisible && (
+        <Tooltip content="View uploads">
+          <Button
+            zIndex={0}
+            position="fixed"
+            bottom="1rem"
+            right="1rem"
+            size="lg"
+            colorPalette={hasActiveUploads ? "blue" : "gray"}
+            aria-label="Show uploads"
+            onClick={() => setIsUploadMonitorVisible(true)}
+          >
+            {hasActiveUploads ? (
+              <Spinner />
+            ) : (
+              <Icon>
+                <HiOutlineUpload />
+              </Icon>
+            )}
+            {hasActiveUploads ? "Uploading" : "View Uploads"}
+          </Button>
+        </Tooltip>
+      )}
     </>
   );
 };

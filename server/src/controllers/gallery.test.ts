@@ -47,15 +47,23 @@ import { GalleryController } from "./gallery.ts";
 const redisMocks = vi.hoisted(() => ({
   sMembersMock: vi.fn(),
   multiMock: vi.fn(),
+  mGetMock: vi.fn(),
 }));
 
 type PipelineOperation = { cmd: string; args: unknown[] };
 type Pipeline = {
   ops: PipelineOperation[];
   hGetAll: (key: string) => Pipeline;
+  get: (key: string) => Pipeline;
+  mGet: (keys: string[]) => Pipeline;
   sRem: (key: string, member: string) => Pipeline;
+  sAdd: (key: string, member: string) => Pipeline;
   del: (key: string) => Pipeline;
   zRem: (key: string, member: string) => Pipeline;
+  zAdd: (key: string, members: { score: number; value: string }[]) => Pipeline;
+  rename: (key: string, newKey: string) => Pipeline;
+  set: (key: string, value: string) => Pipeline;
+  exists: (key: string) => Pipeline;
   exec: () => Promise<unknown>;
 };
 
@@ -71,8 +79,20 @@ const createPipeline = (): Pipeline => {
       ops.push({ cmd: "hGetAll", args: [key] });
       return this;
     },
+    get(key: string) {
+      ops.push({ cmd: "get", args: [key] });
+      return this;
+    },
+    mGet(keys: string[]) {
+      ops.push({ cmd: "mGet", args: [keys] });
+      return this;
+    },
     sRem(key: string, member: string) {
       ops.push({ cmd: "sRem", args: [key, member] });
+      return this;
+    },
+    sAdd(key: string, member: string) {
+      ops.push({ cmd: "sAdd", args: [key, member] });
       return this;
     },
     del(key: string) {
@@ -83,11 +103,28 @@ const createPipeline = (): Pipeline => {
       ops.push({ cmd: "zRem", args: [key, member] });
       return this;
     },
+    zAdd(key: string, members: { score: number; value: string }[]) {
+      ops.push({ cmd: "zAdd", args: [key, members] });
+      return this;
+    },
+    rename(key: string, newKey: string) {
+      ops.push({ cmd: "rename", args: [key, newKey] });
+      return this;
+    },
+    set(key: string, value: string) {
+      ops.push({ cmd: "set", args: [key, value] });
+      return this;
+    },
+    exists(key: string) {
+      ops.push({ cmd: "exists", args: [key] });
+      return this;
+    },
     exec() {
       execCallOrder.push([...ops]);
       return Promise.resolve(execResults.shift());
     },
   };
+  pipelines.push(pipeline);
   return pipeline;
 };
 
@@ -96,6 +133,16 @@ vi.mock("../redis.ts", () => ({
     client: {
       sMembers: redisMocks.sMembersMock,
       multi: redisMocks.multiMock,
+      get: vi.fn(),
+      mGet: redisMocks.mGetMock,
+      set: vi.fn(),
+      exists: vi.fn(),
+      rename: vi.fn(),
+      sAdd: vi.fn(),
+      sRem: vi.fn(),
+      del: vi.fn(),
+      zAdd: vi.fn(),
+      zRem: vi.fn(),
     },
     store: {},
   },
@@ -168,21 +215,28 @@ describe("GalleryAPI Unit Tests", () => {
       const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
 
       redisMocks.sMembersMock.mockResolvedValue(["active", "expired"]);
-      execResults.push([
-        {
-          createdAt: String(now - 1_000),
-          expiresAt: String(now + 10_000),
-          ttlWeeks: "1",
+
+      // Mock mGet to return metadata JSON strings
+      redisMocks.mGetMock.mockResolvedValue([
+        JSON.stringify({
+          createdAt: now - 1_000,
+          expiresAt: now + 10_000,
+          ttlWeeks: 1,
           createdBy: "user-a",
-        },
-        {
-          createdAt: String(now - 5_000),
-          expiresAt: String(now - 100),
-          ttlWeeks: "1",
+          totalItems: 0,
+        }),
+        JSON.stringify({
+          createdAt: now - 5_000,
+          expiresAt: now - 100,
+          ttlWeeks: 1,
           createdBy: "user-b",
-        },
+          totalItems: 0,
+        }),
       ]);
+
+      // Mock cleanup operations
       execResults.push([]);
+      redisMocks.multiMock.mockReturnValue(createPipeline());
 
       const controller = new GalleryController();
       const result = await controller.listGalleries("guild-123");
@@ -200,16 +254,15 @@ describe("GalleryAPI Unit Tests", () => {
         },
       ]);
 
-      expect(pipelines).toHaveLength(2);
-      const cleanupOps = pipelines[1].ops;
+      expect(pipelines).toHaveLength(1);
+      const cleanupOps = pipelines[0].ops;
       expect(cleanupOps).toEqual([
         { cmd: "sRem", args: ["guild:guild-123:galleries", "expired"] },
         { cmd: "del", args: ["guild:guild-123:gallery:expired:meta"] },
-        { cmd: "zRem", args: ["galleries:expiries", "guild:guild-123:gallery:expired"] },
+        { cmd: "zRem", args: ["galleries:expiries:v2", "guild:guild-123:gallery:expired"] },
       ]);
-      expect(execCallOrder).toHaveLength(2);
-      expect(execCallOrder[0]).toEqual(pipelines[0].ops);
-      expect(execCallOrder[1]).toEqual(cleanupOps);
+      expect(execCallOrder).toHaveLength(1);
+      expect(execCallOrder[0]).toEqual(cleanupOps);
 
       nowSpy.mockRestore();
     });

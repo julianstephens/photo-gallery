@@ -1,14 +1,8 @@
 import type { AxiosError } from "axios";
 import { createContext } from "react";
-import type { User } from "utils";
 import type { AuthContextValue } from "./types";
 
 export type Nullish<T> = T | null | undefined;
-
-export const getGuildIdFromUser = (user: Nullish<User>, idx?: number): string => {
-  if (!user) return "";
-  return user.primary_guild?.identity_guild_id || user.guilds[idx || 0]?.id || "";
-};
 
 export const toErrorMessage = (err: unknown): string => {
   if (typeof err === "string") return err;

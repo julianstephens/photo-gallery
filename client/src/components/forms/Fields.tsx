@@ -1,3 +1,4 @@
+import { useGalleryContext } from "@/contexts/GalleryContext";
 import { useAuth, useListGalleries } from "@/hooks";
 import {
   createListCollection,
@@ -152,19 +153,15 @@ export const Select = ({
   );
 };
 
-export const GuildSelect = (
-  props: Omit<SelectProps, "name" | "options" | "label" | "isMulti"> & {
-    defaultGuild?: string;
-  },
-) => {
+export const GuildSelect = (props: Omit<SelectProps, "name" | "options" | "label" | "isMulti">) => {
   const { currentUser } = useAuth();
-  const { defaultGuild, ...restProps } = props;
+  const { defaultGuildId } = useGalleryContext();
   const selectOpts = useMemo(
     () =>
       currentUser?.guilds.map((g) => ({
         value: g.id,
         label: g.name,
-        ...(defaultGuild && defaultGuild === g.id
+        ...(defaultGuildId === g.id
           ? {
               icon: (
                 <HStack gap="2">
@@ -177,7 +174,7 @@ export const GuildSelect = (
             }
           : {}),
       })) ?? [],
-    [currentUser, defaultGuild],
+    [currentUser, defaultGuildId],
   );
 
   if (!currentUser) {
@@ -191,7 +188,7 @@ export const GuildSelect = (
       options={selectOpts}
       isMulti={false}
       invalid={props.invalid}
-      {...restProps}
+      {...props}
     />
   );
 };

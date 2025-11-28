@@ -1,23 +1,48 @@
-import { Button, Heading, HStack, Icon, Text, VStack } from "@chakra-ui/react";
-import { HiOutlineUpload } from "react-icons/hi";
-import { HiArrowLongLeft, HiPencil, HiTrash } from "react-icons/hi2";
+import { getGallery } from "@/queries";
+import { Button, Heading, HStack, Icon, Spinner, Text, VStack } from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
+import { HiArrowLongLeft } from "react-icons/hi2";
 import { TbCheckbox } from "react-icons/tb";
-import type { Gallery } from "utils";
+import { DeleteGalleryButton } from "./DeleteGalleryButton";
 import { Gallery as GalleryDisplay } from "./Gallery";
+import { RenameGalleryButton } from "./RenameGalleryButton";
+import { UploadPhotosButton } from "./UploadPhotosButton";
 
 interface DetailedGalleryProps {
   pageSlug: string;
-  gallery: Gallery;
+  galleryName: string;
   guildId: string;
-  closeGallery?: () => void;
+  closeGallery: () => void;
 }
 
 export const DetailedGallery = ({
-  gallery,
+  galleryName,
   pageSlug,
   guildId,
   closeGallery,
 }: DetailedGalleryProps) => {
+  const { data: gallery, isLoading } = useQuery({
+    queryKey: ["gallery", { guildId, galleryName }],
+    queryFn: () => getGallery(guildId, galleryName),
+    enabled: !!guildId && !!galleryName,
+  });
+
+  if (isLoading) {
+    return (
+      <VStack justify="center" align="center" height="full">
+        <Spinner />
+      </VStack>
+    );
+  }
+
+  if (!gallery) {
+    return (
+      <VStack justify="center" align="center" height="full" gap="4">
+        <Text>Gallery not found</Text>
+        <Button onClick={closeGallery}>Back to galleries</Button>
+      </VStack>
+    );
+  }
   return (
     <>
       <HStack
@@ -57,24 +82,20 @@ export const DetailedGallery = ({
             </Icon>
             Select Photos
           </Button>
-          <Button colorPalette="blue">
-            <Icon>
-              <HiOutlineUpload />
-            </Icon>
-            Upload Photos
-          </Button>
-          <Button variant="outline">
-            <Icon>
-              <HiPencil />
-            </Icon>
-            Edit Name
-          </Button>
-          <Button variant="subtle" colorPalette="red">
-            <Icon>
-              <HiTrash />
-            </Icon>
-            Delete Gallery
-          </Button>
+          <RenameGalleryButton galleryName={gallery.name} guildId={guildId} type="full" />
+          <UploadPhotosButton
+            guildId={guildId}
+            galleryName={gallery.name}
+            buttonText="Upload Photos"
+            buttonColorPalette="blue"
+            buttonVariant="solid"
+          />
+          <DeleteGalleryButton
+            galleryName={gallery.name}
+            guildId={guildId}
+            type="full"
+            postDelete={closeGallery}
+          />
         </HStack>
       </HStack>
       <GalleryDisplay

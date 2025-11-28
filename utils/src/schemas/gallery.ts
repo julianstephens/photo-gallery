@@ -30,3 +30,9 @@ export const removeGallerySchema = z.object({
   guildId: z.string().min(1).max(100),
   galleryName: z.string().min(1).max(100),
 });
+
+export const updateGalleryNameSchema = z.object({
+  guildId: z.string().min(1).max(100),
+  galleryName: z.string().min(1).max(100),
+  newGalleryName: z.string().min(1).max(100),
+});

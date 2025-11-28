@@ -1,5 +1,5 @@
 import { httpClient } from "@/clients.ts";
-import type { UploadJob, UploadProgress } from "utils";
+import type { UploadProgress } from "utils";
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -8,12 +8,14 @@ export const initiateUpload = async (
   fileType: string,
   galleryName: string,
   totalSize: number,
+  guildId: string,
 ) => {
   const { data } = await httpClient.post("/uploads/initiate", {
     fileName,
     fileType,
     galleryName,
     totalSize,
+    guildId,
   });
   return data;
 };
@@ -44,9 +46,10 @@ export const getUploadProgress = async (uploadId: string): Promise<UploadProgres
 export const uploadFileInChunks = async (
   file: File,
   galleryName: string,
+  guildId: string,
   onProgress: (progress: number) => void,
 ) => {
-  const { uploadId } = await initiateUpload(file.name, file.type, galleryName, file.size);
+  const { uploadId } = await initiateUpload(file.name, file.type, galleryName, file.size, guildId);
   const totalParts = Math.ceil(file.size / CHUNK_SIZE);
   const uploadPromises = [];
 
@@ -65,28 +68,4 @@ export const uploadFileInChunks = async (
   await Promise.all(uploadPromises);
 
   return finalizeUpload(uploadId);
-};
-
-export const uploadToGallery = async (file: File, galleryName: string, guildId: string) => {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("galleryName", galleryName);
-  formData.append("guildId", guildId);
-
-  const { data } = await httpClient.post("/galleries/upload", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-  return data;
-};
-
-export const getUploadJob = async (jobId: string): Promise<UploadJob> => {
-  const { data } = await httpClient.get<UploadJob>(`/galleries/upload/${jobId}`);
-  return data;
-};
-
-export const getAllUploadJobs = async (): Promise<UploadJob[]> => {
-  const { data } = await httpClient.get<UploadJob[]>("/galleries/uploads");
-  return data;
 };

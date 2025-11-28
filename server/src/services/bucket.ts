@@ -72,13 +72,19 @@ export class BucketService {
   };
 
   async #getObjectMetadata(key: string): Promise<Record<string, string>> {
-    const resp = await this.#s3.send(
-      new HeadObjectCommand({
-        Bucket: this.#bucketName,
-        Key: key,
-      }),
-    );
-    return resp.Metadata ?? {};
+    try {
+      const resp = await this.#s3.send(
+        new HeadObjectCommand({
+          Bucket: this.#bucketName,
+          Key: key,
+        }),
+      );
+      return resp.Metadata ?? {};
+    } catch (error) {
+      // If HEAD is forbidden, return empty metadata to avoid failing the listing
+      console.warn(`Failed to get metadata for ${key}:`, error);
+      return {};
+    }
   }
 
   async getObject(key: string): Promise<{ data: Buffer; contentType: string }> {

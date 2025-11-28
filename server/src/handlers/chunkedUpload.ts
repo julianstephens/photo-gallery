@@ -10,6 +10,7 @@ import {
   uploadChunkQuerySchema,
 } from "utils";
 import { ZodError } from "zod";
+import { GalleryController } from "../controllers/gallery.ts";
 import { appLogger } from "../middleware/logger.ts";
 import { BucketService } from "../services/bucket.ts";
 import { ChunkedUploadService } from "../services/chunkedUpload.ts";
@@ -18,6 +19,7 @@ import { UploadService } from "../services/upload.ts";
 const chunkedUploadService = new ChunkedUploadService();
 const bucketService = new BucketService();
 const uploadService = new UploadService();
+const galleryController = new GalleryController();
 
 // Maximum allowed chunk size (10MB) to prevent memory exhaustion
 const MAX_CHUNK_SIZE = 10 * 1024 * 1024;
@@ -135,6 +137,15 @@ export const finalizeUpload = async (req: Request, res: Response) => {
         chunkedUploadService.updateProgress(uploadId, "completed", "server-upload", {
           processedFiles: 1,
         });
+
+        // Sync gallery item count after successful upload
+        await galleryController.syncGalleryItemCount(metadata.guildId, metadata.galleryName);
+
+        appLogger.debug(
+          { uploadId, guildId: metadata.guildId, galleryName: metadata.galleryName },
+          "[finalizeUpload] Gallery item count synced after single file upload",
+        );
+
         return res.status(200).json(result);
       } catch (error) {
         chunkedUploadService.markFailed(uploadId, error);
@@ -266,6 +277,14 @@ export const finalizeUpload = async (req: Request, res: Response) => {
 
       // Mark upload as completed
       chunkedUploadService.updateProgress(uploadId, "completed", "server-upload");
+
+      // Sync gallery item count after successful ZIP upload
+      await galleryController.syncGalleryItemCount(metadata.guildId, metadata.galleryName);
+
+      appLogger.debug(
+        { uploadId, guildId: metadata.guildId, galleryName: metadata.galleryName },
+        "[finalizeUpload] Gallery item count synced after ZIP upload",
+      );
     } catch (zipErr) {
       appLogger.error(
         { err: zipErr, uploadId, metadata },

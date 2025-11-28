@@ -1,16 +1,20 @@
 import {
   createGallerySchema,
   removeGallerySchema,
+  updateGalleryNameSchema,
   type CreateGalleryRequest,
   type Gallery,
   type GalleryItemResponse,
   type GalleryMeta,
   type RemoveGalleryRequest,
-  type UploadJob,
-  type UploadToGalleryRequest,
+  type UpdateGalleryNameRequest,
   type User,
 } from "utils";
-import { API_BASE_URL, httpClient, UPLOAD_BASE_URL, uploadHttpClient } from "./clients";
+import { API_BASE_URL, httpClient } from "./clients";
+
+/**********************
+ * GALLERY QUERIES
+ **********************/
 
 export const listGalleries = async (guildId: string): Promise<Gallery[]> => {
   const res = await httpClient.get<Gallery[]>("galleries", { params: { guildId } });
@@ -43,6 +47,31 @@ export const listGalleryItems = async (
   return res.data;
 };
 
+export const renameGallery = async (req: UpdateGalleryNameRequest): Promise<void> => {
+  const { guildId, galleryName, newGalleryName } = updateGalleryNameSchema.parse(req);
+  await httpClient.put("galleries", {
+    guildId,
+    galleryName,
+    newGalleryName,
+  });
+};
+
+export const setDefaultGallery = async (guildId: string, galleryName: string): Promise<void> => {
+  await httpClient.post("galleries/default", {
+    guildId,
+    galleryName,
+  });
+};
+
+export const removeGallery = async (req: RemoveGalleryRequest): Promise<void> => {
+  const body = removeGallerySchema.parse(req);
+  await httpClient.delete("galleries", { data: body });
+};
+
+/**********************
+ * GUILD QUERIES
+ **********************/
+
 export const getDefaultGuild = async (): Promise<string | null> => {
   const { data } = await httpClient.get<{ guildId: string | null }>("guilds/default");
   return data.guildId;
@@ -54,39 +83,13 @@ export const setDefaultGuild = async (guildId: string): Promise<void> => {
   });
 };
 
-export const setDefaultGallery = async (guildId: string, galleryName: string): Promise<void> => {
-  await httpClient.post("galleries/default", {
-    guildId,
-    galleryName,
-  });
-};
+/**********************
+ * UPLOAD QUERIES
+ **********************/
 
-export const uploadToGallery = async (
-  uploadReq: UploadToGalleryRequest,
-): Promise<{ type: "sync" | "async"; jobId?: string; uploaded?: unknown[] }> => {
-  const formData = new FormData();
-  formData.append("guildId", uploadReq.guildId);
-  formData.append("galleryName", uploadReq.galleryName);
-  formData.append("file", uploadReq.file);
-
-  const response = await uploadHttpClient.post("galleries/upload", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
-
-  return response.data;
-};
-
-export const getUploadJob = async (jobId: string): Promise<UploadJob> => {
-  const { data } = await httpClient.get(`galleries/upload/${jobId}`);
-  return data;
-};
-
-export const removeGallery = async (req: RemoveGalleryRequest): Promise<void> => {
-  const body = removeGallerySchema.parse(req);
-  await httpClient.delete("galleries", { data: body });
-};
+/**********************
+ * AUTH QUERIES
+ **********************/
 
 export const login = async () => {
   const base = (httpClient.defaults.baseURL as string) ?? API_BASE_URL ?? "/api/";
@@ -116,8 +119,8 @@ export const login = async () => {
     console.warn("[queries] Primary health check failed. Falling back to direct API.", err);
   }
 
-  // Fallback: attempt to use the direct upload base configured (if available) or primary
-  const fallbackBase = (UPLOAD_BASE_URL as string) ?? base;
+  // Fallback: attempt to use the direct API base configured (if available) or primary
+  const fallbackBase = (API_BASE_URL as string) ?? base;
   const fallbackAuthUrl = new URL("auth", fallbackBase).toString();
   console.debug("[queries] Redirecting to fallback auth URL:", { fallbackAuthUrl });
   window.location.assign(fallbackAuthUrl);

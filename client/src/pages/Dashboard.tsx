@@ -3,8 +3,9 @@ import { Gallery } from "@/components/Gallery";
 import { Loader } from "@/components/Loader";
 import { SetDefaultGuildButton } from "@/components/SetDefaultGuild";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useAuth, useDefaultGuild } from "@/hooks";
-import { Box, Button, Flex, Heading, IconButton } from "@chakra-ui/react";
+import { useGalleryContext } from "@/contexts/GalleryContext";
+import { useAuth, useListGalleries } from "@/hooks";
+import { Box, Button, Flex, Heading, IconButton, Text } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { HiArrowUp } from "react-icons/hi";
 import { useNavigate } from "react-router";
@@ -14,7 +15,12 @@ const Dashboard = () => {
   const [gallery, setGallery] = useState<string>("");
   const { currentUser, authReady, logout } = useAuth();
   const goto = useNavigate();
-  const defaultGuild = useDefaultGuild();
+  const {
+    data: galleries,
+    isLoading: galleriesLoading,
+    error: galleriesError,
+  } = useListGalleries(guild);
+  const { setActiveGuild, setActiveGallery, defaultGuildId, activeGuildId } = useGalleryContext();
 
   const updateGuild = (selectedGuild: string) => {
     setGuild(selectedGuild);
@@ -29,10 +35,25 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    if (defaultGuild) {
-      setGuild(defaultGuild);
+    if (defaultGuildId) {
+      setGuild(defaultGuildId);
+      // Immediately update context when default guild loads
+      setActiveGuild(defaultGuildId);
     }
-  }, [defaultGuild]);
+  }, [defaultGuildId, setActiveGuild]);
+
+  // Update GalleryContext when guild changes (for manual guild selection)
+  useEffect(() => {
+    if (guild) {
+      setActiveGuild(guild);
+    }
+  }, [guild, setActiveGuild]);
+
+  useEffect(() => {
+    if (gallery) {
+      setActiveGallery(gallery);
+    }
+  }, [gallery, setActiveGallery]);
 
   if (!authReady) return <Loader />;
 
@@ -67,16 +88,30 @@ const Dashboard = () => {
         <Flex gap="4" mb="4">
           <GuildSelect value={guild} onChange={updateGuild} />
           <Box w="fit" alignSelf="last baseline" mb="0.5rem">
-            <SetDefaultGuildButton defaultGuild={guild} />
+            <SetDefaultGuildButton
+              defaultGuild={guild}
+              disabled={defaultGuildId === activeGuildId}
+            />
           </Box>
         </Flex>
-        <GallerySelect
-          guild={guild}
-          setGuild={updateGuild}
-          value={gallery}
-          onChange={updateGallery}
-        />
-        <Gallery guildId={guild} galleryName={gallery} />
+        {galleriesLoading ? (
+          <Flex w="full" h="full" justify="center" align="center">
+            <Loader />
+          </Flex>
+        ) : galleriesError ? (
+          <Flex w="full" h="full" justify="center" align="center">
+            <Text>Error loading galleries.</Text>
+          </Flex>
+        ) : !galleries || galleries.length === 0 ? (
+          <Flex w="full" h="full" justify="center" align="center">
+            <Text>No galleries found for the selected guild.</Text>
+          </Flex>
+        ) : (
+          <>
+            <GallerySelect guild={guild} value={gallery} onChange={updateGallery} />
+            <Gallery guildId={guild} galleryName={gallery} />
+          </>
+        )}
       </Flex>
       <Box position="fixed" bottom="1rem" right="3rem">
         <Tooltip content="Scroll to top">
