@@ -12,6 +12,16 @@ pnpm test
 
 The integration test validates the 107 MB "Saved Pictures.zip" chunked upload, which tests the stream backpressure handling fix for large files.
 
+### Running Only Integration Tests
+
+If you want to focus exclusively on the large upload suite (skipping the faster unit tests), use the dedicated script:
+
+```bash
+pnpm test:integration
+```
+
+This command executes only the `*.integration.test.ts` files under `server/`, assuming the required local fixtures are present.
+
 ## Skipping Integration Tests in CI/CD
 
 For CI/CD pipelines that don't have access to test data files, you can skip integration tests using environment variables.

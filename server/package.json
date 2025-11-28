@@ -8,6 +8,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "test:integration": "vitest run src/**/*.integration.test.ts",
     "test:coverage": "vitest run --coverage",
     "dev": "pnpm dlx tsx watch ./src/index.ts",
     "build": "pnpm tsup",
