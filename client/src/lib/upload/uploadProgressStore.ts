@@ -3,6 +3,15 @@
  * Used by UploadPhotosButton to notify UploadMonitor of active uploads
  */
 
+import {
+  loadAllPersistedUploadsForUser,
+  markAllUploadsAsSeen,
+  markUploadAsSeen,
+  savePersistedUploads,
+  toPersistedUpload,
+  type PersistedUpload,
+} from "./uploadPersistence";
+
 export interface ActiveUpload {
   id: string;
   fileName: string;
@@ -13,13 +22,19 @@ export interface ActiveUpload {
   error?: string;
   startTime: number;
   completedTime?: number;
+  seen?: boolean;
 }
 
 type UploadListener = (uploads: ActiveUpload[]) => void;
+type PersistenceConfig = {
+  userId: string;
+  enabled: boolean;
+};
 
 class UploadProgressStore {
   private uploads = new Map<string, ActiveUpload>();
   private listeners: Set<UploadListener> = new Set();
+  private persistenceConfig: PersistenceConfig | null = null;
 
   subscribe(listener: UploadListener): () => void {
     this.listeners.add(listener);
@@ -32,6 +47,64 @@ class UploadProgressStore {
     this.listeners.forEach((listener) => listener(uploads));
   }
 
+  /**
+   * Persists current uploads to localStorage if persistence is enabled.
+   * Groups uploads by guildId and saves them separately.
+   */
+  private persistState(): void {
+    if (!this.persistenceConfig?.enabled || !this.persistenceConfig.userId) return;
+
+    const { userId } = this.persistenceConfig;
+    const uploadsByGuild = new Map<string, PersistedUpload[]>();
+
+    // Group uploads by guildId
+    for (const upload of this.uploads.values()) {
+      const guildUploads = uploadsByGuild.get(upload.guildId) || [];
+      guildUploads.push(toPersistedUpload(upload));
+      uploadsByGuild.set(upload.guildId, guildUploads);
+    }
+
+    // Save each guild's uploads
+    for (const [guildId, uploads] of uploadsByGuild) {
+      savePersistedUploads(userId, guildId, uploads);
+    }
+  }
+
+  /**
+   * Enables persistence and hydrates state from localStorage.
+   * Returns true if there are entries that should trigger showing the monitor.
+   */
+  enablePersistence(userId: string): boolean {
+    this.persistenceConfig = { userId, enabled: true };
+
+    // Load persisted uploads for all guilds
+    const allPersistedUploads = loadAllPersistedUploadsForUser(userId);
+    let hasEntriesToShow = false;
+
+    for (const [, uploads] of allPersistedUploads) {
+      for (const upload of uploads) {
+        // Only restore unseen entries (seen entries are already filtered in loadPersistedUploads)
+        if (!this.uploads.has(upload.id)) {
+          this.uploads.set(upload.id, { ...upload, seen: false });
+          hasEntriesToShow = true;
+        }
+      }
+    }
+
+    if (hasEntriesToShow) {
+      this.notifyListeners();
+    }
+
+    return hasEntriesToShow;
+  }
+
+  /**
+   * Disables persistence.
+   */
+  disablePersistence(): void {
+    this.persistenceConfig = null;
+  }
+
   addUpload(id: string, fileName: string, galleryName: string, guildId: string): void {
     this.uploads.set(id, {
       id,
@@ -41,8 +114,10 @@ class UploadProgressStore {
       progress: 0,
       status: "uploading",
       startTime: Date.now(),
+      seen: false,
     });
     this.notifyListeners();
+    this.persistState();
   }
 
   updateProgress(id: string, progress: number): void {
@@ -50,6 +125,7 @@ class UploadProgressStore {
     if (upload) {
       upload.progress = Math.min(100, Math.max(0, progress));
       this.notifyListeners();
+      this.persistState();
     }
   }
 
@@ -60,6 +136,7 @@ class UploadProgressStore {
       upload.progress = 100;
       upload.completedTime = Date.now();
       this.notifyListeners();
+      this.persistState();
     }
   }
 
@@ -70,10 +147,20 @@ class UploadProgressStore {
       upload.error = error;
       upload.completedTime = Date.now();
       this.notifyListeners();
+      this.persistState();
     }
   }
 
+  /**
+   * Removes an upload from the store and marks it as seen in persistence.
+   * This is called when a user explicitly clears an upload.
+   */
   removeUpload(id: string): void {
+    const upload = this.uploads.get(id);
+    if (upload && this.persistenceConfig?.enabled && this.persistenceConfig.userId) {
+      // Mark as seen in storage directly so it won't be restored on next load
+      markUploadAsSeen(this.persistenceConfig.userId, upload.guildId, id);
+    }
     this.uploads.delete(id);
     this.notifyListeners();
   }
@@ -82,7 +169,40 @@ class UploadProgressStore {
     return Array.from(this.uploads.values());
   }
 
+  /**
+   * Clears all non-uploading uploads and marks them as seen.
+   */
+  clearCompleted(): void {
+    const uploadsToRemove: string[] = [];
+    for (const upload of this.uploads.values()) {
+      if (upload.status !== "uploading") {
+        uploadsToRemove.push(upload.id);
+        // Mark as seen in storage directly
+        if (this.persistenceConfig?.enabled && this.persistenceConfig.userId) {
+          markUploadAsSeen(this.persistenceConfig.userId, upload.guildId, upload.id);
+        }
+      }
+    }
+
+    for (const id of uploadsToRemove) {
+      this.uploads.delete(id);
+    }
+    this.notifyListeners();
+  }
+
   clear(): void {
+    // Mark all as seen before clearing
+    if (this.persistenceConfig?.enabled && this.persistenceConfig.userId) {
+      // Group by guildId and mark all as seen
+      const guildIds = new Set<string>();
+      for (const upload of this.uploads.values()) {
+        guildIds.add(upload.guildId);
+      }
+      for (const guildId of guildIds) {
+        markAllUploadsAsSeen(this.persistenceConfig.userId, guildId);
+      }
+    }
+
     this.uploads.clear();
     this.notifyListeners();
   }

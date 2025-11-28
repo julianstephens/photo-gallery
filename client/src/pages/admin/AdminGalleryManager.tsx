@@ -3,7 +3,13 @@ import { GuildSelect } from "@/components/forms";
 import { DetailedGallery, GalleryList, UploadMonitor } from "@/components/gallery";
 import { CreateGalleryModal } from "@/components/modals";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useAuth, useGalleryContext, useListGalleries, useUploadContext } from "@/hooks";
+import {
+  useAuth,
+  useGalleryContext,
+  useListGalleries,
+  useUploadContext,
+  useUploadPersistence,
+} from "@/hooks";
 import { Button, Flex, HStack, Icon, Presence, Spinner, Text, VStack } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
 import { HiOutlineUpload } from "react-icons/hi";
@@ -18,7 +24,8 @@ const AdminGalleryManagerPage = () => {
   const effectiveGuildId = hasGuilds ? guildId || "" : "";
   const { data, error, isLoading } = useListGalleries(effectiveGuildId);
   const [showCreateGalleryModal, setShowCreateGalleryModal] = useState(false);
-  const { uploadMonitorEverShown, hasActiveUploads } = useUploadContext();
+  const { uploadMonitorEverShown, hasActiveUploads, updateUploadMonitorVisibility } =
+    useUploadContext();
   const {
     activeGalleryName,
     isDefaultGuild,
@@ -30,6 +37,17 @@ const AdminGalleryManagerPage = () => {
   const [isUploadMonitorVisible, setIsUploadMonitorVisible] = useState(true);
   const [guild, setGuild] = useState<string>("");
   const [galleryOpened, setGalleryOpened] = useState(false);
+
+  // Initialize upload persistence and check for persisted uploads
+  const hasPersistedUploads = useUploadPersistence();
+
+  // Auto-show monitor if there are persisted uploads on initial load
+  useEffect(() => {
+    if (hasPersistedUploads) {
+      setIsUploadMonitorVisible(true);
+      updateUploadMonitorVisibility(true);
+    }
+  }, [hasPersistedUploads, updateUploadMonitorVisibility]);
 
   const pageTitle = "Admin Gallery Manager";
   const pageSlug = pageTitle.toLowerCase().replace(/\s+/g, "-").toLowerCase();

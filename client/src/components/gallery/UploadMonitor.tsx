@@ -6,13 +6,14 @@ import {
   Button,
   CloseButton,
   HStack,
+  IconButton,
   Progress,
   Spinner,
   Text,
   VStack,
 } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
-import { HiCheck, HiOutlineExclamationCircle } from "react-icons/hi2";
+import { HiCheck, HiOutlineExclamationCircle, HiXMark } from "react-icons/hi2";
 
 export interface UploadMonitorProps {
   onClose?: () => void;
@@ -29,13 +30,12 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
     return unsubscribe;
   }, []);
 
-  const handleClear = () => {
-    const uploads = uploadProgressStore.getUploads();
-    uploads.forEach((upload) => {
-      if (upload.status !== "uploading") {
-        uploadProgressStore.removeUpload(upload.id);
-      }
-    });
+  const handleClearAll = () => {
+    uploadProgressStore.clearCompleted();
+  };
+
+  const handleClearSingle = (uploadId: string) => {
+    uploadProgressStore.removeUpload(uploadId);
   };
 
   // Show the monitor if there are uploads to display AND it's not hidden
@@ -44,6 +44,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
   const activeCount = uploads.filter((u) => u.status === "uploading").length;
   const completedCount = uploads.filter((u) => u.status === "completed").length;
   const failedCount = uploads.filter((u) => u.status === "failed").length;
+  const hasCompletedOrFailed = completedCount > 0 || failedCount > 0;
 
   const formatTime = (ms: number): string => {
     const seconds = Math.floor(ms / 1000);
@@ -87,9 +88,14 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
           Uploads
         </Text>
         <HStack gap={2}>
-          {uploads.length > 0 && (
-            <Button size="xs" variant="ghost" onClick={handleClear} aria-label="Clear uploads">
-              Clear
+          {hasCompletedOrFailed && (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={handleClearAll}
+              aria-label="Clear all completed uploads"
+            >
+              Clear All
             </Button>
           )}
           {onClose && <CloseButton size="sm" onClick={onClose} aria-label="Close upload monitor" />}
@@ -143,24 +149,36 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
                 </Text>
               </VStack>
 
-              {upload.status === "uploading" && (
-                <Badge colorPalette="blue" variant="subtle">
-                  <Spinner size="xs" mr={1} />
-                  Uploading
-                </Badge>
-              )}
-              {upload.status === "completed" && (
-                <Badge colorPalette="green" variant="subtle">
-                  <HiCheck />
-                  Done
-                </Badge>
-              )}
-              {upload.status === "failed" && (
-                <Badge colorPalette="red" variant="subtle">
-                  <HiOutlineExclamationCircle />
-                  Failed
-                </Badge>
-              )}
+              <HStack gap={1}>
+                {upload.status === "uploading" && (
+                  <Badge colorPalette="blue" variant="subtle">
+                    <Spinner size="xs" mr={1} />
+                    Uploading
+                  </Badge>
+                )}
+                {upload.status === "completed" && (
+                  <Badge colorPalette="green" variant="subtle">
+                    <HiCheck />
+                    Done
+                  </Badge>
+                )}
+                {upload.status === "failed" && (
+                  <Badge colorPalette="red" variant="subtle">
+                    <HiOutlineExclamationCircle />
+                    Failed
+                  </Badge>
+                )}
+                {upload.status !== "uploading" && (
+                  <IconButton
+                    aria-label={`Clear ${upload.fileName}`}
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => handleClearSingle(upload.id)}
+                  >
+                    <HiXMark />
+                  </IconButton>
+                )}
+              </HStack>
             </HStack>
 
             {/* Progress bar */}
