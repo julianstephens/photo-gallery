@@ -1,7 +1,7 @@
 import { queryClient } from "@/clients";
 import { ConfirmDeleteModal } from "@/components/modals/ConfirmDelete";
 import { toaster } from "@/components/ui/toaster";
-import { useGalleryContext } from "@/contexts/GalleryContext";
+import { useGalleryContext } from "@/hooks";
 import type { ButtonProps } from "@/lib/types";
 import { removeGallery } from "@/queries";
 import { Button, Icon, IconButton } from "@chakra-ui/react";

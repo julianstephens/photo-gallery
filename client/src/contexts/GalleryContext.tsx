@@ -1,19 +1,6 @@
 import { useDefaultGuild } from "@/hooks";
-import React, { createContext, useCallback, useContext, useState, type ReactNode } from "react";
-
-interface GalleryContextType {
-  activeGuildId: string | null;
-  activeGalleryName: string | null;
-  defaultGuildId: string | null;
-  isDefaultGuild: boolean;
-  setActiveGuild: (guildId: string) => void;
-  setActiveGallery: (galleryName: string) => void;
-  clearActiveGallery: () => void;
-  updateGalleryName: (oldName: string, newName: string) => void;
-  removeGallery: (galleryName: string) => void;
-}
-
-const GalleryContext = createContext<GalleryContextType | undefined>(undefined);
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { GalleryContext, type GalleryContextType } from "./galleryContextStore";
 
 export const GalleryProvider = ({ children }: { children: ReactNode }) => {
   const [activeGuildId, setActiveGuildId] = useState<string | null>(null);
@@ -22,7 +9,7 @@ export const GalleryProvider = ({ children }: { children: ReactNode }) => {
   const [defaultGuildId, setDefaultGuildId] = useState<string | null>(null);
 
   // Update defaultGuildId whenever the default guild changes
-  React.useEffect(() => {
+  useEffect(() => {
     setDefaultGuildId(defaultGuild ?? null);
   }, [defaultGuild]);
 
@@ -62,25 +49,32 @@ export const GalleryProvider = ({ children }: { children: ReactNode }) => {
     [activeGalleryName],
   );
 
-  const value: GalleryContextType = {
-    activeGuildId,
-    activeGalleryName,
-    defaultGuildId,
-    isDefaultGuild,
-    setActiveGuild,
-    setActiveGallery,
-    clearActiveGallery,
-    updateGalleryName,
-    removeGallery,
-  };
+  const value = useMemo<GalleryContextType>(
+    () => ({
+      activeGuildId,
+      activeGalleryName,
+      defaultGuildId,
+      isDefaultGuild,
+      setActiveGuild,
+      setActiveGallery,
+      clearActiveGallery,
+      updateGalleryName,
+      removeGallery,
+    }),
+    [
+      activeGuildId,
+      activeGalleryName,
+      defaultGuildId,
+      isDefaultGuild,
+      setActiveGuild,
+      setActiveGallery,
+      clearActiveGallery,
+      updateGalleryName,
+      removeGallery,
+    ],
+  );
 
   return <GalleryContext.Provider value={value}>{children}</GalleryContext.Provider>;
 };
 
-export const useGalleryContext = () => {
-  const context = useContext(GalleryContext);
-  if (context === undefined) {
-    throw new Error("useGalleryContext must be used within a GalleryProvider");
-  }
-  return context;
-};
+export type { GalleryContextType };

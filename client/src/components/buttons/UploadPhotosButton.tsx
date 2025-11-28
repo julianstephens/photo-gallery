@@ -1,12 +1,14 @@
 import { toaster } from "@/components/ui/toaster";
-import { useUploadContext } from "@/contexts/UploadContext";
+import { useUploadContext } from "@/hooks";
 import { uploadProgressStore } from "@/lib/upload/uploadProgressStore";
 import { uploadFileInChunks } from "@/lib/upload/uploadService";
-import { Button, FileUpload, type FileUploadFileAcceptDetails } from "@chakra-ui/react";
+import { Button, FileUpload, Icon, Menu, type FileUploadFileAcceptDetails } from "@chakra-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { useRef, useState } from "react";
+import { useRef, useState, type InputHTMLAttributes } from "react";
 import { HiOutlineUpload } from "react-icons/hi";
+import { MdOutlineDriveFolderUpload } from "react-icons/md";
+import { RiArrowDropDownLine } from "react-icons/ri";
 
 interface UploadPhotosButtonProps {
   guildId: string;
@@ -14,20 +16,26 @@ interface UploadPhotosButtonProps {
   buttonText?: string;
   buttonVariant: "outline" | "solid" | "ghost" | "plain";
   buttonColorPalette: "gray" | "red" | "blue" | "green" | "yellow" | "purple" | "pink" | "orange";
+  fullWidth?: boolean;
 }
 
 export const UploadPhotosButton = ({
   guildId,
   galleryName,
-  buttonText = "Upload",
   buttonVariant = "outline",
   buttonColorPalette = "gray",
+  fullWidth = false,
 }: UploadPhotosButtonProps) => {
   const queryClient = useQueryClient();
   const { updateUploadMonitorVisibility, setHasActiveUploads } = useUploadContext();
   const [isLoading, setIsLoading] = useState(false);
   const [, setUploadProgress] = useState<number | null>(null);
   const fileUploadRef = useRef<HTMLInputElement>(null);
+  const folderUploadRef = useRef<HTMLInputElement>(null);
+  const folderPickerProps = {
+    webkitdirectory: "",
+    directory: "",
+  } as InputHTMLAttributes<HTMLInputElement>;
 
   const isValidImageFile = (file: File): boolean => {
     // Check if file is an image type
@@ -143,52 +151,129 @@ export const UploadPhotosButton = ({
       if (fileUploadRef.current) {
         fileUploadRef.current.value = "";
       }
+      if (folderUploadRef.current) {
+        folderUploadRef.current.value = "";
+      }
     }
   };
+
   return (
-    <FileUpload.Root
-      w="45%"
-      accept={["image/*"]}
-      maxW="100%"
-      maxFileSize={500 * 1024 * 1024}
-      maxFiles={50}
-      onFileReject={(details) => {
-        if (details.files.some((f) => f.errors.includes("TOO_MANY_FILES"))) {
-          toaster.error({
-            title: "Too Many Files",
-            description: "Maximum 50 files per upload. Please select fewer files.",
-          });
-        } else if (details.files.some((f) => f.errors.includes("TOO_LARGE"))) {
-          toaster.error({
-            title: "File Too Large",
-            description: "Maximum file size is 500MB. Please select smaller files.",
-          });
-        } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
-          toaster.error({
-            title: "Invalid File Type",
-            description: "Please select image files.",
-          });
-        } else {
-          console.error("Rejected files:", details.files);
-        }
-      }}
-      onFileAccept={(details) => {
-        void uploadFiles(details);
-      }}
-    >
-      <FileUpload.HiddenInput ref={fileUploadRef} multiple />
-      <FileUpload.Trigger asChild>
-        <Button
-          variant={buttonVariant}
-          colorPalette={buttonColorPalette}
-          w="full"
-          loading={isLoading}
-          disabled={isLoading}
-        >
-          <HiOutlineUpload />
-          {buttonText}
-        </Button>
-      </FileUpload.Trigger>
-    </FileUpload.Root>
+    <>
+      <FileUpload.Root
+        style={{ display: "none" }}
+        accept={["image/*"]}
+        maxFileSize={500 * 1024 * 1024}
+        maxFiles={50}
+        onFileReject={(details) => {
+          if (details.files.some((f) => f.errors.includes("TOO_MANY_FILES"))) {
+            toaster.error({
+              title: "Too Many Files",
+              description: "Maximum 50 files per upload. Please select fewer files.",
+            });
+          } else if (details.files.some((f) => f.errors.includes("TOO_LARGE"))) {
+            toaster.error({
+              title: "File Too Large",
+              description: "Maximum file size is 500MB. Please select smaller files.",
+            });
+          } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
+            toaster.error({
+              title: "Invalid File Type",
+              description: "Please select image files.",
+            });
+          } else {
+            console.error("Rejected files:", details.files);
+          }
+        }}
+        onFileAccept={(details) => {
+          void uploadFiles(details);
+        }}
+      >
+        <FileUpload.HiddenInput ref={fileUploadRef} multiple />
+      </FileUpload.Root>
+
+      <FileUpload.Root
+        style={{ display: "none" }}
+        accept={["image/*"]}
+        maxFileSize={500 * 1024 * 1024}
+        maxFiles={10}
+        onFileReject={(details) => {
+          if (details.files.some((f) => f.errors.includes("TOO_MANY_FILES"))) {
+            toaster.error({
+              title: "Too Many Files",
+              description: "Maximum 10 folders per upload. Please select fewer folders.",
+            });
+          } else if (details.files.some((f) => f.errors.includes("TOO_LARGE"))) {
+            toaster.error({
+              title: "File Too Large",
+              description: "Maximum file size is 500MB. Please select smaller files.",
+            });
+          } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
+            toaster.error({
+              title: "Invalid File Type",
+              description: "Please select image files.",
+            });
+          } else {
+            console.error("Rejected files:", details.files);
+          }
+        }}
+        onFileAccept={(details) => {
+          void uploadFiles(details);
+        }}
+      >
+        <FileUpload.HiddenInput ref={folderUploadRef} multiple {...folderPickerProps} />
+      </FileUpload.Root>
+
+      <Menu.Root>
+        <Menu.Trigger {...(fullWidth ? { w: "full" } : {})} asChild>
+          <Button
+            minW="190px"
+            variant={buttonVariant}
+            colorPalette={buttonColorPalette}
+            _active={{ outline: "none" }}
+            _focus={{ outline: "none" }}
+          >
+            <Icon>
+              <HiOutlineUpload />
+            </Icon>{" "}
+            Upload <RiArrowDropDownLine />
+          </Button>
+        </Menu.Trigger>
+        <Menu.Positioner style={{ width: "var(--reference-width)" }}>
+          <Menu.Content>
+            <Menu.Item
+              value="Upload Files"
+              onClick={(event) => {
+                event.preventDefault();
+                fileUploadRef.current?.click();
+              }}
+            >
+              <Button
+                variant="plain"
+                w="full"
+                loading={isLoading}
+                disabled={isLoading}
+                _active={{ outline: "none", border: "none" }}
+                _focus={{ outline: "none", border: "none" }}
+              >
+                <HiOutlineUpload />
+                Upload Files
+              </Button>
+            </Menu.Item>
+            <Menu.Item
+              value="Upload Folders"
+              onClick={(event) => {
+                event.preventDefault();
+                folderUploadRef.current?.click();
+              }}
+            >
+              <Button variant="plain" w="full" loading={isLoading} disabled={isLoading}>
+                <MdOutlineDriveFolderUpload />
+                Upload Folders
+              </Button>
+            </Menu.Item>
+          </Menu.Content>
+        </Menu.Positioner>
+      </Menu.Root>
+    </>
   );
 };

@@ -1,12 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
-
-interface UploadContextType {
-  showUploadMonitor: boolean;
-  uploadMonitorEverShown: boolean;
-  setShowUploadMonitor: (show: boolean) => void;
-}
-
-const UploadContext = createContext<UploadContextType | undefined>(undefined);
+import { useMemo, useState, type ReactNode } from "react";
+import { UploadContext, type UploadContextValue } from "./uploadContextStore";
 
 export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const [showUploadMonitor, setShowUploadMonitorState] = useState(false);
@@ -19,23 +12,14 @@ export const UploadProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  return (
-    <UploadContext.Provider
-      value={{
-        showUploadMonitor,
-        uploadMonitorEverShown,
-        setShowUploadMonitor,
-      }}
-    >
-      {children}
-    </UploadContext.Provider>
+  const value = useMemo<UploadContextValue>(
+    () => ({
+      showUploadMonitor,
+      uploadMonitorEverShown,
+      setShowUploadMonitor,
+    }),
+    [showUploadMonitor, uploadMonitorEverShown],
   );
-};
 
-export const useUploadContext = () => {
-  const context = useContext(UploadContext);
-  if (!context) {
-    throw new Error("useUploadContext must be used within an UploadProvider");
-  }
-  return context;
+  return <UploadContext.Provider value={value}>{children}</UploadContext.Provider>;
 };

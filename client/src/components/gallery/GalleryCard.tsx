@@ -1,7 +1,7 @@
 import { DeleteGalleryButton } from "@/components/buttons/DeleteGalleryButton";
 import { RenameGalleryButton } from "@/components/buttons/RenameGalleryButton";
 import { UploadPhotosButton } from "@/components/buttons/UploadPhotosButton";
-import { Button, Card, DataList, HStack, Icon, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Card, DataList, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { HiOutlineEye } from "react-icons/hi2";
 import type { Gallery } from "utils";
 
@@ -51,13 +51,16 @@ export const GalleryCard = ({ info, guildId, openDetailedGalleryView }: GalleryC
               </Icon>
               View Gallery
             </Button>
-            <UploadPhotosButton
-              guildId={guildId}
-              galleryName={info.name}
-              buttonText="Upload"
-              buttonVariant="outline"
-              buttonColorPalette="gray"
-            />
+            <Box w="45%">
+              <UploadPhotosButton
+                guildId={guildId}
+                galleryName={info.name}
+                buttonText="Upload"
+                buttonVariant="outline"
+                buttonColorPalette="gray"
+                fullWidth
+              />
+            </Box>
             <RenameGalleryButton galleryName={info.name} guildId={guildId} type="icon" />
             <DeleteGalleryButton type="icon" guildId={guildId} galleryName={info.name} />
           </HStack>
