@@ -14,11 +14,13 @@ const Dashboard = () => {
   const [gallery, setGallery] = useState<string>("");
   const { currentUser, authReady, logout } = useAuth();
   const goto = useNavigate();
+  const userGuilds = currentUser?.guilds ?? [];
+  const hasGuilds = userGuilds.length > 0;
   const {
     data: galleries,
     isLoading: galleriesLoading,
     error: galleriesError,
-  } = useListGalleries(guild);
+  } = useListGalleries(hasGuilds ? guild : "");
   const { setActiveGuild, setActiveGallery, defaultGuildId, activeGuildId } = useGalleryContext();
 
   const updateGuild = (selectedGuild: string) => {
@@ -34,12 +36,12 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    if (defaultGuildId) {
+    if (defaultGuildId && hasGuilds) {
       setGuild(defaultGuildId);
       // Immediately update context when default guild loads
       setActiveGuild(defaultGuildId);
     }
-  }, [defaultGuildId, setActiveGuild]);
+  }, [defaultGuildId, hasGuilds, setActiveGuild]);
 
   // Update GalleryContext when guild changes (for manual guild selection)
   useEffect(() => {
@@ -84,31 +86,52 @@ const Dashboard = () => {
         </Flex>
       </Flex>
       <Flex id="dashboard-content" direction="column" gap="4" mt="8" h="full" w="full">
-        <Flex gap="4" mb="4">
-          <GuildSelect value={guild} onChange={updateGuild} />
-          <Box w="fit" alignSelf="last baseline" mb="0.5rem">
-            <SetDefaultGuildButton
-              defaultGuild={guild}
-              disabled={defaultGuildId === activeGuildId}
-            />
-          </Box>
-        </Flex>
-        {galleriesLoading ? (
+        {!hasGuilds ? (
           <Flex w="full" h="full" justify="center" align="center">
-            <Loader />
-          </Flex>
-        ) : galleriesError ? (
-          <Flex w="full" h="full" justify="center" align="center">
-            <Text>Error loading galleries.</Text>
-          </Flex>
-        ) : !galleries || galleries.length === 0 ? (
-          <Flex w="full" h="full" justify="center" align="center">
-            <Text>No galleries found for the selected guild.</Text>
+            <Text color="gray.400" textAlign="center">
+              You don&apos;t have access to any guilds yet. Ask a server administrator to add you to
+              a guild.
+            </Text>
           </Flex>
         ) : (
           <>
-            <GallerySelect guild={guild} value={gallery} onChange={updateGallery} />
-            <Gallery guildId={guild} galleryName={gallery} />
+            <Flex gap="4" mb="4">
+              <GuildSelect value={guild} onChange={updateGuild} />
+              <Box w="fit" alignSelf="last baseline" mb="0.5rem">
+                <SetDefaultGuildButton
+                  defaultGuild={guild}
+                  disabled={defaultGuildId === activeGuildId}
+                />
+              </Box>
+            </Flex>
+            {galleriesLoading ? (
+              <Flex w="full" h="full" justify="center" align="center">
+                <Loader />
+              </Flex>
+            ) : galleriesError ? (
+              <Flex w="full" h="full" justify="center" align="center">
+                <Text>Error loading galleries.</Text>
+              </Flex>
+            ) : !guild ? (
+              <Flex w="full" h="full" justify="center" align="center">
+                <Text>Select a guild to view its galleries.</Text>
+              </Flex>
+            ) : !galleries || galleries.length === 0 ? (
+              <Flex w="full" h="full" justify="center" align="center">
+                <Text>No galleries found for the selected guild.</Text>
+              </Flex>
+            ) : (
+              <>
+                <GallerySelect guild={guild} value={gallery} onChange={updateGallery} />
+                {gallery ? (
+                  <Gallery guildId={guild} galleryName={gallery} />
+                ) : (
+                  <Flex w="full" h="full" justify="center" align="center">
+                    <Text>Select a gallery to view its photos.</Text>
+                  </Flex>
+                )}
+              </>
+            )}
           </>
         )}
       </Flex>

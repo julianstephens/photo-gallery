@@ -22,6 +22,11 @@ export const setDefaultGuild = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing guildId in request body" });
   }
 
+  const guildIds = req.session.guildIds;
+  if (!guildIds || !guildIds.includes(guildId)) {
+    return res.status(403).json({ error: "Forbidden: Not a member of the requested guild" });
+  }
+
   try {
     await guildController.setDefaultGuild(guildId, req.session.userId || "");
     res.status(200).json({ message: "Default guild set successfully" });

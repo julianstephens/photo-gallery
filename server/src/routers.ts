@@ -32,8 +32,8 @@ authRouter.get("/auth/me", requiresAuth, handlers.getCurrentUser);
  * GALLERY ROUTES
  **********************/
 const galleryRouter = Router();
-galleryRouter.use(requiresAuth);
-galleryRouter.use(requiresGuildMembership);
+galleryRouter.use("/galleries", requiresAuth);
+galleryRouter.use("/galleries", requiresGuildMembership);
 galleryRouter.get("/galleries", handlers.listGalleries);
 galleryRouter.get("/galleries/single", handlers.getSingleGallery);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
@@ -47,7 +47,6 @@ galleryRouter.delete("/galleries", requiresAdmin, handlers.removeGallery);
  **********************/
 const guildRouter = Router();
 guildRouter.use(requiresAuth);
-guildRouter.use(requiresGuildMembership);
 guildRouter.get("/guilds/default", handlers.getDefaultGuild);
 guildRouter.post("/guilds/default", handlers.setDefaultGuild);
 

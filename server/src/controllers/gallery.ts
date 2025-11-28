@@ -20,17 +20,14 @@ import {
 const EXPIRES_ZSET = "galleries:expiries:v2";
 
 const GalleryNameError = "Gallery name cannot be empty";
-// const ImagePathError = "Image path is required";
 
 export class GalleryController {
   #bucketService: BucketService;
   #gradientMetaService: GradientMetaService;
-  // #uploadService: UploadService;
 
   constructor() {
     this.#bucketService = new BucketService();
     this.#gradientMetaService = new GradientMetaService();
-    // this.#uploadService = new UploadService();
   }
 
   #isAppleDoubleFile = (pathLike: string | undefined | null) => {
@@ -104,7 +101,10 @@ export class GalleryController {
 
     const results = await redis.client.mGet(metaKeys);
     const active: Gallery[] = [];
-    const expiredOrMissing: Array<{ name: string; metaKey: string; }> = [];
+    const expiredOrMissing: Array<{
+      name: string;
+      metaKey: string;
+    }> = [];
 
     for (let i = 0; i < galleries.length; i++) {
       const galleryName = galleries[i];

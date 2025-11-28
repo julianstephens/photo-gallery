@@ -1,4 +1,4 @@
-import { useDefaultGuild } from "@/hooks";
+import { useAuth, useDefaultGuild } from "@/hooks";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { GalleryContext, type GalleryContextType } from "./galleryContextStore";
 
@@ -7,11 +7,17 @@ export const GalleryProvider = ({ children }: { children: ReactNode }) => {
   const [activeGalleryName, setActiveGalleryName] = useState<string | null>(null);
   const defaultGuild = useDefaultGuild();
   const [defaultGuildId, setDefaultGuildId] = useState<string | null>(null);
+  const { currentUser } = useAuth();
+  const userGuilds = useMemo(() => currentUser?.guilds ?? [], [currentUser]);
+  const resolvedDefaultGuildId = useMemo(
+    () => defaultGuild ?? userGuilds[0]?.id ?? null,
+    [defaultGuild, userGuilds],
+  );
 
-  // Update defaultGuildId whenever the default guild changes
+  // Update defaultGuildId whenever the server default changes or fallbacks are needed
   useEffect(() => {
-    setDefaultGuildId(defaultGuild ?? null);
-  }, [defaultGuild]);
+    setDefaultGuildId(resolvedDefaultGuildId ?? null);
+  }, [resolvedDefaultGuildId]);
 
   const isDefaultGuild = activeGuildId === defaultGuildId && activeGuildId !== null;
 
@@ -28,6 +34,29 @@ export const GalleryProvider = ({ children }: { children: ReactNode }) => {
   const clearActiveGallery = useCallback(() => {
     setActiveGalleryName(null);
   }, []);
+
+  // Automatically select a guild when one becomes available
+  useEffect(() => {
+    if (!activeGuildId && resolvedDefaultGuildId) {
+      setActiveGuild(resolvedDefaultGuildId);
+    }
+  }, [activeGuildId, resolvedDefaultGuildId, setActiveGuild]);
+
+  // Ensure active guild remains valid if memberships change
+  useEffect(() => {
+    if (!activeGuildId) {
+      return;
+    }
+    const stillMember = userGuilds.some((guild) => guild.id === activeGuildId);
+    if (!stillMember) {
+      if (resolvedDefaultGuildId) {
+        setActiveGuild(resolvedDefaultGuildId);
+      } else {
+        setActiveGuildId(null);
+        setActiveGalleryName(null);
+      }
+    }
+  }, [activeGuildId, resolvedDefaultGuildId, setActiveGalleryName, setActiveGuild, userGuilds]);
 
   const updateGalleryName = useCallback(
     (oldName: string, newName: string) => {
