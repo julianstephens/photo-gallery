@@ -79,6 +79,30 @@ describe("requiresAdmin", () => {
 });
 
 describe("requiresGuildMembership", () => {
+  it("returns 400 when guildId query parameter is missing", () => {
+    const req = createReq({ userId: "123", guildIds: ["guild-1", "guild-2"] }, { query: {} });
+    const res = createRes();
+    const next = createNext();
+
+    requiresGuildMembership(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when guildId is missing even if guild memberships are also missing", () => {
+    const req = createReq({ userId: "123" }, { query: {} });
+    const res = createRes();
+    const next = createNext();
+
+    requiresGuildMembership(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it("returns 403 when guild memberships are missing from session", () => {
     const req = createReq({ userId: "123" }, { query: { guildId: "guild-1" } });
     const res = createRes();
@@ -100,18 +124,6 @@ describe("requiresGuildMembership", () => {
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ error: "Forbidden: Missing guild membership context" });
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  it("returns 400 when guildId query parameter is missing", () => {
-    const req = createReq({ userId: "123", guildIds: ["guild-1", "guild-2"] }, { query: {} });
-    const res = createRes();
-    const next = createNext();
-
-    requiresGuildMembership(req, res, next);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
     expect(next).not.toHaveBeenCalled();
   });
 

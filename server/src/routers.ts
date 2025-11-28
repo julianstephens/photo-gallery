@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as handlers from "./handlers/index.ts";
 import { streamMedia } from "./handlers/media.ts";
-import { requiresAdmin, requiresAuth } from "./middleware/auth.ts";
+import { requiresAdmin, requiresAuth, requiresGuildMembership } from "./middleware/auth.ts";
 import env from "./schemas/env.ts";
 
 /**********************
@@ -62,7 +62,12 @@ uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUpl
  * MEDIA PROXY ROUTE
  **********************/
 const mediaRouter = Router();
-mediaRouter.get("/:galleryName/:year-:month-:day/*splat", streamMedia);
+mediaRouter.get(
+  "/:galleryName/:year-:month-:day/*splat",
+  requiresAuth,
+  requiresGuildMembership,
+  streamMedia,
+);
 
 export default {
   healthRouter,

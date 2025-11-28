@@ -19,9 +19,21 @@ export const requiresAdmin = (req: Request, res: Response, next: NextFunction) =
  * Middleware to validate guild membership for the given guildId.
  * Checks that the user's session contains guild memberships and that the
  * requested guildId is in their list of authenticated guilds.
+ *
+ * Requires the `requiresAuth` middleware to be applied before this middleware.
+ * Assumes that `req.session.userId` is present and valid.
  */
 export const requiresGuildMembership = (req: Request, res: Response, next: NextFunction) => {
   const guildId = req.query.guildId as string;
+
+  // Validate guildId is present in query first (400 before 403)
+  if (!guildId) {
+    appLogger.warn(
+      { userId: req.session.userId, path: req.path },
+      "[requiresGuildMembership] Missing guildId parameter",
+    );
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
 
   // Check for authenticated guild memberships in session
   const guildIds = req.session.guildIds;
@@ -31,15 +43,6 @@ export const requiresGuildMembership = (req: Request, res: Response, next: NextF
       "[requiresGuildMembership] Missing guild membership context",
     );
     return res.status(403).json({ error: "Forbidden: Missing guild membership context" });
-  }
-
-  // Validate guildId is present in query
-  if (!guildId) {
-    appLogger.warn(
-      { userId: req.session.userId, path: req.path },
-      "[requiresGuildMembership] Missing guildId parameter",
-    );
-    return res.status(400).json({ error: "Missing guildId parameter" });
   }
 
   // Cross-check guildId against verified memberships
