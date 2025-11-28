@@ -36,6 +36,42 @@ export const normalizeGalleryFolderName = (value: string) => {
   return slug || "gallery";
 };
 
+const trimSlashes = (segment: string) => segment.replace(/^\/+|\/+$/g, "");
+
+const sanitizePathSegment = (value: string, label: string) => {
+  const trimmed = validateString(value, `${label} is required`);
+  const cleaned = trimSlashes(trimmed.replace(/[^a-zA-Z0-9-_]+/g, "-"));
+  return cleaned || "default";
+};
+
+export type GalleryStorageRef = {
+  guildId: string;
+  gallerySlug: string;
+};
+
+type GalleryStoragePathInput = GalleryStorageRef & {
+  relativePath?: string;
+};
+
+export const buildGalleryStoragePrefix = ({ guildId, gallerySlug }: GalleryStorageRef) => {
+  const sanitizedGuild = sanitizePathSegment(guildId, "Guild ID");
+  const slug = normalizeGalleryFolderName(gallerySlug);
+  return `guilds/${sanitizedGuild}/galleries/${slug}`;
+};
+
+export const buildGalleryStoragePath = ({
+  guildId,
+  gallerySlug,
+  relativePath,
+}: GalleryStoragePathInput) => {
+  const base = buildGalleryStoragePrefix({ guildId, gallerySlug });
+  if (!relativePath) {
+    return base;
+  }
+  const cleanedRelative = trimSlashes(relativePath);
+  return cleanedRelative.length > 0 ? `${base}/${cleanedRelative}` : base;
+};
+
 /**
  * Escapes HTML entities to prevent XSS attacks.
  * Covers the most common characters that could be used in XSS payloads.

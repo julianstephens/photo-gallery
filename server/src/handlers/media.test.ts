@@ -191,7 +191,9 @@ describe("media handlers", () => {
       // The normalizeGalleryFolderName mock returns lowercase with spaces replaced by dashes
       // So "summer" stays "summer" and "Summer" becomes "summer"
       galleryControllerMock.listGalleries.mockResolvedValue([{ name: "summer", meta: {} }]);
-      galleryControllerMock.getGalleryFolderName.mockResolvedValue("summer");
+      galleryControllerMock.getGalleryFolderName.mockResolvedValue(
+        "guilds/guild-1/galleries/summer",
+      );
 
       const noSuchKeyError = new Error("NoSuchKey");
       noSuchKeyError.name = "NoSuchKey";
@@ -220,7 +222,9 @@ describe("media handlers", () => {
       // The normalizeGalleryFolderName mock returns lowercase with spaces replaced by dashes
       // So "summer" stays "summer" and "Summer" becomes "summer"
       galleryControllerMock.listGalleries.mockResolvedValue([{ name: "summer", meta: {} }]);
-      galleryControllerMock.getGalleryFolderName.mockResolvedValue("summer");
+      galleryControllerMock.getGalleryFolderName.mockResolvedValue(
+        "guilds/guild-1/galleries/summer",
+      );
       bucketServiceMock.getObject.mockResolvedValue({
         data: imageBuffer,
         contentType: "image/jpeg",

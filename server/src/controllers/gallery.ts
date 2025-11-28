@@ -10,7 +10,12 @@ import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 import { BucketService } from "../services/bucket.ts";
 import { GradientMetaService } from "../services/gradientMeta.ts";
-import { InvalidInputError, normalizeGalleryFolderName, validateString } from "../utils.ts";
+import {
+  buildGalleryStoragePrefix,
+  InvalidInputError,
+  normalizeGalleryFolderName,
+  validateString,
+} from "../utils.ts";
 
 const EXPIRES_ZSET = "galleries:expiries:v2";
 
@@ -66,15 +71,18 @@ export class GalleryController {
     try {
       const metadata = JSON.parse(metadataJson);
       const folderName = metadata.folderName;
-      if (folderName && folderName.trim().length > 0) {
-        return folderName;
-      }
+      const slug =
+        typeof folderName === "string" && folderName.trim().length > 0
+          ? folderName
+          : normalizeGalleryFolderName(validGalleryName);
+      return buildGalleryStoragePrefix({ guildId: validGuildId, gallerySlug: slug });
     } catch (e) {
       appLogger.error({ error: e, metaKey, metadataJson }, "Failed to parse gallery metadata");
     }
 
-    // If folderName doesn't exist or parse failed, return the gallery name as default
-    return validGalleryName;
+    // If folderName doesn't exist or parse failed, derive a slug from gallery name
+    const fallbackSlug = normalizeGalleryFolderName(validGalleryName);
+    return buildGalleryStoragePrefix({ guildId: validGuildId, gallerySlug: fallbackSlug });
   };
 
   listGalleries = async (guildId: string) => {
@@ -96,7 +104,7 @@ export class GalleryController {
 
     const results = await redis.client.mGet(metaKeys);
     const active: Gallery[] = [];
-    const expiredOrMissing: Array<{ name: string; metaKey: string }> = [];
+    const expiredOrMissing: Array<{ name: string; metaKey: string; }> = [];
 
     for (let i = 0; i < galleries.length; i++) {
       const galleryName = galleries[i];
@@ -227,7 +235,12 @@ export class GalleryController {
     multi.zAdd(EXPIRES_ZSET, [{ score: expiresAt, value: memberKey }]);
     await multi.exec();
 
-    await this.#bucketService.createBucketFolder(meta.folderName ?? folderName);
+    const storagePrefix = buildGalleryStoragePrefix({
+      guildId: req.guildId,
+      gallerySlug: meta.folderName ?? folderName,
+    });
+
+    await this.#bucketService.createBucketFolder(storagePrefix);
 
     return meta;
   };
@@ -495,6 +508,10 @@ export class GalleryController {
 
     const currentFolderName = await this.getGalleryFolderName(validGuildId, validOldName);
     const newFolderName = normalizeGalleryFolderName(validNewName);
+    const newFolderPath = buildGalleryStoragePrefix({
+      guildId: validGuildId,
+      gallerySlug: newFolderName,
+    });
 
     const {
       listKey,
@@ -760,14 +777,14 @@ export class GalleryController {
 
     // Rename the bucket folder
     appLogger.debug(
-      { currentFolderName, newFolderName },
+      { currentFolderName, newFolderPath },
       "[renameGallery] Starting bucket folder rename",
     );
 
-    await this.#bucketService.renameBucketFolder(currentFolderName, newFolderName);
+    await this.#bucketService.renameBucketFolder(currentFolderName, newFolderPath);
 
     appLogger.debug(
-      { currentFolderName, newFolderName },
+      { currentFolderName, newFolderPath },
       "[renameGallery] Bucket folder renamed successfully",
     );
 
