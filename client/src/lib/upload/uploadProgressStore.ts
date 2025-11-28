@@ -83,9 +83,9 @@ class UploadProgressStore {
 
     for (const [, uploads] of allPersistedUploads) {
       for (const upload of uploads) {
-        // Only restore unseen entries (seen entries are already filtered in loadPersistedUploads)
+        // loadPersistedUploads already filters out seen entries
         if (!this.uploads.has(upload.id)) {
-          this.uploads.set(upload.id, { ...upload, seen: false });
+          this.uploads.set(upload.id, upload);
           hasEntriesToShow = true;
         }
       }
