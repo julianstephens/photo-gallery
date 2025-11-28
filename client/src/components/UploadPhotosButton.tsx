@@ -32,8 +32,7 @@ export const UploadPhotosButton = ({
   const uploadFiles = async (details: FileUploadFileAcceptDetails) => {
     setIsLoading(true);
     setUploadProgress(0);
-    const file = details.files[0];
-    const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const files = details.files;
 
     if (!guildId) {
       toaster.error({
@@ -44,23 +43,53 @@ export const UploadPhotosButton = ({
       return;
     }
 
+    if (files.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setHasActiveUploads(true);
-      // Register upload in progress store
-      uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
+      updateUploadMonitorVisibility(true);
+      const uploadPromises = files.map(async (file) => {
+        const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
 
-      await uploadFileInChunks(file, galleryName, guildId, (progress) => {
-        setUploadProgress(progress);
-        uploadProgressStore.updateProgress(uploadId, progress);
-        updateUploadMonitorVisibility(true);
+        try {
+          await uploadFileInChunks(file, galleryName, guildId, (progress) => {
+            uploadProgressStore.updateProgress(uploadId, progress);
+          });
+          uploadProgressStore.completeUpload(uploadId);
+        } catch (error) {
+          let errMsg = "An error occurred during the upload.";
+          if (error instanceof AxiosError) {
+            errMsg = error.response?.data?.error || errMsg;
+          }
+          uploadProgressStore.failUpload(uploadId, errMsg);
+          throw error;
+        }
       });
 
-      uploadProgressStore.completeUpload(uploadId);
+      const results = await Promise.allSettled(uploadPromises);
+      const failedCount = results.filter((r) => r.status === "rejected").length;
+      const successCount = results.filter((r) => r.status === "fulfilled").length;
 
-      toaster.success({
-        title: "Upload Completed",
-        description: "File uploaded successfully.",
-      });
+      if (failedCount === 0) {
+        toaster.success({
+          title: "Upload Completed",
+          description: `${successCount} file${successCount !== 1 ? "s" : ""} uploaded successfully.`,
+        });
+      } else if (successCount === 0) {
+        toaster.error({
+          title: "Upload Failed",
+          description: `All ${failedCount} file${failedCount !== 1 ? "s" : ""} failed to upload.`,
+        });
+      } else {
+        toaster.warning({
+          title: "Partial Upload",
+          description: `${successCount} file${successCount !== 1 ? "s" : ""} uploaded, ${failedCount} failed.`,
+        });
+      }
 
       // Refetch gallery list to update totalItems count
       if (guildId) {
@@ -74,18 +103,14 @@ export const UploadPhotosButton = ({
           queryKey: ["galleryItems"],
           type: "active",
         });
+        // Refetch the specific gallery to update photo count in DetailedGallery
+        await queryClient.refetchQueries({
+          queryKey: ["gallery", { guildId, galleryName }],
+          type: "active",
+        });
       }
     } catch (error) {
-      let errMsg = "An error occurred during the upload.";
-      if (error instanceof AxiosError) {
-        errMsg = error.response?.data?.error || errMsg;
-      }
-      uploadProgressStore.failUpload(uploadId, errMsg);
-      toaster.error({
-        title: "Upload Failed",
-        description: errMsg,
-      });
-      console.error(error);
+      console.error("Upload error:", error);
     } finally {
       setIsLoading(false);
       setUploadProgress(null);
@@ -98,15 +123,35 @@ export const UploadPhotosButton = ({
   return (
     <FileUpload.Root
       w="45%"
-      accept={["image/*"]}
+      accept={["image/*", ".zip"]}
+      maxW="100%"
+      maxFileSize={500 * 1024 * 1024}
+      maxFiles={50}
       onFileReject={(details) => {
-        console.error("Rejected files:", details.files);
+        if (details.files.some((f) => f.errors.includes("TOO_MANY_FILES"))) {
+          toaster.error({
+            title: "Too Many Files",
+            description: "Maximum 50 files per upload. Please select fewer files.",
+          });
+        } else if (details.files.some((f) => f.errors.includes("TOO_LARGE"))) {
+          toaster.error({
+            title: "File Too Large",
+            description: "Maximum file size is 500MB. Please select smaller files.",
+          });
+        } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
+          toaster.error({
+            title: "Invalid File Type",
+            description: "Please select image files or ZIP archives.",
+          });
+        } else {
+          console.error("Rejected files:", details.files);
+        }
       }}
       onFileAccept={(details) => {
         void uploadFiles(details);
       }}
     >
-      <FileUpload.HiddenInput ref={fileUploadRef} />
+      <FileUpload.HiddenInput ref={fileUploadRef} multiple />
       <FileUpload.Trigger asChild>
         <Button
           variant={buttonVariant}

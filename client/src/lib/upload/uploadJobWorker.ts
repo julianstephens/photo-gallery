@@ -39,7 +39,7 @@ let timeoutId: number | null = null;
 let startTime: number | null = null;
 
 const MAX_DURATION_MS = 10 * 60 * 1000; // 10 minutes
-const BASE_DELAY_MS = 1500; // 1.5 seconds for progress polling
+const BASE_DELAY_MS = 1500; // 1.5 seconds for upload progress polling
 const MAX_DELAY_MS = 30000;
 
 const clearTimer = () => {

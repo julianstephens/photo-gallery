@@ -116,6 +116,12 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     const finalizedPath = result.filePath;
     const uploadDatePrefix = `uploads/${new Date().toISOString().split("T")[0]}`;
 
+    // Get the normalized gallery folder name from metadata
+    const galleryFolderName = await galleryController.getGalleryFolderName(
+      metadata.guildId,
+      metadata.galleryName,
+    );
+
     // If this looks like a zip upload, extract and upload individual files instead of the archive
     const ext = extname(metadata.fileName || "").toLowerCase();
     const looksLikeZipByExt = ext === ".zip";
@@ -130,7 +136,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
         });
 
         const objectName = uploadService.buildObjectName(uploadDatePrefix, metadata.fileName);
-        await bucketService.uploadToBucket(metadata.galleryName, objectName, finalizedPath);
+        await bucketService.uploadToBucket(galleryFolderName, objectName, finalizedPath);
         await rm(finalizedPath, { force: true }).catch(() => {});
 
         // Mark upload as completed
@@ -138,12 +144,16 @@ export const finalizeUpload = async (req: Request, res: Response) => {
           processedFiles: 1,
         });
 
-        // Sync gallery item count after successful upload
-        await galleryController.syncGalleryItemCount(metadata.guildId, metadata.galleryName);
+        // Increment gallery item count by 1 for this single file upload
+        await galleryController.incrementGalleryItemCount(
+          metadata.guildId,
+          metadata.galleryName,
+          1,
+        );
 
         appLogger.debug(
           { uploadId, guildId: metadata.guildId, galleryName: metadata.galleryName },
-          "[finalizeUpload] Gallery item count synced after single file upload",
+          "[finalizeUpload] Gallery item count incremented after single file upload",
         );
 
         return res.status(200).json(result);
@@ -263,7 +273,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
 
           const relPath = fullPath.replace(extractDir + "/", "");
           const objectName = uploadService.buildObjectName(uploadDatePrefix, relPath);
-          await bucketService.uploadToBucket(metadata.galleryName, objectName, fullPath);
+          await bucketService.uploadToBucket(galleryFolderName, objectName, fullPath);
 
           // Update progress after each file upload
           processedCount++;
@@ -278,12 +288,21 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       // Mark upload as completed
       chunkedUploadService.updateProgress(uploadId, "completed", "server-upload");
 
-      // Sync gallery item count after successful ZIP upload
-      await galleryController.syncGalleryItemCount(metadata.guildId, metadata.galleryName);
+      // Increment gallery item count by the number of files extracted and uploaded from zip
+      await galleryController.incrementGalleryItemCount(
+        metadata.guildId,
+        metadata.galleryName,
+        discoveredFiles.length,
+      );
 
       appLogger.debug(
-        { uploadId, guildId: metadata.guildId, galleryName: metadata.galleryName },
-        "[finalizeUpload] Gallery item count synced after ZIP upload",
+        {
+          uploadId,
+          guildId: metadata.guildId,
+          galleryName: metadata.galleryName,
+          filesAdded: discoveredFiles.length,
+        },
+        "[finalizeUpload] Gallery item count incremented after ZIP upload",
       );
     } catch (zipErr) {
       appLogger.error(

@@ -87,6 +87,24 @@ export const Select = ({
 }: SelectProps) => {
   const formattedValue = useMemo(() => (Array.isArray(value) ? value : [value]), [value]);
   const collection = useMemo(() => createListCollection({ items: options }), [options]);
+
+  const Positioner = () => {
+    return (
+      <FieldSelect.Positioner>
+        <FieldSelect.Content>
+          {collection.items.map((item) => (
+            <FieldSelect.Item item={item} key={item.value}>
+              <HStack>
+                {item.icon}
+                {item.label}
+              </HStack>
+              <FieldSelect.ItemIndicator />
+            </FieldSelect.Item>
+          ))}
+        </FieldSelect.Content>
+      </FieldSelect.Positioner>
+    );
+  };
   return (
     <Field.Root maxW={maxW} width={width} invalid={invalid}>
       {useLabel && <Field.Label htmlFor={name}>{label}</Field.Label>}
@@ -118,34 +136,10 @@ export const Select = ({
         </FieldSelect.Control>
         {usePortal ? (
           <Portal>
-            <FieldSelect.Positioner>
-              <FieldSelect.Content>
-                {collection.items.map((item) => (
-                  <FieldSelect.Item item={item} key={item.value}>
-                    <HStack>
-                      {item.icon}
-                      {item.label}
-                    </HStack>
-                    <FieldSelect.ItemIndicator />
-                  </FieldSelect.Item>
-                ))}
-              </FieldSelect.Content>
-            </FieldSelect.Positioner>
+            <Positioner />
           </Portal>
         ) : (
-          <FieldSelect.Positioner>
-            <FieldSelect.Content>
-              {collection.items.map((item) => (
-                <FieldSelect.Item item={item} key={item.value}>
-                  <HStack>
-                    {item.label}
-                    {item.icon}
-                  </HStack>
-                  <FieldSelect.ItemIndicator />
-                </FieldSelect.Item>
-              ))}
-            </FieldSelect.Content>
-          </FieldSelect.Positioner>
+          <Positioner />
         )}
       </FieldSelect.Root>
       <Field.ErrorText>{errors?.[name]?.message}</Field.ErrorText>

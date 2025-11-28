@@ -346,6 +346,56 @@ export class GalleryController {
     await this.#syncGalleryItemCount(guildId, galleryName);
   };
 
+  incrementGalleryItemCount = async (guildId: string, galleryName: string, count: number = 1) => {
+    try {
+      const validGuildId = validateString(guildId, "Guild ID is required");
+      const validGalleryName = validateString(galleryName, GalleryNameError);
+
+      const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+      if (!metaKey) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[incrementGalleryItemCount] Missing meta key, skipping increment",
+        );
+        return;
+      }
+
+      const metadataJson = await redis.client.get(metaKey);
+      if (!metadataJson) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[incrementGalleryItemCount] Gallery metadata not found, skipping increment",
+        );
+        return;
+      }
+
+      const metadata = JSON.parse(metadataJson);
+      const previousCount = metadata.totalItems ?? 0;
+      metadata.totalItems = previousCount + count;
+
+      await redis.client.set(metaKey, JSON.stringify(metadata));
+      appLogger.debug(
+        {
+          guildId: validGuildId,
+          galleryName: validGalleryName,
+          previousCount,
+          increment: count,
+          newTotal: metadata.totalItems,
+        },
+        "[incrementGalleryItemCount] Gallery item count incremented",
+      );
+    } catch (error) {
+      appLogger.error(
+        { error, guildId, galleryName, count },
+        "[incrementGalleryItemCount] Failed to increment gallery item count",
+      );
+    }
+  };
+
+  getGalleryFolderName = async (guildId: string, galleryName: string): Promise<string> => {
+    return await this.#getGalleryFolderName(guildId, galleryName);
+  };
+
   hasGallery = async (guildId: string, galleryName: string) => {
     const validGuildId = validateString(guildId, "Guild ID is required");
     const validGalleryName = validateString(galleryName, GalleryNameError);

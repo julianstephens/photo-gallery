@@ -275,4 +275,40 @@ describe("GalleryAPI Unit Tests", () => {
       expect(redisMocks.multiMock).not.toHaveBeenCalled();
     });
   });
+
+  describe("normalizeGalleryFolderName - test utility", () => {
+    it("converts special characters to hyphens", async () => {
+      const { normalizeGalleryFolderName } = await import("../utils.ts");
+      expect(normalizeGalleryFolderName("My Awesome Gallery")).toBe("my-awesome-gallery");
+    });
+
+    it("handles multiple consecutive special characters", async () => {
+      const { normalizeGalleryFolderName } = await import("../utils.ts");
+      expect(normalizeGalleryFolderName("My!!!Gallery###2025")).toBe("my-gallery-2025");
+    });
+
+    it("removes leading and trailing hyphens", async () => {
+      const { normalizeGalleryFolderName } = await import("../utils.ts");
+      expect(normalizeGalleryFolderName("---MyGallery---")).toBe("mygallery");
+    });
+
+    it("uses default 'gallery' when all characters are stripped", async () => {
+      const { normalizeGalleryFolderName } = await import("../utils.ts");
+      expect(normalizeGalleryFolderName("!!!###$$$")).toBe("gallery");
+    });
+
+    it("converts to lowercase", async () => {
+      const { normalizeGalleryFolderName } = await import("../utils.ts");
+      expect(normalizeGalleryFolderName("MYGallery_2025")).toBe("mygallery-2025");
+    });
+
+    it("handles real-world examples", async () => {
+      const { normalizeGalleryFolderName } = await import("../utils.ts");
+      expect(normalizeGalleryFolderName("Random Pics")).toBe("random-pics");
+      expect(normalizeGalleryFolderName("My 2025 Vacation!")).toBe("my-2025-vacation");
+      expect(normalizeGalleryFolderName("Annual Photo Review (2025)")).toBe(
+        "annual-photo-review-2025",
+      );
+    });
+  });
 });
