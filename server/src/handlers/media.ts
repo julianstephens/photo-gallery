@@ -49,11 +49,6 @@ export const streamMedia = async (req: Request, res: Response) => {
     return res.status(403).json({ error: "Forbidden: Not a member of the requested guild" });
   }
 
-  appLogger.debug(
-    { userId: req.session.userId, guildId },
-    "[streamMedia] Guild membership validated",
-  );
-
   try {
     appLogger.debug({ galleryName, guildId }, "[streamMedia] Resolving gallery folder name");
     // Find the correct gallery by comparing the normalized folder name
