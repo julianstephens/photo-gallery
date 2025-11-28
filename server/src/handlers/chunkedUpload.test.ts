@@ -1,5 +1,21 @@
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockEnv, mockRedisModule } from "../utils/test-mocks.ts";
+
+// Mock environment variables before any imports
+vi.mock("../schemas/env.ts", () => ({
+  default: mockEnv,
+  envSchema: {
+    safeParse: vi.fn().mockReturnValue({
+      success: true,
+      data: mockEnv,
+    }),
+  },
+  parsedCorsOrigins: vi.fn().mockReturnValue([mockEnv.CORS_ORIGINS]),
+}));
+
+// Mock Redis module to prevent actual connection attempts
+vi.mock("../redis.ts", () => mockRedisModule());
 
 const serviceMocks = vi.hoisted(() => ({
   initiateUpload: vi.fn(),
@@ -8,6 +24,11 @@ const serviceMocks = vi.hoisted(() => ({
   cleanupUpload: vi.fn(),
   cleanupExpiredUploads: vi.fn(),
   getMetadata: vi.fn(),
+  getProgress: vi.fn(),
+  updateProgress: vi.fn(),
+  markCompleted: vi.fn(),
+  markFailed: vi.fn(),
+  cleanupProgress: vi.fn(),
 }));
 
 vi.mock("../services/chunkedUpload.ts", () => ({
@@ -42,8 +63,14 @@ vi.mock("../middleware/logger.ts", () => ({
 }));
 
 const handlers = await import("./chunkedUpload.ts");
-const { initiateUpload, uploadChunk, finalizeUpload, cancelUpload, cleanupExpiredUploads } =
-  handlers;
+const {
+  initiateUpload,
+  uploadChunk,
+  finalizeUpload,
+  cancelUpload,
+  cleanupExpiredUploads,
+  getUploadProgress,
+} = handlers;
 
 const createRes = () => {
   const res: Partial<Response> = {};
@@ -80,6 +107,7 @@ describe("chunked upload handlers", () => {
           fileType: "text/plain",
           totalSize: 123,
           galleryName: "test-gallery",
+          guildId: "test-guild-id",
         },
       });
       const res = createRes();
@@ -108,6 +136,7 @@ describe("chunked upload handlers", () => {
           fileType: "text/plain",
           totalSize: 123,
           galleryName: "test-gallery",
+          guildId: "test-guild-id",
         },
       });
       const res = createRes();
@@ -121,33 +150,40 @@ describe("chunked upload handlers", () => {
   });
 
   describe("uploadChunk", () => {
-    const createAsyncIterableReq = (
+    const createDataEventReq = (
       query: Record<string, string>,
       chunks: Buffer[],
       headers: Record<string, string> = {},
     ) => {
       const req = createReq({ query });
       req.headers = { ...req.headers, ...headers };
-      // Create a proper async iterable
-      const iterator = {
-        current: 0,
-        chunks,
-        async next() {
-          if (this.current < this.chunks.length) {
-            return { value: this.chunks[this.current++], done: false };
-          }
-          return { value: undefined, done: true };
-        },
-      };
-      Object.assign(req, {
-        [Symbol.asyncIterator]: () => iterator,
+
+      // Mock EventEmitter behavior for req.on('data'), req.on('end'), req.on('error')
+      const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+      req.on = vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(listener);
+        return req;
       });
+
+      // Simulate emitting data events
+      setImmediate(() => {
+        try {
+          chunks.forEach((chunk) => {
+            listeners["data"]?.forEach((listener) => listener(chunk));
+          });
+          listeners["end"]?.forEach((listener) => listener());
+        } catch (error) {
+          listeners["error"]?.forEach((listener) => listener(error));
+        }
+      });
+
       return req;
     };
 
     it("returns 200 on successful chunk upload", async () => {
       const chunkData = Buffer.from("test data");
-      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, [chunkData]);
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, [chunkData]);
       const res = createRes();
       serviceMocks.saveChunk.mockResolvedValue(undefined);
 
@@ -159,7 +195,7 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 400 for invalid query parameters", async () => {
-      const req = createAsyncIterableReq({}, []);
+      const req = createDataEventReq({}, []);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -168,11 +204,9 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 413 when content-length exceeds limit", async () => {
-      const req = createAsyncIterableReq(
-        { uploadId: "test-id", index: "0" },
-        [Buffer.from("test")],
-        { "content-length": String(15 * 1024 * 1024) },
-      );
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, [Buffer.from("test")], {
+        "content-length": String(15 * 1024 * 1024),
+      });
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -189,7 +223,7 @@ describe("chunked upload handlers", () => {
         Buffer.alloc(chunkSize, "c"),
         Buffer.alloc(chunkSize, "d"), // Total: 12MB > 10MB limit
       ];
-      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, smallChunks);
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, smallChunks);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -198,7 +232,7 @@ describe("chunked upload handlers", () => {
     });
 
     it("returns 400 for empty chunk data", async () => {
-      const req = createAsyncIterableReq({ uploadId: "test-id", index: "0" }, []);
+      const req = createDataEventReq({ uploadId: "test-id", index: "0" }, []);
       const res = createRes();
 
       await uploadChunk(req, res);
@@ -209,7 +243,7 @@ describe("chunked upload handlers", () => {
 
     it("returns 404 for non-existent upload session", async () => {
       const chunkData = Buffer.from("test data");
-      const req = createAsyncIterableReq({ uploadId: "non-existent", index: "0" }, [chunkData]);
+      const req = createDataEventReq({ uploadId: "non-existent", index: "0" }, [chunkData]);
       const res = createRes();
       serviceMocks.saveChunk.mockRejectedValue(new Error("Upload session not found"));
 
@@ -318,6 +352,53 @@ describe("chunked upload handlers", () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: "Failed to cleanup expired uploads" });
+    });
+  });
+
+  describe("getUploadProgress", () => {
+    it("returns 200 with progress data", async () => {
+      const req = createReq({ params: { uploadId: "test-id" } });
+      const res = createRes();
+      const mockProgress = {
+        uploadId: "test-id",
+        status: "uploading",
+        phase: "client-upload",
+        progress: {
+          totalBytes: 1000,
+          uploadedBytes: 500,
+          totalFiles: null,
+          processedFiles: null,
+        },
+        error: null,
+      };
+      serviceMocks.getProgress.mockReturnValue(mockProgress);
+
+      await getUploadProgress(req, res);
+
+      expect(serviceMocks.getProgress).toHaveBeenCalledWith("test-id");
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(mockProgress);
+    });
+
+    it("returns 400 when uploadId is missing", async () => {
+      const req = createReq({ params: {} });
+      const res = createRes();
+
+      await getUploadProgress(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing uploadId parameter" });
+    });
+
+    it("returns 404 when progress not found", async () => {
+      const req = createReq({ params: { uploadId: "non-existent" } });
+      const res = createRes();
+      serviceMocks.getProgress.mockReturnValue(undefined);
+
+      await getUploadProgress(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Upload session not found" });
     });
   });
 });

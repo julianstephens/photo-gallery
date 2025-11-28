@@ -1,0 +1,194 @@
+import { toaster } from "@/components/ui/toaster";
+import { useUploadContext } from "@/contexts/UploadContext";
+import { uploadProgressStore } from "@/lib/upload/uploadProgressStore";
+import { uploadFileInChunks } from "@/lib/upload/uploadService";
+import { Button, FileUpload, type FileUploadFileAcceptDetails } from "@chakra-ui/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import { useRef, useState } from "react";
+import { HiOutlineUpload } from "react-icons/hi";
+
+interface UploadPhotosButtonProps {
+  guildId: string;
+  galleryName: string;
+  buttonText?: string;
+  buttonVariant: "outline" | "solid" | "ghost" | "plain";
+  buttonColorPalette: "gray" | "red" | "blue" | "green" | "yellow" | "purple" | "pink" | "orange";
+}
+
+export const UploadPhotosButton = ({
+  guildId,
+  galleryName,
+  buttonText = "Upload",
+  buttonVariant = "outline",
+  buttonColorPalette = "gray",
+}: UploadPhotosButtonProps) => {
+  const queryClient = useQueryClient();
+  const { updateUploadMonitorVisibility, setHasActiveUploads } = useUploadContext();
+  const [isLoading, setIsLoading] = useState(false);
+  const [, setUploadProgress] = useState<number | null>(null);
+  const fileUploadRef = useRef<HTMLInputElement>(null);
+
+  const isValidImageFile = (file: File): boolean => {
+    // Check if file is an image type
+    return file.type.startsWith("image/");
+  };
+
+  const uploadFiles = async (details: FileUploadFileAcceptDetails) => {
+    setIsLoading(true);
+    setUploadProgress(0);
+    const files = details.files;
+
+    if (!guildId) {
+      toaster.error({
+        title: "Upload Failed",
+        description: "Guild information is missing",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    if (files.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Filter out non-image files
+    const validFiles = files.filter(isValidImageFile);
+    const invalidCount = files.length - validFiles.length;
+
+    if (invalidCount > 0) {
+      toaster.warning({
+        title: "Skipped Non-Image Files",
+        description: `${invalidCount} file${invalidCount !== 1 ? "s were" : " was"} skipped because ${invalidCount !== 1 ? "they are" : "it is"} not an image.`,
+      });
+    }
+
+    if (validFiles.length === 0) {
+      toaster.error({
+        title: "No Image Files",
+        description: "Please select at least one image file to upload.",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setHasActiveUploads(true);
+      updateUploadMonitorVisibility(true);
+      const uploadPromises = validFiles.map(async (file) => {
+        const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
+
+        try {
+          await uploadFileInChunks(file, galleryName, guildId, (progress) => {
+            uploadProgressStore.updateProgress(uploadId, progress);
+          });
+          uploadProgressStore.completeUpload(uploadId);
+        } catch (error) {
+          let errMsg = "An error occurred during the upload.";
+          if (error instanceof AxiosError) {
+            errMsg = error.response?.data?.error || errMsg;
+          }
+          uploadProgressStore.failUpload(uploadId, errMsg);
+          throw error;
+        }
+      });
+
+      const results = await Promise.allSettled(uploadPromises);
+      const failedCount = results.filter((r) => r.status === "rejected").length;
+      const successCount = results.filter((r) => r.status === "fulfilled").length;
+
+      if (failedCount === 0) {
+        toaster.success({
+          title: "Upload Completed",
+          description: `${successCount} file${successCount !== 1 ? "s" : ""} uploaded successfully.`,
+        });
+      } else if (successCount === 0) {
+        toaster.error({
+          title: "Upload Failed",
+          description: `All ${failedCount} file${failedCount !== 1 ? "s" : ""} failed to upload.`,
+        });
+      } else {
+        toaster.warning({
+          title: "Partial Upload",
+          description: `${successCount} file${successCount !== 1 ? "s" : ""} uploaded, ${failedCount} failed.`,
+        });
+      }
+
+      // Refetch gallery list to update totalItems count
+      if (guildId) {
+        // Refetch the galleries list to get updated metadata
+        await queryClient.refetchQueries({
+          queryKey: ["galleries", { guildId }],
+          type: "active",
+        });
+        // Also refetch gallery items
+        await queryClient.refetchQueries({
+          queryKey: ["galleryItems"],
+          type: "active",
+        });
+        // Refetch the specific gallery to update photo count in DetailedGallery
+        await queryClient.refetchQueries({
+          queryKey: ["gallery", { guildId, galleryName }],
+          type: "active",
+        });
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+    } finally {
+      setIsLoading(false);
+      setUploadProgress(null);
+      setHasActiveUploads(false);
+      if (fileUploadRef.current) {
+        fileUploadRef.current.value = "";
+      }
+    }
+  };
+  return (
+    <FileUpload.Root
+      w="45%"
+      accept={["image/*"]}
+      maxW="100%"
+      maxFileSize={500 * 1024 * 1024}
+      maxFiles={50}
+      onFileReject={(details) => {
+        if (details.files.some((f) => f.errors.includes("TOO_MANY_FILES"))) {
+          toaster.error({
+            title: "Too Many Files",
+            description: "Maximum 50 files per upload. Please select fewer files.",
+          });
+        } else if (details.files.some((f) => f.errors.includes("TOO_LARGE"))) {
+          toaster.error({
+            title: "File Too Large",
+            description: "Maximum file size is 500MB. Please select smaller files.",
+          });
+        } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
+          toaster.error({
+            title: "Invalid File Type",
+            description: "Please select image files.",
+          });
+        } else {
+          console.error("Rejected files:", details.files);
+        }
+      }}
+      onFileAccept={(details) => {
+        void uploadFiles(details);
+      }}
+    >
+      <FileUpload.HiddenInput ref={fileUploadRef} multiple />
+      <FileUpload.Trigger asChild>
+        <Button
+          variant={buttonVariant}
+          colorPalette={buttonColorPalette}
+          w="full"
+          loading={isLoading}
+          disabled={isLoading}
+        >
+          <HiOutlineUpload />
+          {buttonText}
+        </Button>
+      </FileUpload.Trigger>
+    </FileUpload.Root>
+  );
+};

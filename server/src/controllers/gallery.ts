@@ -1,47 +1,27 @@
-import { lookup as mimeFromExt } from "mime-types";
-import { extname } from "path";
-import type { Readable } from "stream";
-import unzipper from "unzipper";
 import {
   createGallerySchema,
   galleryMetaSchema,
   type CreateGalleryRequest,
   type Gallery,
   type SetDefaultGalleryRequest,
-  type UploadJobProgress,
 } from "utils";
 import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 import { BucketService } from "../services/bucket.ts";
-import { UploadService } from "../services/upload.ts";
-import { UploadJobService } from "../services/uploadJob.ts";
 import { InvalidInputError, normalizeGalleryFolderName, validateString } from "../utils.ts";
 
-const EXPIRES_ZSET = "galleries:expiries";
-
-class UnsupportedMimeTypeError extends Error {
-  constructor() {
-    super("Unsupported file type. Upload an image/* or a .zip of images.");
-    this.name = "UnsupportedMimeTypeError";
-  }
-}
+const EXPIRES_ZSET = "galleries:expiries:v2";
 
 const GalleryNameError = "Gallery name cannot be empty";
-const ImagePathError = "Image path is required";
-const MAX_ZIP_ENTRIES = 1000;
-const MAX_ZIP_UNCOMPRESSED_BYTES = 500 * 1024 * 1024; // 500 MB guardrail
-const PROGRESS_UPDATE_INTERVAL = 10; // Update progress every N files
-export const ZIP_WATCHDOG_TIMEOUT_MS = 5 * 60 * 1000; // Prevent hung ZIP processing (5 minutes)
+// const ImagePathError = "Image path is required";
 
 export class GalleryController {
   #bucketService: BucketService;
-  #uploadService: UploadService;
-  #uploadJobService: UploadJobService;
+  // #uploadService: UploadService;
 
   constructor() {
     this.#bucketService = new BucketService();
-    this.#uploadService = new UploadService();
-    this.#uploadJobService = new UploadJobService();
+    // this.#uploadService = new UploadService();
   }
 
   #isAppleDoubleFile = (pathLike: string | undefined | null) => {
@@ -55,29 +35,6 @@ export class GalleryController {
     return stripped.startsWith("._");
   };
 
-  #recordToMetadata = (record: Record<string, string> | null) => {
-    if (!record) {
-      throw new Error("Missing gallery metadata");
-    }
-
-    const parsed: Record<string, unknown> = {
-      createdAt: Number(record.createdAt) || NaN,
-      expiresAt: Number(record.expiresAt) || NaN,
-      ttlWeeks: Number(record.ttlWeeks) || NaN,
-      createdBy: record.createdBy || "",
-    };
-    if (record.folderName) {
-      parsed.folderName = record.folderName;
-    }
-
-    const result = galleryMetaSchema.safeParse(parsed);
-    if (!result.success) {
-      throw new Error("Corrupted gallery metadata");
-    }
-
-    return result.data;
-  };
-
   #galleryKeys = (guildId: string, galleryName?: string) => {
     const listKey = `guild:${guildId}:galleries`;
     const memberKey = `guild:${guildId}:gallery:${galleryName}`;
@@ -88,7 +45,7 @@ export class GalleryController {
     return { listKey, memberKey, metaKey };
   };
 
-  #getGalleryFolderName = async (guildId: string, galleryName: string) => {
+  public getGalleryFolderName = async (guildId: string, galleryName: string) => {
     const validGuildId = validateString(guildId, "Guild ID is required");
     const validGalleryName = validateString(galleryName, GalleryNameError);
 
@@ -97,17 +54,22 @@ export class GalleryController {
       throw new Error("Internal error: missing meta key");
     }
 
-    const exists = await redis.client.exists(metaKey);
-    if (!exists) {
+    const metadataJson = await redis.client.get(metaKey);
+    if (!metadataJson) {
       throw new InvalidInputError("Gallery does not exist");
     }
 
-    const folderName = await redis.client.hGet(metaKey, "folderName");
-    if (folderName && folderName.trim().length > 0) {
-      return folderName;
+    try {
+      const metadata = JSON.parse(metadataJson);
+      const folderName = metadata.folderName;
+      if (folderName && folderName.trim().length > 0) {
+        return folderName;
+      }
+    } catch (e) {
+      appLogger.error({ error: e, metaKey, metadataJson }, "Failed to parse gallery metadata");
     }
 
-    await redis.client.hSet(metaKey, { folderName: validGalleryName });
+    // If folderName doesn't exist or parse failed, return the gallery name as default
     return validGalleryName;
   };
 
@@ -119,29 +81,48 @@ export class GalleryController {
     if (!galleries || galleries.length === 0) return [];
 
     const now = Date.now();
-    const multi = redis.client.multi();
     const metaKeys: string[] = [];
 
     for (const galleryName of galleries) {
       const { metaKey } = this.#galleryKeys(validGuildId, galleryName);
       if (metaKey) {
         metaKeys.push(metaKey);
-        multi.hGetAll(metaKey);
       }
     }
 
-    const results = (await multi.exec()) as unknown as Array<Record<string, string> | null>;
+    const results = await redis.client.mGet(metaKeys);
     const active: Gallery[] = [];
     const expiredOrMissing: Array<{ name: string; metaKey: string }> = [];
 
     for (let i = 0; i < galleries.length; i++) {
       const galleryName = galleries[i];
-      const expiresAtStr = results[i]?.expiresAt;
-      const expiresAt = expiresAtStr ? Number(expiresAtStr) : NaN;
+      const metadataJson = results[i];
 
-      if (Number.isFinite(expiresAt) && expiresAt > now) {
-        active.push({ name: galleryName, meta: this.#recordToMetadata(results[i]) });
-      } else {
+      if (!metadataJson) {
+        const { metaKey } = this.#galleryKeys(validGuildId, galleryName);
+        if (metaKey) {
+          expiredOrMissing.push({ name: galleryName, metaKey });
+        }
+        continue;
+      }
+
+      try {
+        const metadata = JSON.parse(metadataJson);
+        const expiresAt = metadata.expiresAt;
+
+        if (Number.isFinite(expiresAt) && expiresAt > now) {
+          active.push({ name: galleryName, meta: metadata });
+        } else {
+          const { metaKey } = this.#galleryKeys(validGuildId, galleryName);
+          if (metaKey) {
+            expiredOrMissing.push({ name: galleryName, metaKey });
+          }
+        }
+      } catch (e) {
+        appLogger.error(
+          { error: e, galleryName, metadataJson },
+          "Failed to parse gallery metadata in listGalleries",
+        );
         const { metaKey } = this.#galleryKeys(validGuildId, galleryName);
         if (metaKey) {
           expiredOrMissing.push({ name: galleryName, metaKey });
@@ -161,6 +142,42 @@ export class GalleryController {
     }
 
     return active;
+  };
+
+  getSingleGallery = async (guildId: string, galleryName: string) => {
+    const validGuildId = validateString(guildId, "Guild ID is required");
+    const validGalleryName = validateString(galleryName, GalleryNameError);
+
+    const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+    if (!metaKey) {
+      throw new Error("Internal error: missing meta key");
+    }
+
+    const metadataJson = await redis.client.get(metaKey);
+    if (!metadataJson) {
+      throw new InvalidInputError("Gallery does not exist");
+    }
+
+    try {
+      const metadata = JSON.parse(metadataJson);
+      const now = Date.now();
+      const expiresAt = metadata.expiresAt;
+
+      if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+        throw new InvalidInputError("Gallery has expired");
+      }
+
+      return { name: validGalleryName, meta: metadata };
+    } catch (e) {
+      if (e instanceof InvalidInputError) {
+        throw e;
+      }
+      appLogger.error(
+        { error: e, galleryName: validGalleryName, metadataJson },
+        "Failed to parse gallery metadata in getSingleGallery",
+      );
+      throw new InvalidInputError("Failed to retrieve gallery");
+    }
   };
 
   createGallery = async (req: CreateGalleryRequest, userId: string) => {
@@ -197,20 +214,12 @@ export class GalleryController {
       ttlWeeks: req.ttlWeeks,
       createdBy: validUserId,
       folderName,
+      totalItems: 0,
     });
 
     const multi = redis.client.multi();
     multi.sAdd(listKey, validatedGalleryName);
-    const metaPayload: Record<string, string> = {
-      createdAt: String(meta.createdAt),
-      expiresAt: String(meta.expiresAt),
-      ttlWeeks: String(meta.ttlWeeks),
-      createdBy: meta.createdBy,
-    };
-    if (meta.folderName) {
-      metaPayload.folderName = meta.folderName;
-    }
-    multi.hSet(metaKey, metaPayload);
+    multi.set(metaKey, JSON.stringify(meta));
     multi.zAdd(EXPIRES_ZSET, [{ score: expiresAt, value: memberKey }]);
     await multi.exec();
 
@@ -219,392 +228,70 @@ export class GalleryController {
     return meta;
   };
 
-  uploadToGallery = async (
-    file: Express.Multer.File,
-    galleryName: string,
-    guildId: string,
-    objectPath: string,
-  ) => {
-    const folderName = await this.#getGalleryFolderName(guildId, galleryName);
-
-    // Single image upload
-    if (
-      this.#uploadService.isImageMime(file.mimetype) ||
-      this.#uploadService.allowedImageExts.has(extname(file.originalname).toLowerCase())
-    ) {
-      if (this.#isAppleDoubleFile(file.originalname)) {
-        throw new InvalidInputError("macOS resource fork files are not supported");
-      }
-      const ext = extname(file.originalname).toLowerCase();
-      const base = file.originalname.replace(ext, "");
-      const objectName = this.#uploadService.buildObjectName(
-        objectPath,
-        `${Date.now()}-${base}${ext}`,
-      );
-      const contentType = file.mimetype || mimeFromExt(ext) || "application/octet-stream";
-
-      await this.#bucketService.uploadBufferToBucket(folderName, objectName, file.buffer, {
-        "Content-Type": String(contentType),
-        Name: base,
-      });
-
-      return {
-        type: "sync" as const,
-        uploaded: [{ key: objectName, contentType }],
-      };
-    }
-
-    // ZIP upload - check if it's a ZIP file
-    const isZipByExt = file.originalname.toLowerCase().endsWith(".zip");
-    const isZipByMagic = this.#uploadService.looksLikeZip(file.buffer);
-    const isZipByMime = this.#uploadService.isZipMime(file.mimetype);
-
-    if (isZipByExt || isZipByMagic || isZipByMime) {
-      appLogger.info(
-        {
-          guildId,
-          galleryName,
-          objectPath,
-          originalName: file.originalname,
-          size: file.size,
-        },
-        "[GalleryController.uploadToGallery] Received ZIP for async processing",
-      );
-
-      // Create an upload job for async processing
-      const jobId = await this.#uploadJobService.createJob(
-        guildId,
-        galleryName,
-        file.originalname,
-        file.size,
-      );
-
-      appLogger.info(
-        { jobId, guildId, galleryName, filename: file.originalname },
-        "[GalleryController.uploadToGallery] Created upload job",
-      );
-
-      // Process ZIP file asynchronously (don't await)
-      Promise.resolve().then(() => {
-        this.#processZipUpload(jobId, file.buffer, galleryName, folderName, objectPath).catch(
-          async (err) => {
-            appLogger.error({ err, jobId }, "[uploadToGallery] Failed to process ZIP for job");
-            // Ensure job is marked as failed if async processing throws
-            try {
-              await this.#uploadJobService.updateJobStatus(jobId, "failed", String(err));
-            } catch (updateErr) {
-              appLogger.error(
-                { updateErr, jobId },
-                "[uploadToGallery] Failed to update job status",
-              );
-            }
-          },
-        );
-      });
-
-      return {
-        type: "async" as const,
-        jobId,
-      };
-    }
-
-    throw new UnsupportedMimeTypeError();
-  };
-
-  #processZipUpload = async (
-    jobId: string,
-    buffer: Buffer,
-    galleryName: string,
-    folderName: string,
-    objectPath: string,
-  ) => {
-    const timeoutError = new Error("ZIP processing timed out.");
-    let watchdogTimer: NodeJS.Timeout | undefined;
-    let watchdogTriggered = false;
-    let activeStream: Readable | null = null;
-
-    const clearWatchdog = () => {
-      if (watchdogTimer) {
-        clearTimeout(watchdogTimer);
-        watchdogTimer = undefined;
-      }
-    };
-
-    const throwIfWatchdogTriggered = () => {
-      if (watchdogTriggered) {
-        throw timeoutError;
-      }
-    };
-
-    const trackStreamForWatchdog = (stream: Readable | null) => {
-      activeStream = stream;
-      if (watchdogTriggered && stream) {
-        stream.destroy(timeoutError);
-      }
-    };
-
-    watchdogTimer = setTimeout(() => {
-      watchdogTriggered = true;
-      appLogger.error(
-        { jobId, galleryName },
-        "[processZipUpload] ZIP watchdog triggered after timeout",
-      );
-      if (activeStream) {
-        activeStream.destroy(timeoutError);
-      }
-    }, ZIP_WATCHDOG_TIMEOUT_MS);
-
-    try {
-      appLogger.info(
-        { jobId, galleryName, objectPath, bufferSize: buffer.length },
-        "[GalleryController.#processZipUpload] Starting ZIP processing",
-      );
-      await this.#uploadJobService.updateJobStatus(jobId, "processing");
-      throwIfWatchdogTriggered();
-
-      const uploaded: Array<{ key: string; contentType: string | false | null }> = [];
-      const failed: Array<{ filename: string; error: string }> = [];
-      let totalBytes = 0;
-      let processedCount = 0; // Files actually processed (uploaded or failed)
-
-      // Generate timestamp once for the entire batch to avoid collisions
-      const timestamp = Date.now();
-
-      const startedAt = Date.now();
-      const MAX_PROCESSING_DURATION_MS = ZIP_WATCHDOG_TIMEOUT_MS;
-
-      const directory = await unzipper.Open.buffer(buffer);
-      throwIfWatchdogTriggered();
-      appLogger.info(
-        { jobId, entryCount: directory.files.length },
-        "[GalleryController.#processZipUpload] Opened ZIP directory",
-      );
-
-      if (!directory.files.length) {
-        appLogger.warn({ jobId }, "[processZipUpload] ZIP archive contained no entries");
-        await this.#uploadJobService.updateJobStatus(
-          jobId,
-          "failed",
-          "ZIP contained no supported image files.",
-        );
-        await this.#uploadJobService.finalizeJob(jobId);
-        return;
-      }
-
-      const imageEntries = directory.files.filter((entry) => {
-        if (entry.type !== "File") return false;
-        const entryPath = entry.path || "";
-        if (this.#isAppleDoubleFile(entryPath)) return false;
-        const ext = extname(entryPath).toLowerCase();
-        return this.#uploadService.allowedImageExts.has(ext);
-      });
-
-      if (imageEntries.length === 0) {
-        appLogger.warn(
-          { jobId },
-          "[processZipUpload] ZIP archive contained no supported image entries",
-        );
-        await this.#uploadJobService.updateJobStatus(
-          jobId,
-          "failed",
-          "ZIP contained no supported image files.",
-        );
-        await this.#uploadJobService.finalizeJob(jobId);
-        return;
-      }
-
-      if (imageEntries.length > MAX_ZIP_ENTRIES) {
-        await this.#uploadJobService.updateJobStatus(
-          jobId,
-          "failed",
-          "ZIP limits exceeded (too many files).",
-        );
-        await this.#uploadJobService.finalizeJob(jobId);
-        return;
-      }
-
-      const totalImageFiles = imageEntries.length;
-
-      let entriesSeen = 0;
-      for (const entry of imageEntries) {
-        throwIfWatchdogTriggered();
-        entriesSeen += 1;
-        if (entriesSeen === 1) {
-          appLogger.info(
-            { jobId, entryPath: entry.path, entryType: entry.type },
-            "[GalleryController.#processZipUpload] First ZIP entry detected",
-          );
-        } else if (entriesSeen % 100 === 0) {
-          appLogger.info(
-            { jobId, entriesSeen },
-            "[GalleryController.#processZipUpload] Processed 100 ZIP entries",
-          );
-        }
-
-        if (Date.now() - startedAt > MAX_PROCESSING_DURATION_MS) {
-          appLogger.error({ jobId, galleryName }, "[processZipUpload] ZIP processing timed out");
-          await this.#uploadJobService.updateJobStatus(
-            jobId,
-            "failed",
-            "ZIP processing timed out.",
-          );
-          await this.#uploadJobService.finalizeJob(jobId);
-          return;
-        }
-
-        const entryPath = entry.path || "";
-        if (this.#isAppleDoubleFile(entryPath)) {
-          appLogger.debug(
-            { jobId, entryPath },
-            "[GalleryController.#processZipUpload] Skipping AppleDouble resource",
-          );
-          continue;
-        }
-        const ext = extname(entryPath).toLowerCase();
-
-        const size = entry.uncompressedSize ?? entry.extra?.uncompressedSize ?? 0;
-        totalBytes += size;
-
-        if (totalBytes > MAX_ZIP_UNCOMPRESSED_BYTES) {
-          await this.#uploadJobService.updateJobStatus(
-            jobId,
-            "failed",
-            "ZIP limits exceeded (too many files or total size too large).",
-          );
-          await this.#uploadJobService.finalizeJob(jobId);
-          return;
-        }
-
-        const filename = entryPath.split("/").pop() || `file${ext}`;
-
-        try {
-          const contentType = mimeFromExt(ext) || "application/octet-stream";
-          const objectName = this.#uploadService.buildObjectName(
-            objectPath,
-            `${timestamp}-${processedCount}-${filename}`,
-          );
-
-          const nodeStream = entry.stream();
-          trackStreamForWatchdog(nodeStream);
-          nodeStream.on("error", (err) => {
-            appLogger.error(
-              { err, jobId, filename },
-              "[GalleryController.#processZipUpload] Entry stream error",
-            );
-          });
-          nodeStream.once("close", () => {
-            if (activeStream === nodeStream) {
-              trackStreamForWatchdog(null);
-            }
-          });
-
-          await this.#bucketService.uploadStreamToBucket(
-            folderName,
-            objectName,
-            nodeStream,
-            size || undefined,
-            {
-              "Content-Type": String(contentType),
-            },
-          );
-          trackStreamForWatchdog(null);
-          throwIfWatchdogTriggered();
-
-          uploaded.push({ key: objectName, contentType });
-          appLogger.info(
-            { jobId, galleryName, objectName, filename, contentType },
-            "[GalleryController.#processZipUpload] Uploaded file",
-          );
-        } catch (err) {
-          appLogger.error({ err, jobId, filename }, "[processZipUpload] Failed to upload file");
-          failed.push({ filename, error: String(err) });
-          throwIfWatchdogTriggered();
-          continue;
-        }
-
-        processedCount += 1;
-
-        if (processedCount % PROGRESS_UPDATE_INTERVAL === 0) {
-          // Send empty arrays for intermediate updates to minimize Redis payload size
-          // Full file lists are only sent in the final progress update
-          const progress: UploadJobProgress = {
-            processedFiles: processedCount,
-            totalFiles: totalImageFiles,
-            uploadedFiles: [],
-            failedFiles: [],
-          };
-          appLogger.info(
-            { jobId, processedFiles: progress.processedFiles, totalFiles: progress.totalFiles },
-            "[GalleryController.#processZipUpload] Updating intermediate progress",
-          );
-          void this.#uploadJobService.updateJobProgress(jobId, progress);
-        }
-      }
-
-      // If no image entries were found at all, fail the job explicitly
-      if (uploaded.length === 0) {
-        appLogger.warn(
-          { jobId, totalImageFiles, uploadedCount: uploaded.length },
-          "[processZipUpload] ZIP contained no supported image files",
-        );
-        await this.#uploadJobService.updateJobStatus(
-          jobId,
-          "failed",
-          "ZIP contained no supported image files.",
-        );
-        await this.#uploadJobService.finalizeJob(jobId);
-        return;
-      }
-
-      // Final progress update with full details
-      const finalProgress: UploadJobProgress = {
-        processedFiles: processedCount,
-        totalFiles: totalImageFiles,
-        uploadedFiles: uploaded,
-        failedFiles: failed,
-      };
-      await this.#uploadJobService.updateJobProgress(jobId, finalProgress);
-      await this.#uploadJobService.updateJobStatus(jobId, "completed");
-      appLogger.info(
-        {
-          jobId,
-          galleryName,
-          totalFiles: totalImageFiles,
-          uploadedCount: uploaded.length,
-          failedCount: failed.length,
-        },
-        "[GalleryController.#processZipUpload] Completed ZIP processing",
-      );
-
-      // Clean up job from list after completion
-      await this.#uploadJobService.finalizeJob(jobId);
-    } catch (err) {
-      const isWatchdogTimeout = err instanceof Error && err.message === timeoutError.message;
-      appLogger.error({ err, jobId }, "[processZipUpload] Error processing ZIP for job");
-      const failureMessage = isWatchdogTimeout ? timeoutError.message : String(err);
-      await this.#uploadJobService.updateJobStatus(jobId, "failed", failureMessage);
-
-      // Clean up job from list after failure
-      try {
-        await this.#uploadJobService.finalizeJob(jobId);
-      } catch (cleanupErr) {
-        appLogger.error({ cleanupErr, jobId }, "[processZipUpload] Failed to cleanup job");
-      }
-    } finally {
-      clearWatchdog();
-    }
-  };
-
   getGalleryContents = async (guildId: string, name: string) => {
     const validatedName = validateString(name, GalleryNameError);
-    const folderName = await this.#getGalleryFolderName(guildId, validatedName);
-    const contents = await this.#bucketService.getBucketFolderContents(
-      `${folderName}/uploads`,
-      true,
+    const folderName = await this.getGalleryFolderName(guildId, validatedName);
+
+    appLogger.debug(
+      { guildId, galleryName: name, folderName },
+      "[getGalleryContents] Starting to fetch gallery contents",
     );
+
+    // Try to get contents from the uploads subdirectory first
+    let contents = await this.#bucketService.getBucketFolderContents(`${folderName}/uploads`, true);
+
+    appLogger.debug(
+      {
+        guildId,
+        galleryName: name,
+        uploadsPath: `${folderName}/uploads`,
+        fileCount: contents.length,
+      },
+      "[getGalleryContents] Files found in uploads subdirectory",
+    );
+
+    // If no files found in uploads subdirectory, try root gallery folder
+    if (contents.length === 0) {
+      contents = await this.#bucketService.getBucketFolderContents(folderName, true);
+      appLogger.debug(
+        { guildId, galleryName: name, rootPath: folderName, fileCount: contents.length },
+        "[getGalleryContents] Files found in root gallery folder (fallback)",
+      );
+    }
+
     const filteredContents = contents.filter((item) => {
-      return item.size && item.size > 0 && !this.#isAppleDoubleFile(item.name);
+      // Only count files, not folders, and exclude metadata/system files
+      const isValid =
+        item.size &&
+        item.size > 0 &&
+        !this.#isAppleDoubleFile(item.name) &&
+        !item.name?.endsWith("/");
+      if (!isValid) {
+        appLogger.debug(
+          {
+            guildId,
+            galleryName: name,
+            itemName: item.name,
+            itemSize: item.size,
+            isAppleDouble: this.#isAppleDoubleFile(item.name),
+            endsWithSlash: item.name?.endsWith("/"),
+          },
+          "[getGalleryContents] Filtering out invalid item",
+        );
+      }
+      return isValid;
     });
+
+    appLogger.debug(
+      {
+        guildId,
+        galleryName: name,
+        totalFiles: contents.length,
+        filteredCount: filteredContents.length,
+      },
+      "[getGalleryContents] Final filtered count",
+    );
+
     return {
       gallery: name,
       count: filteredContents.length,
@@ -612,26 +299,167 @@ export class GalleryController {
     };
   };
 
+  #syncGalleryItemCount = async (guildId: string, galleryName: string) => {
+    try {
+      const { metaKey } = this.#galleryKeys(guildId, galleryName);
+      if (!metaKey) {
+        appLogger.warn(
+          { guildId, galleryName },
+          "[syncGalleryItemCount] Missing meta key, skipping sync",
+        );
+        return;
+      }
+
+      const metadataJson = await redis.client.get(metaKey);
+      if (!metadataJson) {
+        appLogger.warn(
+          { guildId, galleryName },
+          "[syncGalleryItemCount] Gallery metadata not found, skipping sync",
+        );
+        return;
+      }
+
+      const metadata = JSON.parse(metadataJson);
+      appLogger.debug(
+        { guildId, galleryName, currentTotalItems: metadata.totalItems },
+        "[syncGalleryItemCount] Current metadata totalItems before sync",
+      );
+
+      const { count } = await this.getGalleryContents(guildId, galleryName);
+      metadata.totalItems = count;
+
+      await redis.client.set(metaKey, JSON.stringify(metadata));
+      appLogger.debug(
+        { guildId, galleryName, totalItems: count },
+        "[syncGalleryItemCount] Gallery item count synced",
+      );
+    } catch (error) {
+      appLogger.error(
+        { error, guildId, galleryName },
+        "[syncGalleryItemCount] Failed to sync gallery item count",
+      );
+    }
+  };
+
+  syncGalleryItemCount = async (guildId: string, galleryName: string) => {
+    await this.#syncGalleryItemCount(guildId, galleryName);
+  };
+
+  incrementGalleryItemCount = async (guildId: string, galleryName: string, count: number = 1) => {
+    try {
+      const validGuildId = validateString(guildId, "Guild ID is required");
+      const validGalleryName = validateString(galleryName, GalleryNameError);
+
+      const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+      if (!metaKey) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[incrementGalleryItemCount] Missing meta key, skipping increment",
+        );
+        return;
+      }
+
+      const metadataJson = await redis.client.get(metaKey);
+      if (!metadataJson) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[incrementGalleryItemCount] Gallery metadata not found, skipping increment",
+        );
+        return;
+      }
+
+      const metadata = JSON.parse(metadataJson);
+      const previousCount = metadata.totalItems ?? 0;
+      metadata.totalItems = previousCount + count;
+
+      await redis.client.set(metaKey, JSON.stringify(metadata));
+      appLogger.debug(
+        {
+          guildId: validGuildId,
+          galleryName: validGalleryName,
+          previousCount,
+          increment: count,
+          newTotal: metadata.totalItems,
+        },
+        "[incrementGalleryItemCount] Gallery item count incremented",
+      );
+    } catch (error) {
+      appLogger.error(
+        { error, guildId, galleryName, count },
+        "[incrementGalleryItemCount] Failed to increment gallery item count",
+      );
+    }
+  };
+
+  decrementGalleryItemCount = async (guildId: string, galleryName: string, count: number = 1) => {
+    try {
+      const validGuildId = validateString(guildId, "Guild ID is required");
+      const validGalleryName = validateString(galleryName, GalleryNameError);
+
+      const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+      if (!metaKey) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[decrementGalleryItemCount] Missing meta key, skipping decrement",
+        );
+        return;
+      }
+
+      const metadataJson = await redis.client.get(metaKey);
+      if (!metadataJson) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[decrementGalleryItemCount] Gallery metadata not found, skipping decrement",
+        );
+        return;
+      }
+
+      const metadata = JSON.parse(metadataJson);
+      const previousCount = metadata.totalItems ?? 0;
+      metadata.totalItems = Math.max(0, previousCount - count);
+
+      await redis.client.set(metaKey, JSON.stringify(metadata));
+      appLogger.debug(
+        {
+          guildId: validGuildId,
+          galleryName: validGalleryName,
+          previousCount,
+          decrement: count,
+          newTotal: metadata.totalItems,
+        },
+        "[decrementGalleryItemCount] Gallery item count decremented",
+      );
+    } catch (error) {
+      appLogger.error(
+        { error, guildId, galleryName, count },
+        "[decrementGalleryItemCount] Failed to decrement gallery item count",
+      );
+    }
+  };
+
   hasGallery = async (guildId: string, galleryName: string) => {
     const validGuildId = validateString(guildId, "Guild ID is required");
     const validGalleryName = validateString(galleryName, GalleryNameError);
 
-    const { listKey, metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+    const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
     if (!metaKey) {
       throw new Error("Internal error: missing meta key");
     }
 
-    const multi = redis.client.multi();
-    multi.sIsMember(listKey, validGalleryName);
-    multi.hGet(metaKey, "expiresAt");
+    // Simply check if the metadata key exists and is valid
+    try {
+      const meta = await redis.client.get(metaKey);
+      if (!meta) return false;
 
-    const [exists, expiresAt] = await multi.exec();
-
-    if (!exists) return false;
-
-    const expiresAtNum = expiresAt ? Number(expiresAt) : NaN;
-    if (Number.isFinite(expiresAtNum) && expiresAtNum > Date.now()) {
-      return true;
+      const parsedMeta = JSON.parse(meta);
+      const expiresAtNum = parsedMeta.expiresAt ? Number(parsedMeta.expiresAt) : NaN;
+      if (Number.isFinite(expiresAtNum) && expiresAtNum > Date.now()) {
+        return true;
+      }
+    } catch (error) {
+      // If there's any error reading/parsing metadata, consider it doesn't exist
+      appLogger.warn({ error, metaKey }, "[hasGallery] Error checking gallery");
+      return false;
     }
 
     return false;
@@ -641,10 +469,15 @@ export class GalleryController {
     const validGuildId = validateString(guildId, "Guild ID is required");
     const validOldName = validateString(oldName, "Old gallery name is required");
     const validNewName = validateString(newName, "New gallery name is required");
-    const currentFolderName = await this.#getGalleryFolderName(validGuildId, validOldName);
+
+    appLogger.debug(
+      { guildId: validGuildId, oldName: validOldName, newName: validNewName },
+      "[renameGallery] Starting gallery rename operation",
+    );
+
+    const currentFolderName = await this.getGalleryFolderName(validGuildId, validOldName);
     const newFolderName = normalizeGalleryFolderName(validNewName);
 
-    const multi = redis.client.multi();
     const {
       listKey,
       metaKey: oldMetaKey,
@@ -659,8 +492,18 @@ export class GalleryController {
       throw new Error("Internal error: missing meta key");
     }
 
+    appLogger.debug(
+      { guildId: validGuildId, oldMetaKey, newMetaKey, oldMemberKey, newMemberKey },
+      "[renameGallery] Computed Redis keys",
+    );
+
+    // Validate gallery exists and new name is available
     const guildSet = await redis.client.sMembers(listKey);
     if (!guildSet.includes(validOldName)) {
+      appLogger.warn(
+        { guildId: validGuildId, oldName: validOldName, galleryNames: guildSet },
+        "[renameGallery] Old gallery not found in set",
+      );
       throw new InvalidInputError("Old gallery does not exist");
     }
     if (guildSet.includes(validNewName)) {
@@ -673,22 +516,253 @@ export class GalleryController {
       throw new InvalidInputError("A gallery with this folder already exists");
     }
 
-    multi.sRem(listKey, validOldName);
-    multi.sAdd(listKey, validNewName);
-    multi.rename(oldMetaKey, newMetaKey);
-    multi.zRem(EXPIRES_ZSET, oldMemberKey);
-    multi.zAdd(EXPIRES_ZSET, [{ score: 0, value: newMemberKey }]);
-    await multi.exec();
+    appLogger.debug(
+      { guildId: validGuildId, oldName: validOldName, newName: validNewName },
+      "[renameGallery] Validation passed, proceeding with rename",
+    );
 
-    await redis.client.hSet(newMetaKey, { folderName: newFolderName });
+    // Fetch the old metadata before renaming
+    const oldMetadataJson = await redis.client.get(oldMetaKey);
+    if (!oldMetadataJson) {
+      appLogger.error(
+        { guildId: validGuildId, oldName: validOldName, oldMetaKey },
+        "[renameGallery] Gallery metadata not found in Redis",
+      );
+      throw new InvalidInputError("Gallery metadata not found");
+    }
+
+    let metadata;
+    try {
+      metadata = JSON.parse(oldMetadataJson);
+      appLogger.debug(
+        { guildId: validGuildId, oldName: validOldName, metadataKeys: Object.keys(metadata) },
+        "[renameGallery] Successfully parsed old metadata",
+      );
+    } catch (e) {
+      appLogger.error(
+        { error: e, oldMetaKey, oldMetadataJson },
+        "[renameGallery] Failed to parse gallery metadata",
+      );
+      throw new Error("Failed to parse gallery metadata");
+    }
+
+    // Update the folder name in metadata
+    metadata.folderName = newFolderName;
+
+    const expiryScore = metadata.expiresAt;
+    appLogger.debug(
+      {
+        guildId: validGuildId,
+        oldName: validOldName,
+        newName: validNewName,
+        expiryScore,
+        expiryDate: new Date(expiryScore),
+      },
+      "[renameGallery] Extracted expiry score from metadata",
+    );
+
+    if (!Number.isFinite(expiryScore)) {
+      appLogger.error(
+        { guildId: validGuildId, oldName: validOldName, expiryScore },
+        "[renameGallery] Invalid expiry score in metadata",
+      );
+      throw new Error("Invalid expiry score in gallery metadata");
+    }
+
+    // Execute all Redis operations in a single atomic transaction
+    appLogger.debug(
+      { guildId: validGuildId, oldName: validOldName, newName: validNewName },
+      "[renameGallery] Starting Redis transaction",
+    );
+
+    const multi = redis.client.multi();
+
+    // Remove old gallery name from the set
+    multi.sRem(listKey, validOldName);
+    appLogger.debug({}, "[renameGallery] Queued: sRem old name from set");
+
+    // Add new gallery name to the set
+    multi.sAdd(listKey, validNewName);
+    appLogger.debug({}, "[renameGallery] Queued: sAdd new name to set");
+
+    // Delete old metadata key
+    multi.del(oldMetaKey);
+    appLogger.debug({}, "[renameGallery] Queued: del old metadata key");
+
+    // Set new metadata key with updated data
+    multi.set(newMetaKey, JSON.stringify(metadata));
+    appLogger.debug({}, "[renameGallery] Queued: set new metadata key");
+
+    // Remove old expiry entry from sorted set
+    multi.zRem(EXPIRES_ZSET, oldMemberKey);
+    appLogger.debug({}, "[renameGallery] Queued: zRem old member from EXPIRES_ZSET");
+
+    // Add new expiry entry to sorted set with same score
+    multi.zAdd(EXPIRES_ZSET, [{ score: expiryScore, value: newMemberKey }]);
+    appLogger.debug({}, "[renameGallery] Queued: zAdd new member to EXPIRES_ZSET");
+
+    const results = await multi.exec();
+
+    appLogger.debug(
+      {
+        guildId: validGuildId,
+        oldName: validOldName,
+        newName: validNewName,
+        resultCount: results?.length,
+        results,
+      },
+      "[renameGallery] Redis transaction executed",
+    );
+
+    if (!results || results.length !== 6) {
+      appLogger.error(
+        {
+          guildId: validGuildId,
+          oldName: validOldName,
+          newName: validNewName,
+          resultCount: results?.length,
+        },
+        "[renameGallery] Redis transaction failed - unexpected number of results",
+      );
+      throw new Error("Failed to execute rename transaction");
+    }
+
+    // Verify all operations succeeded
+    const [sRemResult, sAddResult, delResult, setResult, zRemResult, zAddResult] = results;
+    appLogger.debug(
+      { sRemResult, sAddResult, delResult, setResult, zRemResult, zAddResult },
+      "[renameGallery] Individual operation results from transaction",
+    );
+
+    // Post-transaction verification
+    appLogger.debug(
+      { guildId: validGuildId, oldName: validOldName, newName: validNewName },
+      "[renameGallery] Starting post-transaction verification",
+    );
+
+    // Verify new metadata exists
+    const newMetadataJson = await redis.client.get(newMetaKey);
+    if (!newMetadataJson) {
+      appLogger.error(
+        { guildId: validGuildId, oldName: validOldName, newName: validNewName, newMetaKey },
+        "[renameGallery] CRITICAL: New metadata key not found after transaction",
+      );
+      throw new Error("Failed to rename gallery - metadata verification failed");
+    }
+
+    appLogger.debug(
+      { guildId: validGuildId, newName: validNewName, newMetaKey },
+      "[renameGallery] Verified: New metadata key exists",
+    );
+
+    // Verify old metadata is deleted
+    const oldMetadataCheck = await redis.client.get(oldMetaKey);
+    if (oldMetadataCheck) {
+      appLogger.warn(
+        { guildId: validGuildId, oldName: validOldName, oldMetaKey },
+        "[renameGallery] WARNING: Old metadata key still exists",
+      );
+    } else {
+      appLogger.debug(
+        { guildId: validGuildId, oldName: validOldName, oldMetaKey },
+        "[renameGallery] Verified: Old metadata key deleted",
+      );
+    }
+
+    // Verify new gallery name is in the set
+    const newGalleryInSet = await redis.client.sIsMember(listKey, validNewName);
+    appLogger.debug(
+      { guildId: validGuildId, newName: validNewName, inSet: newGalleryInSet },
+      "[renameGallery] Verified new gallery name in set",
+    );
+
+    // Verify old gallery name is removed from set
+    const oldGalleryInSet = await redis.client.sIsMember(listKey, validOldName);
+    if (oldGalleryInSet) {
+      appLogger.warn(
+        { guildId: validGuildId, oldName: validOldName },
+        "[renameGallery] WARNING: Old gallery name still in set",
+      );
+    } else {
+      appLogger.debug(
+        { guildId: validGuildId, oldName: validOldName },
+        "[renameGallery] Verified old gallery name removed from set",
+      );
+    }
+
+    // Verify ZSET entries
+    const newZSetScore = await redis.client.zScore(EXPIRES_ZSET, newMemberKey);
+    const oldZSetScore = await redis.client.zScore(EXPIRES_ZSET, oldMemberKey);
+
+    appLogger.debug(
+      {
+        guildId: validGuildId,
+        oldName: validOldName,
+        newName: validNewName,
+        newMemberKey,
+        oldMemberKey,
+        newZSetScore,
+        oldZSetScore,
+        expectedScore: expiryScore,
+      },
+      "[renameGallery] ZSET verification after transaction",
+    );
+
+    if (!Number.isFinite(newZSetScore)) {
+      appLogger.error(
+        { guildId: validGuildId, newName: validNewName, newMemberKey, newZSetScore },
+        "[renameGallery] CRITICAL: New member not in EXPIRES_ZSET or has invalid score",
+      );
+      throw new Error("Failed to rename gallery - ZSET verification failed");
+    }
+
+    if (newZSetScore !== expiryScore) {
+      appLogger.warn(
+        { guildId: validGuildId, newZSetScore, expectedScore: expiryScore },
+        "[renameGallery] WARNING: ZSET score mismatch",
+      );
+    }
+
+    if (oldZSetScore !== null && oldZSetScore !== undefined) {
+      appLogger.warn(
+        { guildId: validGuildId, oldName: validOldName, oldMemberKey, oldZSetScore },
+        "[renameGallery] WARNING: Old member still in EXPIRES_ZSET",
+      );
+    } else {
+      appLogger.debug(
+        { guildId: validGuildId, oldName: validOldName, oldMemberKey },
+        "[renameGallery] Verified old member removed from EXPIRES_ZSET",
+      );
+    }
+
+    appLogger.debug(
+      { guildId: validGuildId, oldName: validOldName, newName: validNewName },
+      "[renameGallery] Post-transaction verification completed successfully",
+    );
+
+    // Rename the bucket folder
+    appLogger.debug(
+      { currentFolderName, newFolderName },
+      "[renameGallery] Starting bucket folder rename",
+    );
 
     await this.#bucketService.renameBucketFolder(currentFolderName, newFolderName);
+
+    appLogger.debug(
+      { currentFolderName, newFolderName },
+      "[renameGallery] Bucket folder renamed successfully",
+    );
+
+    appLogger.info(
+      { guildId: validGuildId, oldName: validOldName, newName: validNewName },
+      "[renameGallery] Gallery rename operation completed successfully",
+    );
   };
 
   removeGallery = async (guildId: string, galleryName: string) => {
     const validatedGuildId = validateString(guildId, "Guild ID is required");
     const validatedName = validateString(galleryName, GalleryNameError);
-    const folderName = await this.#getGalleryFolderName(validatedGuildId, validatedName);
+    const folderName = await this.getGalleryFolderName(validatedGuildId, validatedName);
 
     const { listKey, memberKey, metaKey } = this.#galleryKeys(validatedGuildId, validatedName);
     if (!metaKey) {
@@ -715,28 +789,5 @@ export class GalleryController {
     await redis.client.set(key, validatedGalleryName);
 
     return { defaultGallery: validatedGalleryName };
-  };
-
-  getUploadJob = async (jobId: string) => {
-    const job = await this.#uploadJobService.getJob(jobId);
-    if (!job) {
-      throw new InvalidInputError("Upload job not found");
-    }
-    return job;
-  };
-
-  getImage = async (guildId: string, galleryName: string, imagePath: string) => {
-    const validatedGalleryName = validateString(galleryName, GalleryNameError);
-    const folderName = await this.#getGalleryFolderName(guildId, validatedGalleryName);
-    const validatedImagePath = validateString(imagePath, ImagePathError);
-
-    // Sanitize path to prevent traversal attacks
-    const sanitizedImagePath = this.#uploadService.sanitizeKeySegment(validatedImagePath);
-
-    // Build the full S3 key
-    const key = `${folderName}/uploads/${sanitizedImagePath}`;
-
-    // Get the object from S3
-    return await this.#bucketService.getObject(key);
   };
 }

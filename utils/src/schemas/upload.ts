@@ -5,6 +5,7 @@ export const initiateUploadRequestSchema = z.object({
   fileName: z.string().min(1).max(255),
   fileType: z.string().regex(/^[a-z]+\/[a-z0-9\-+.]+$/i, { message: "Invalid MIME type format" }),
   galleryName: z.string().min(1),
+  guildId: z.string().min(1),
   totalSize: z.number().int().min(0),
 });
 
@@ -58,4 +59,33 @@ export const uploadJobSchema = z.object({
     })
     .optional(),
   error: z.string().optional(),
+});
+
+// Upload progress tracking schemas
+export const uploadProgressStatusSchema = z.enum([
+  "pending",
+  "uploading",
+  "processing",
+  "completed",
+  "failed",
+]);
+
+export const uploadProgressPhaseSchema = z.enum([
+  "client-upload",
+  "server-assemble",
+  "server-zip-extract",
+  "server-upload",
+]);
+
+export const uploadProgressSchema = z.object({
+  uploadId: z.string(),
+  status: uploadProgressStatusSchema,
+  phase: uploadProgressPhaseSchema,
+  progress: z.object({
+    totalBytes: z.number().nullable(),
+    uploadedBytes: z.number().nullable(),
+    totalFiles: z.number().nullable(),
+    processedFiles: z.number().nullable(),
+  }),
+  error: z.string().nullable(),
 });

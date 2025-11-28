@@ -12,6 +12,20 @@ export const galleryMetaSchema = z.object({
   ttlWeeks: z.number().min(1).max(6),
   createdBy: z.string().min(1).max(100),
   folderName: z.string().min(1).max(150).optional(),
+  totalItems: z.number().min(0).default(0),
+});
+
+/**
+ * Per-image metadata schema to store palette / gradient and placeholder.
+ */
+export const imageGradientSchema = z.object({
+  palette: z.array(z.string()).optional(), // array of hex strings
+  primary: z.string().optional(), // hex
+  secondary: z.string().optional(), // hex
+  foreground: z.string().optional(), // black/white hex
+  css: z.string().optional(),
+  // small blurred placeholder data URL to use as low-quality image placeholder
+  blurDataUrl: z.string().optional(),
 });
 
 export const setDefaultGallerySchema = z.object({
@@ -28,4 +42,10 @@ export const uploadToGallerySchema = z.object({
 export const removeGallerySchema = z.object({
   guildId: z.string().min(1).max(100),
   galleryName: z.string().min(1).max(100),
+});
+
+export const updateGalleryNameSchema = z.object({
+  guildId: z.string().min(1).max(100),
+  galleryName: z.string().min(1).max(100),
+  newGalleryName: z.string().min(1).max(100),
 });

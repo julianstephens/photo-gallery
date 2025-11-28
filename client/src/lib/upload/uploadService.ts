@@ -1,4 +1,5 @@
 import { httpClient } from "@/clients.ts";
+import type { UploadProgress } from "utils";
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -7,12 +8,14 @@ export const initiateUpload = async (
   fileType: string,
   galleryName: string,
   totalSize: number,
+  guildId: string,
 ) => {
   const { data } = await httpClient.post("/uploads/initiate", {
     fileName,
     fileType,
     galleryName,
     totalSize,
+    guildId,
   });
   return data;
 };
@@ -35,12 +38,18 @@ export const cancelUpload = async (uploadId: string) => {
   await httpClient.delete(`/uploads/${uploadId}`);
 };
 
+export const getUploadProgress = async (uploadId: string): Promise<UploadProgress> => {
+  const { data } = await httpClient.get<UploadProgress>(`/uploads/${uploadId}/progress`);
+  return data;
+};
+
 export const uploadFileInChunks = async (
   file: File,
   galleryName: string,
+  guildId: string,
   onProgress: (progress: number) => void,
 ) => {
-  const { uploadId } = await initiateUpload(file.name, file.type, galleryName, file.size);
+  const { uploadId } = await initiateUpload(file.name, file.type, galleryName, file.size, guildId);
   const totalParts = Math.ceil(file.size / CHUNK_SIZE);
   const uploadPromises = [];
 

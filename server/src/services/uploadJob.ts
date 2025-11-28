@@ -28,15 +28,7 @@ export class UploadJobService {
     };
 
     const jobKey = this.#buildJobKey(jobId);
-    await redis.client.hSet(jobKey, {
-      jobId,
-      status: job.status,
-      galleryName,
-      guildId,
-      filename,
-      fileSize: String(fileSize),
-      createdAt: String(job.createdAt),
-    });
+    await redis.client.set(jobKey, JSON.stringify(job));
     await redis.client.expire(jobKey, JOB_TTL_SECONDS);
     await redis.client.rPush(UPLOAD_JOBS_LIST, jobId);
 
@@ -45,75 +37,62 @@ export class UploadJobService {
 
   getJob = async (jobId: string): Promise<UploadJob | null> => {
     const jobKey = this.#buildJobKey(jobId);
-    const data = await redis.client.hGetAll(jobKey);
+    const jobJson = await redis.client.get(jobKey);
 
-    if (!data || Object.keys(data).length === 0) {
+    if (!jobJson) {
       return null;
     }
 
-    const job: UploadJob = {
-      jobId: data.jobId,
-      status: data.status as UploadJobStatus,
-      galleryName: data.galleryName,
-      guildId: data.guildId,
-      filename: data.filename,
-      fileSize: Number(data.fileSize),
-      createdAt: Number(data.createdAt),
-      startedAt: data.startedAt ? Number(data.startedAt) : undefined,
-      completedAt: data.completedAt ? Number(data.completedAt) : undefined,
-      error: data.error,
-    };
-
-    // Parse progress if it exists
-    if (data.progress) {
-      try {
-        job.progress = JSON.parse(data.progress) as UploadJobProgress;
-      } catch {
-        // Ignore parse errors
-      }
+    try {
+      const job = JSON.parse(jobJson) as UploadJob;
+      return job;
+    } catch (error) {
+      console.error(`Failed to parse upload job ${jobId}:`, error);
+      return null;
     }
-
-    return job;
   };
 
   updateJobStatus = async (jobId: string, status: UploadJobStatus, error?: string) => {
     const jobKey = this.#buildJobKey(jobId);
 
-    // Validate job exists before updating to prevent creating incomplete entries
-    const exists = await redis.client.exists(jobKey);
-    if (!exists) {
+    // Get current job
+    const jobJson = await redis.client.get(jobKey);
+    if (!jobJson) {
       throw new Error(`Job ${jobId} does not exist`);
     }
 
-    const updates: Record<string, string> = { status };
+    const job = JSON.parse(jobJson) as UploadJob;
+    job.status = status;
 
-    if (status === "processing" && !(await redis.client.hGet(jobKey, "startedAt"))) {
-      updates.startedAt = String(Date.now());
+    if (status === "processing" && !job.startedAt) {
+      job.startedAt = Date.now();
     }
 
     if (status === "completed" || status === "failed") {
-      updates.completedAt = String(Date.now());
+      job.completedAt = Date.now();
     }
 
     if (error) {
-      updates.error = error;
+      job.error = error;
     }
 
-    await redis.client.hSet(jobKey, updates);
+    await redis.client.set(jobKey, JSON.stringify(job));
   };
 
   updateJobProgress = async (jobId: string, progress: UploadJobProgress) => {
     const jobKey = this.#buildJobKey(jobId);
 
-    // Validate job exists before updating to prevent creating incomplete entries
-    const exists = await redis.client.exists(jobKey);
-    if (!exists) {
+    // Get current job
+    const jobJson = await redis.client.get(jobKey);
+    if (!jobJson) {
       throw new Error(`Job ${jobId} does not exist`);
     }
 
-    await redis.client.hSet(jobKey, {
-      progress: JSON.stringify(progress),
-    });
+    const job = JSON.parse(jobJson) as UploadJob;
+    job.progress = progress;
+
+    const updatedJson = JSON.stringify(job);
+    await redis.client.set(jobKey, updatedJson);
   };
 
   deleteJob = async (jobId: string) => {
@@ -128,7 +107,23 @@ export class UploadJobService {
     if (!exists) {
       return;
     }
-    await redis.client.lRem(UPLOAD_JOBS_LIST, 0, jobId);
+    // For completed/failed jobs, keep them in the list for a short time so clients can see final state
+    // They will be automatically removed when the key expires
     await redis.client.expire(jobKey, TERMINAL_JOB_TTL_SECONDS);
+    // Don't remove from list immediately - let clients see the final state
+  };
+
+  getAllJobs = async (): Promise<UploadJob[]> => {
+    const jobIds = await redis.client.lRange(UPLOAD_JOBS_LIST, 0, -1);
+    const jobs: UploadJob[] = [];
+
+    for (const jobId of jobIds) {
+      const job = await this.getJob(jobId);
+      if (job) {
+        jobs.push(job);
+      }
+    }
+
+    return jobs;
   };
 }

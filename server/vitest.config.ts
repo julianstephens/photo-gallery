@@ -11,4 +11,9 @@ export default defineConfig({
       exclude: ["src/**/*.test.ts", "src/**/*.spec.ts"],
     },
   },
+  define: {
+    "import.meta.env.CI": JSON.stringify(
+      !!process.env.CI || !!process.env.GITHUB_ACTIONS || !!process.env.GITLAB_CI,
+    ),
+  },
 });

@@ -1,58 +1,123 @@
 import type { Request, Response } from "express";
+import { GalleryController } from "../controllers/gallery.ts";
+import { appLogger } from "../middleware/logger.ts";
 import { BucketService } from "../services/bucket.ts";
-import { escapeHtml } from "../utils.ts";
+import { normalizeGalleryFolderName } from "../utils.ts";
 const bucketService = await BucketService.create();
-export const streamMedia = async (req: Request, res: Response) => {
-  const { galleryName } = req.params;
-  const objectName = req.params.objectName as string | string[];
-  const objectPath = Array.isArray(objectName) ? objectName.join("/") : objectName;
-  const key = `${galleryName}/${objectPath}`;
-  try {
-    const accept = req.headers.accept || "";
-    const wantsHtml = accept.includes("text/html");
+const galleryController = new GalleryController();
 
-    if (wantsHtml) {
-      // Serve HTML page for viewing
-      const presignedUrl = await bucketService.createPresignedUrl(key);
-      const fileName = objectPath.split("/").pop() || "image";
-      // Escape user-controlled values to prevent XSS
-      const safeFileName = escapeHtml(fileName);
-      const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>${safeFileName}</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 20px;
-      background: #000;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
+export const streamMedia = async (req: Request, res: Response) => {
+  const { galleryName, year, month, day, splat } = req.params;
+  const objectName = `${year}-${month}-${day}/${splat}`;
+  const { guildId } = req.query;
+
+  appLogger.debug(
+    { galleryName, objectName, guildId, path: req.path, originalUrl: req.originalUrl },
+    "[streamMedia] Request received",
+  );
+
+  if (!galleryName) {
+    appLogger.warn({ galleryName }, "[streamMedia] Missing galleryName parameter");
+    return res.status(400).json({ error: "Missing galleryName parameter" });
+  }
+
+  if (!objectName) {
+    appLogger.warn({ objectName }, "[streamMedia] Missing objectName parameter");
+    return res.status(400).json({ error: "Missing objectName parameter" });
+  }
+
+  if (!guildId) {
+    appLogger.warn({ guildId }, "[streamMedia] Missing guildId parameter");
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
+
+  try {
+    appLogger.debug({ galleryName, guildId }, "[streamMedia] Resolving gallery folder name");
+    // Find the correct gallery by comparing the normalized folder name
+    const galleries = await galleryController.listGalleries(guildId as string);
+    const foundGallery = galleries.find((g) => normalizeGalleryFolderName(g.name) === galleryName);
+
+    if (!foundGallery) {
+      appLogger.warn(
+        { galleryName },
+        "[streamMedia] Gallery not found after checking all galleries for guild",
+      );
+      return res.status(404).json({ error: "Gallery not found" });
     }
-    img {
-      max-width: 100%;
-      max-height: 100vh;
-      object-fit: contain;
+
+    // Get the normalized folder name from the gallery
+    const folderName = await galleryController.getGalleryFolderName(
+      guildId as string,
+      foundGallery.name,
+    );
+    appLogger.debug({ galleryName, folderName }, "[streamMedia] Gallery folder name resolved");
+
+    const candidateKeys = [`${folderName}/uploads/${objectName}`, `${folderName}/${objectName}`];
+    appLogger.debug(
+      { candidateKeys, folderName, objectName },
+      "[streamMedia] Prepared candidate S3 keys",
+    );
+
+    let resolvedKey: string | undefined;
+    let mediaData: Buffer | undefined;
+    let contentType: string | undefined;
+    let lastError: unknown;
+
+    for (const candidate of candidateKeys) {
+      try {
+        appLogger.debug({ candidate }, "[streamMedia] Attempting to fetch object");
+        const result = await bucketService.getObject(candidate);
+        resolvedKey = candidate;
+        mediaData = result.data;
+        contentType = result.contentType;
+        appLogger.debug({ candidate }, "[streamMedia] Object fetched from bucket");
+        break;
+      } catch (candidateError) {
+        if ((candidateError as Error)?.name === "NoSuchKey") {
+          lastError = candidateError;
+          appLogger.debug({ candidate }, "[streamMedia] Candidate key missing, trying next");
+          continue;
+        }
+        throw candidateError;
+      }
     }
-  </style>
-</head>
-<body>
-  <img src="${presignedUrl}" alt="${safeFileName}" />
-</body>
-</html>`;
-      res.setHeader("Content-Type", "text/html");
-      res.send(html);
-    } else {
-      // Serve image data for previews/thumbnails
-      const { data, contentType } = await bucketService.getObject(key);
-      res.setHeader("Content-Type", contentType);
-      res.send(data);
+
+    if (!resolvedKey || !mediaData || !contentType) {
+      throw (
+        (lastError as Error) ?? Object.assign(new Error("Key not found"), { name: "NoSuchKey" })
+      );
     }
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    appLogger.debug(
+      { key: resolvedKey, contentType, size: mediaData.length },
+      "[streamMedia] Sending binary image response",
+    );
+    res.send(mediaData);
   } catch (error) {
-    console.error("Error streaming media:", error);
-    res.status(500).send("Error streaming media");
+    const errorMessage = (error as Error)?.message || "Unknown error";
+    const errorName = (error as Error)?.name || "UnknownError";
+
+    appLogger.error(
+      {
+        error,
+        errorName,
+        errorMessage,
+        galleryName,
+        objectName,
+        guildId,
+        path: req.path,
+      },
+      "[streamMedia] Error serving media",
+    );
+
+    if ((error as Error)?.name === "InvalidInputError") {
+      return res.status(400).json({ error: (error as Error).message });
+    }
+    if ((error as Error)?.name === "NoSuchKey") {
+      return res.status(404).json({ error: "Image not found" });
+    }
+    res.status(500).json({ error: "Failed to retrieve media" });
   }
 };

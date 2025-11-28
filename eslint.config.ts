@@ -9,7 +9,20 @@ import { resolve } from "node:path";
 import tseslint from "typescript-eslint";
 
 export default [
-  { files: ["**/*.{js,mjs,cjs,ts}"] },
+  {
+    files: ["**/*.{js,mjs,cjs,ts}"],
+    rules: {
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
   {
     languageOptions: { ecmaVersion: 2020, globals: { ...globals.node, ...globals.browser } },
   },
@@ -19,6 +32,7 @@ export default [
       "**/public",
       "**/dist",
       "**/coverage",
+      "**/data",
       "client/src/components/ui",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",

@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockEnvModule } from "../utils/test-mocks.ts";
 import { AuthController } from "./auth.ts";
 
 // Mock axios
@@ -10,15 +11,7 @@ vi.mock("axios", () => ({
 }));
 
 // Mock env
-vi.mock("../schemas/env.ts", () => ({
-  default: {
-    DISCORD_CLIENT_ID: "test-client-id",
-    DISCORD_CLIENT_SECRET: "test-client-secret",
-    DISCORD_REDIRECT_URI: "http://localhost/callback",
-    DISCORD_API_URL: "https://discord.com/api",
-    ADMIN_USER_IDS: ["admin-user-1", "admin-user-2"],
-  },
-}));
+vi.mock("../schemas/env.ts", () => mockEnvModule());
 
 describe("AuthController", () => {
   let controller: AuthController;

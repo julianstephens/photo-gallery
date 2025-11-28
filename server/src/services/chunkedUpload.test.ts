@@ -2,6 +2,11 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mockEnvModule } from "../utils/test-mocks.ts";
+
+// Mock env to prevent dotenv loading
+vi.mock("../schemas/env.ts", () => mockEnvModule());
+
 import { ChunkedUploadService } from "./chunkedUpload.ts";
 
 describe("ChunkedUploadService", () => {
@@ -128,7 +133,7 @@ describe("ChunkedUploadService", () => {
         fileName: "test.txt",
         fileType: "text/plain",
         galleryName: "test-gallery",
-        totalSize: 1024,
+        totalSize: 23, // "Hello, Beautiful World!" is 23 bytes
       });
 
       // Save chunks out of order
@@ -154,7 +159,7 @@ describe("ChunkedUploadService", () => {
         fileName: "test.txt",
         fileType: "text/plain",
         galleryName: "test-gallery",
-        totalSize: 1024,
+        totalSize: 4, // "data" is 4 bytes
       });
 
       const metadata = service.getMetadata(uploadId);
@@ -255,6 +260,173 @@ describe("ChunkedUploadService", () => {
 
       // Cleanup
       await service.cleanupUpload(uploadId);
+    });
+  });
+
+  describe("progress tracking", () => {
+    it("initializes progress state on upload initiation", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
+      });
+
+      const progress = service.getProgress(uploadId);
+      expect(progress).toBeDefined();
+      expect(progress?.uploadId).toBe(uploadId);
+      expect(progress?.status).toBe("pending");
+      expect(progress?.phase).toBe("client-upload");
+      expect(progress?.progress.totalBytes).toBe(1024);
+      expect(progress?.progress.uploadedBytes).toBe(0);
+      expect(progress?.progress.totalFiles).toBeNull();
+      expect(progress?.progress.processedFiles).toBeNull();
+      expect(progress?.error).toBeNull();
+
+      // Cleanup
+      await service.cleanupUpload(uploadId);
+      service.cleanupProgress(uploadId);
+    });
+
+    it("updates progress state during chunk upload", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
+      });
+
+      await service.saveChunk(uploadId, 0, Buffer.from("Hello, World!"));
+
+      const progress = service.getProgress(uploadId);
+      expect(progress?.status).toBe("uploading");
+      expect(progress?.phase).toBe("client-upload");
+      expect(progress?.progress.uploadedBytes).toBe(13); // "Hello, World!" length
+
+      // Cleanup
+      await service.cleanupUpload(uploadId);
+      service.cleanupProgress(uploadId);
+    });
+
+    it("updates progress phase during finalization", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 9, // "test data" is 9 bytes
+      });
+
+      await service.saveChunk(uploadId, 0, Buffer.from("test data"));
+      await service.finalizeUpload(uploadId);
+
+      // After finalization, progress should have been updated to processing/server-assemble
+      // Note: The progress state remains after cleanup for status polling
+      const progress = service.getProgress(uploadId);
+      expect(progress?.status).toBe("processing");
+      expect(progress?.phase).toBe("server-assemble");
+
+      // Cleanup progress state
+      service.cleanupProgress(uploadId);
+    });
+
+    it("markCompleted sets status to completed", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
+      });
+
+      service.markCompleted(uploadId);
+
+      const progress = service.getProgress(uploadId);
+      expect(progress?.status).toBe("completed");
+
+      // Cleanup
+      await service.cleanupUpload(uploadId);
+      service.cleanupProgress(uploadId);
+    });
+
+    it("markFailed sets status to failed with error message", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
+      });
+
+      service.markFailed(uploadId, "Test error");
+
+      const progress = service.getProgress(uploadId);
+      expect(progress?.status).toBe("failed");
+      expect(progress?.error).toBe("Test error");
+
+      // Cleanup
+      await service.cleanupUpload(uploadId);
+      service.cleanupProgress(uploadId);
+    });
+
+    it("cleanupProgress removes progress state", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
+      });
+
+      expect(service.getProgress(uploadId)).toBeDefined();
+
+      service.cleanupProgress(uploadId);
+
+      expect(service.getProgress(uploadId)).toBeUndefined();
+
+      // Cleanup
+      await service.cleanupUpload(uploadId);
+    });
+
+    it("updateProgress updates status, phase, and progress values", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
+      });
+
+      service.updateProgress(uploadId, "processing", "server-zip-extract", {
+        totalFiles: 10,
+        processedFiles: 5,
+      });
+
+      const progress = service.getProgress(uploadId);
+      expect(progress?.status).toBe("processing");
+      expect(progress?.phase).toBe("server-zip-extract");
+      expect(progress?.progress.totalFiles).toBe(10);
+      expect(progress?.progress.processedFiles).toBe(5);
+
+      // Cleanup
+      await service.cleanupUpload(uploadId);
+      service.cleanupProgress(uploadId);
+    });
+
+    it("cleanupExpiredUploads also cleans up progress state", async () => {
+      const { uploadId } = await service.initiateUpload({
+        fileName: "test.txt",
+        fileType: "text/plain",
+        galleryName: "test-gallery",
+        totalSize: 1024,
+      });
+
+      // Mock the creation time to be old
+      const metadata = service.getMetadata(uploadId);
+      if (metadata) {
+        (metadata as { createdAt: number }).createdAt = Date.now() - 25 * 60 * 60 * 1000; // 25 hours ago
+      }
+
+      expect(service.getProgress(uploadId)).toBeDefined();
+
+      await service.cleanupExpiredUploads();
+
+      expect(service.getProgress(uploadId)).toBeUndefined();
     });
   });
 });

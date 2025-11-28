@@ -1,60 +1,35 @@
 import { Tooltip } from "@/components/ui/tooltip";
-import { AspectRatio, Box, Center, Image, Link, Skeleton, Text } from "@chakra-ui/react";
-import { useState } from "react";
+import { AspectRatio, Box, Image, Link } from "@chakra-ui/react";
 import type { GalleryItem as GI } from "utils";
 
 export interface GalleryItemProps {
   item: GI;
+  guildId: string;
+  galleryName: string;
 }
 
-export const GalleryItem = ({ item }: GalleryItemProps) => {
-  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+export const GalleryItem = ({ item, guildId, galleryName }: GalleryItemProps) => {
   const name = item.metadata?.name ?? item.name;
-  const isLoaded = status === "loaded";
-  const hasError = status === "error";
-  const isLoading = status === "loading";
+  // item.url is the full S3 key: "normalizedGalleryFolderName/uploads/date/filename"
+  // Extract everything after uploads/ to construct the media URL
+  const urlParts = item.url.split("/");
+  const uploadsIndex = urlParts.indexOf("uploads");
+  const imagePath = uploadsIndex !== -1 ? urlParts.slice(uploadsIndex + 1).join("/") : item.url;
+  const galleryNameForUrl = urlParts[uploadsIndex - 1] || galleryName;
+  const imageSrc = `/media/${galleryNameForUrl}/${imagePath}?guildId=${guildId}`;
 
   return (
     <Tooltip content={name}>
       <Link
-        display="block"
+        display="inline-block"
         w="full"
-        href={`/media/${item.url}`}
+        href={imageSrc}
         target="_blank"
         rel="noopener noreferrer"
       >
         <AspectRatio ratio={1} w="full" mb="2">
-          <Box position="relative" borderRadius="xl" overflow="hidden">
-            <Skeleton
-              variant="shine"
-              position="absolute"
-              inset={0}
-              colorPalette="gray"
-              filter="blur(8px)"
-              opacity={isLoading ? 1 : 0}
-              pointerEvents="none"
-              transition="opacity 0.3s ease"
-            />
-            {!hasError ? (
-              <Image
-                w="100%"
-                h="100%"
-                objectFit="cover"
-                src={`/media/${item.url}`}
-                alt={name}
-                loading="lazy"
-                opacity={isLoaded ? 1 : 0}
-                transition="opacity 0.2s ease"
-                onLoad={() => setStatus("loaded")}
-                onError={() => setStatus("error")}
-              />
-            ) : (
-              <Center w="100%" h="100%" bg="gray.900">
-                <Text fontSize="sm" color="gray.300">
-                  Preview unavailable
-                </Text>
-              </Center>
-            )}
+          <Box position="relative" borderRadius="xl" overflow="hidden" bg="gray.800">
+            <Image w="100%" h="100%" objectFit="cover" src={imageSrc} alt={name} loading="eager" />
           </Box>
         </AspectRatio>
       </Link>

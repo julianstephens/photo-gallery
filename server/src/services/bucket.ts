@@ -72,13 +72,19 @@ export class BucketService {
   };
 
   async #getObjectMetadata(key: string): Promise<Record<string, string>> {
-    const resp = await this.#s3.send(
-      new HeadObjectCommand({
-        Bucket: this.#bucketName,
-        Key: key,
-      }),
-    );
-    return resp.Metadata ?? {};
+    try {
+      const resp = await this.#s3.send(
+        new HeadObjectCommand({
+          Bucket: this.#bucketName,
+          Key: key,
+        }),
+      );
+      return resp.Metadata ?? {};
+    } catch {
+      // If HEAD fails (permission denied, not found, etc.), silently return empty metadata
+      // This is expected behavior - metadata is optional for displaying gallery items
+      return {};
+    }
   }
 
   async getObject(key: string): Promise<{ data: Buffer; contentType: string }> {

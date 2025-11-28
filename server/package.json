@@ -60,6 +60,8 @@
     "@types/unzipper": "^0.10.11",
     "@vitest/coverage-v8": "4.0.7",
     "@vitest/ui": "^4.0.7",
+    "aws-sdk-client-mock": "^4.1.0",
+    "aws-sdk-client-mock-vitest": "^7.0.1",
     "supertest": "^7.1.4",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",

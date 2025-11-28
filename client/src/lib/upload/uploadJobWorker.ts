@@ -1,37 +1,45 @@
-// Web worker for polling upload job status without blocking the main thread.
+// Web worker for polling upload progress without blocking the main thread.
 
-export type UploadJobStatus = "pending" | "processing" | "completed" | "failed";
+export type UploadProgressStatus = "pending" | "uploading" | "processing" | "completed" | "failed";
+export type UploadProgressPhase =
+  | "client-upload"
+  | "server-assemble"
+  | "server-zip-extract"
+  | "server-upload";
 
-export interface UploadJobProgress {
-  processedFiles: number;
-  totalFiles: number;
+// Progress format from /api/uploads/:uploadId/progress
+export interface UploadProgress {
+  uploadId: string;
+  status: UploadProgressStatus;
+  phase: UploadProgressPhase;
+  progress: {
+    totalBytes: number | null;
+    uploadedBytes: number | null;
+    totalFiles: number | null;
+    processedFiles: number | null;
+  };
+  error: string | null;
 }
 
-export interface UploadJob {
-  id: string;
-  status: UploadJobStatus;
-  progress?: UploadJobProgress;
-  error?: string | null;
-  [key: string]: unknown;
-}
-
-export type WorkerInMessage = { type: "start"; jobId: string; baseUrl?: string } | { type: "stop" };
+export type WorkerInMessage =
+  | { type: "start_progress"; uploadId: string; baseUrl?: string }
+  | { type: "stop" };
 
 export type WorkerOutMessage =
-  | { type: "update"; job: UploadJob }
-  | { type: "complete"; job: UploadJob }
-  | { type: "failed"; job: UploadJob }
+  | { type: "progress_update"; progress: UploadProgress }
+  | { type: "progress_complete"; progress: UploadProgress }
+  | { type: "progress_failed"; progress: UploadProgress }
   | { type: "timeout" }
   | { type: "not_found" }
   | { type: "error"; error: string };
 
-let activeJobId: string | null = null;
+let activeUploadId: string | null = null;
 let aborted = false;
 let timeoutId: number | null = null;
 let startTime: number | null = null;
 
 const MAX_DURATION_MS = 10 * 60 * 1000; // 10 minutes
-const BASE_DELAY_MS = 2000;
+const BASE_DELAY_MS = 1500; // 1.5 seconds for upload progress polling
 const MAX_DELAY_MS = 30000;
 
 const clearTimer = () => {
@@ -46,25 +54,26 @@ const scheduleNext = (fn: () => void, delay: number) => {
   timeoutId = setTimeout(fn, delay) as unknown as number;
 };
 
-const pollOnce = async (baseUrl: string) => {
-  if (!activeJobId || aborted) return;
+// Poll the upload progress endpoint
+const pollProgress = async (baseUrl: string) => {
+  if (!activeUploadId || aborted) return;
   if (!startTime) startTime = Date.now();
   if (Date.now() - startTime > MAX_DURATION_MS) {
-    console.log("[uploadJobWorker] Timeout reached for job", { jobId: activeJobId });
+    console.log("[uploadJobWorker] Timeout reached for upload", { uploadId: activeUploadId });
     (self as unknown as Worker).postMessage({ type: "timeout" } satisfies WorkerOutMessage);
-    activeJobId = null;
+    activeUploadId = null;
     return;
   }
   const normalizedBase = baseUrl.replace(/\/$/, "");
-  const url = `${normalizedBase}/galleries/upload/${encodeURIComponent(activeJobId)}`;
+  const url = `${normalizedBase}/uploads/${encodeURIComponent(activeUploadId)}/progress`;
 
   try {
-    console.log("[uploadJobWorker] Polling job status", { jobId: activeJobId, url });
+    console.log("[uploadJobWorker] Polling upload progress", { uploadId: activeUploadId, url });
     const res = await fetch(url, { credentials: "include" });
     if (res.status === 404) {
-      console.log("[uploadJobWorker] Job not found (404)", { jobId: activeJobId });
+      console.log("[uploadJobWorker] Upload not found (404)", { uploadId: activeUploadId });
       (self as unknown as Worker).postMessage({ type: "not_found" } satisfies WorkerOutMessage);
-      activeJobId = null;
+      activeUploadId = null;
       return;
     }
 
@@ -73,65 +82,72 @@ const pollOnce = async (baseUrl: string) => {
       const seconds = retryAfter ? parseInt(retryAfter, 10) : NaN;
       const delay = Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : BASE_DELAY_MS * 2;
       console.log("[uploadJobWorker] Rate limited (429)", {
-        jobId: activeJobId,
+        uploadId: activeUploadId,
         retryAfter,
         delay,
       });
-      scheduleNext(() => void pollOnce(baseUrl), Math.min(delay, MAX_DELAY_MS));
+      scheduleNext(() => void pollProgress(baseUrl), Math.min(delay, MAX_DELAY_MS));
       return;
     }
 
     if (!res.ok) {
-      // transient error, exponential backoff
-      console.warn("[uploadJobWorker] Non-OK response while polling job", {
-        jobId: activeJobId,
+      console.warn("[uploadJobWorker] Non-OK response while polling upload progress", {
+        uploadId: activeUploadId,
         status: res.status,
       });
-      scheduleNext(() => void pollOnce(baseUrl), Math.min(BASE_DELAY_MS * 2, MAX_DELAY_MS));
+      scheduleNext(() => void pollProgress(baseUrl), Math.min(BASE_DELAY_MS * 2, MAX_DELAY_MS));
       return;
     }
 
-    const job = (await res.json()) as UploadJob;
-    (self as unknown as Worker).postMessage({ type: "update", job } satisfies WorkerOutMessage);
+    const progress = (await res.json()) as UploadProgress;
+    (self as unknown as Worker).postMessage({
+      type: "progress_update",
+      progress,
+    } satisfies WorkerOutMessage);
 
-    if (job.status === "completed") {
-      console.log("[uploadJobWorker] Job completed", { jobId: activeJobId });
-      (self as unknown as Worker).postMessage({ type: "complete", job } satisfies WorkerOutMessage);
-      activeJobId = null;
+    if (progress.status === "completed") {
+      console.log("[uploadJobWorker] Upload completed", { uploadId: activeUploadId });
+      (self as unknown as Worker).postMessage({
+        type: "progress_complete",
+        progress,
+      } satisfies WorkerOutMessage);
+      activeUploadId = null;
       return;
     }
 
-    if (job.status === "failed") {
-      console.log("[uploadJobWorker] Job failed", { jobId: activeJobId });
-      (self as unknown as Worker).postMessage({ type: "failed", job } satisfies WorkerOutMessage);
-      activeJobId = null;
+    if (progress.status === "failed") {
+      console.log("[uploadJobWorker] Upload failed", { uploadId: activeUploadId });
+      (self as unknown as Worker).postMessage({
+        type: "progress_failed",
+        progress,
+      } satisfies WorkerOutMessage);
+      activeUploadId = null;
       return;
     }
 
-    scheduleNext(() => void pollOnce(baseUrl), BASE_DELAY_MS);
+    scheduleNext(() => void pollProgress(baseUrl), BASE_DELAY_MS);
   } catch (err) {
-    // network error, retry with backoff
-    console.warn("[uploadJobWorker] Network error while polling job", {
-      jobId: activeJobId,
+    console.warn("[uploadJobWorker] Network error while polling upload progress", {
+      uploadId: activeUploadId,
       error: String(err),
     });
-    scheduleNext(() => void pollOnce(baseUrl), Math.min(BASE_DELAY_MS * 2, MAX_DELAY_MS));
+    scheduleNext(() => void pollProgress(baseUrl), Math.min(BASE_DELAY_MS * 2, MAX_DELAY_MS));
   }
 };
 
 (self as unknown as Worker).onmessage = (event: MessageEvent<WorkerInMessage>) => {
   const msg = event.data;
-  if (msg.type === "start") {
+  if (msg.type === "start_progress") {
     aborted = false;
     startTime = null;
-    activeJobId = msg.jobId;
-    console.log("[uploadJobWorker] Start polling job", { jobId: activeJobId });
+    activeUploadId = msg.uploadId;
+    console.log("[uploadJobWorker] Start polling upload progress", { uploadId: activeUploadId });
     const baseUrl = msg.baseUrl ?? "/api";
-    void pollOnce(baseUrl);
+    void pollProgress(baseUrl);
   } else if (msg.type === "stop") {
     aborted = true;
-    console.log("[uploadJobWorker] Stop polling job", { jobId: activeJobId });
-    activeJobId = null;
+    console.log("[uploadJobWorker] Stop polling", { uploadId: activeUploadId });
+    activeUploadId = null;
     clearTimer();
   }
 };

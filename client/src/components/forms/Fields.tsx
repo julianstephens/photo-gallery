@@ -1,13 +1,18 @@
+import { useGalleryContext } from "@/contexts/GalleryContext";
 import { useAuth, useListGalleries } from "@/hooks";
 import {
   createListCollection,
   Field,
   Input as FieldInput,
   Select as FieldSelect,
+  HStack,
+  Icon,
   Portal,
+  Text,
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import type { FieldError, FieldValues } from "react-hook-form";
+import { HiStar } from "react-icons/hi2";
 import { Navigate } from "react-router";
 
 interface FormProps {
@@ -29,7 +34,7 @@ export interface InputProps extends FormProps, FieldValues {
 }
 
 export interface SelectProps extends FormProps, FieldValues {
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; icon?: React.ReactNode }[];
   usePortal?: boolean;
   useLabel?: boolean;
 }
@@ -82,6 +87,24 @@ export const Select = ({
 }: SelectProps) => {
   const formattedValue = useMemo(() => (Array.isArray(value) ? value : [value]), [value]);
   const collection = useMemo(() => createListCollection({ items: options }), [options]);
+
+  const Positioner = () => {
+    return (
+      <FieldSelect.Positioner>
+        <FieldSelect.Content>
+          {collection.items.map((item) => (
+            <FieldSelect.Item item={item} key={item.value}>
+              <HStack>
+                {item.icon}
+                {item.label}
+              </HStack>
+              <FieldSelect.ItemIndicator />
+            </FieldSelect.Item>
+          ))}
+        </FieldSelect.Content>
+      </FieldSelect.Positioner>
+    );
+  };
   return (
     <Field.Root maxW={maxW} width={width} invalid={invalid}>
       {useLabel && <Field.Label htmlFor={name}>{label}</Field.Label>}
@@ -99,7 +122,13 @@ export const Select = ({
         <FieldSelect.HiddenSelect />
         <FieldSelect.Control>
           <FieldSelect.Trigger>
-            <FieldSelect.ValueText placeholder={placeholder || `Select ${label.toLowerCase()}`} />
+            <HStack w="full" gap="2">
+              <FieldSelect.ValueText
+                placeholder={placeholder || `Select ${label.toLowerCase()}`}
+                flexShrink="0"
+              />
+              {collection.items.find((item) => item.value === formattedValue[0])?.icon}
+            </HStack>
           </FieldSelect.Trigger>
           <FieldSelect.IndicatorGroup>
             <FieldSelect.Indicator />
@@ -107,28 +136,10 @@ export const Select = ({
         </FieldSelect.Control>
         {usePortal ? (
           <Portal>
-            <FieldSelect.Positioner>
-              <FieldSelect.Content>
-                {collection.items.map((item) => (
-                  <FieldSelect.Item item={item} key={item.value}>
-                    {item.label}
-                    <FieldSelect.ItemIndicator />
-                  </FieldSelect.Item>
-                ))}
-              </FieldSelect.Content>
-            </FieldSelect.Positioner>
+            <Positioner />
           </Portal>
         ) : (
-          <FieldSelect.Positioner>
-            <FieldSelect.Content>
-              {collection.items.map((item) => (
-                <FieldSelect.Item item={item} key={item.value}>
-                  {item.label}
-                  <FieldSelect.ItemIndicator />
-                </FieldSelect.Item>
-              ))}
-            </FieldSelect.Content>
-          </FieldSelect.Positioner>
+          <Positioner />
         )}
       </FieldSelect.Root>
       <Field.ErrorText>{errors?.[name]?.message}</Field.ErrorText>
@@ -138,9 +149,26 @@ export const Select = ({
 
 export const GuildSelect = (props: Omit<SelectProps, "name" | "options" | "label" | "isMulti">) => {
   const { currentUser } = useAuth();
+  const { defaultGuildId } = useGalleryContext();
   const selectOpts = useMemo(
-    () => currentUser?.guilds.map((g) => ({ value: g.id, label: g.name })) ?? [],
-    [currentUser],
+    () =>
+      currentUser?.guilds.map((g) => ({
+        value: g.id,
+        label: g.name,
+        ...(defaultGuildId === g.id
+          ? {
+              icon: (
+                <HStack gap="2">
+                  <Icon size="sm">
+                    <HiStar fill="yellow" />
+                  </Icon>
+                  <Text>(Default)</Text>
+                </HStack>
+              ),
+            }
+          : {}),
+      })) ?? [],
+    [currentUser, defaultGuildId],
   );
 
   if (!currentUser) {

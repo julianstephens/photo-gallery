@@ -4,6 +4,7 @@ import type {
   galleryMetaSchema,
   removeGallerySchema,
   setDefaultGallerySchema,
+  updateGalleryNameSchema,
   uploadToGallerySchema,
 } from "../schemas/gallery.ts";
 
@@ -41,3 +42,5 @@ export type SetDefaultGalleryRequest = z.infer<typeof setDefaultGallerySchema>;
 export type UploadToGalleryRequest = z.infer<typeof uploadToGallerySchema>;
 
 export type RemoveGalleryRequest = z.infer<typeof removeGallerySchema>;
+
+export type UpdateGalleryNameRequest = z.infer<typeof updateGalleryNameSchema>;

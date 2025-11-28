@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup",
-    "clean": "rm -rf dist node_modules"
+    "clean": "rm -rf dist node_modules",
+    "test": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -17,9 +18,12 @@
     "@tsconfig/node24": "^24.0.1",
     "@types/node": "^24.10.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.7"
   },
   "dependencies": {
+    "quantize": "^1.0.2",
+    "sharp": "^0.34.5",
     "zod": "^4.1.12"
   }
 }

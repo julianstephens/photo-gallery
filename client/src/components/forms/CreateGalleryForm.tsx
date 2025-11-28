@@ -10,14 +10,7 @@ import React, { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Navigate } from "react-router";
 import { type CreateGalleryRequest, createGallerySchema } from "utils";
-
-export interface CreateGalleryFormProps {
-  doSubmit: boolean;
-  setDoSubmit: (value: boolean) => void;
-  setLoading: (value: boolean) => void;
-  closeModal: () => void;
-  guildId: string;
-}
+import type { FormProps } from "@/lib/types";
 
 export const CreateGalleryForm = ({
   doSubmit,
@@ -25,7 +18,7 @@ export const CreateGalleryForm = ({
   setLoading,
   closeModal,
   guildId,
-}: CreateGalleryFormProps) => {
+}: FormProps) => {
   const { currentUser } = useAuth();
   const {
     handleSubmit,

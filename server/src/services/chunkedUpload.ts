@@ -2,11 +2,20 @@ import { randomUUID } from "crypto";
 import { createWriteStream, promises as fs } from "fs";
 import os from "os";
 import path from "path";
-import type { FinalizeUploadResponse, InitiateUploadRequest, InitiateUploadResponse } from "utils";
+import type {
+  FinalizeUploadResponse,
+  InitiateUploadRequest,
+  InitiateUploadResponse,
+  UploadProgress,
+  UploadProgressPhase,
+  UploadProgressStatus,
+} from "utils";
+import { appLogger } from "../middleware/logger.ts";
 
 const CHUNK_DIR_PREFIX = "chunked-upload-";
 const CHUNK_FILE_PREFIX = "chunk-";
 const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const PROGRESS_TTL_MS = 5 * 60 * 1000; // 5 minutes for completed/failed progress states
 
 /**
  * Sanitize a filename to prevent path traversal attacks.
@@ -30,8 +39,10 @@ export interface ChunkedUploadMetadata {
   fileName: string;
   fileType: string;
   galleryName: string;
+  guildId: string;
   tempDir: string;
   createdAt: number;
+  totalSize: number;
 }
 
 // In-memory store for upload metadata
@@ -39,6 +50,14 @@ export interface ChunkedUploadMetadata {
 // In production, consider using Redis for persistence, or add a startup
 // cleanup routine that scans os.tmpdir() for stale "chunked-upload-*" directories.
 const uploadMetadata = new Map<string, ChunkedUploadMetadata>();
+
+// In-memory store for upload progress state
+// Tracks completedAt timestamp for TTL-based cleanup
+interface ProgressStateEntry {
+  progress: UploadProgress;
+  completedAt: number | null;
+}
+const uploadProgressState = new Map<string, ProgressStateEntry>();
 
 export class ChunkedUploadService {
   /**
@@ -60,11 +79,28 @@ export class ChunkedUploadService {
       fileName: safeFileName,
       fileType: request.fileType,
       galleryName: request.galleryName,
+      guildId: request.guildId,
       tempDir,
       createdAt: Date.now(),
+      totalSize: request.totalSize,
     };
 
     uploadMetadata.set(uploadId, metadata);
+
+    // Initialize progress state
+    const progressData: UploadProgress = {
+      uploadId,
+      status: "pending",
+      phase: "client-upload",
+      progress: {
+        totalBytes: request.totalSize,
+        uploadedBytes: 0,
+        totalFiles: null,
+        processedFiles: null,
+      },
+      error: null,
+    };
+    uploadProgressState.set(uploadId, { progress: progressData, completedAt: null });
 
     return { uploadId };
   }
@@ -91,6 +127,15 @@ export class ChunkedUploadService {
 
     const chunkPath = path.join(metadata.tempDir, `${CHUNK_FILE_PREFIX}${chunkIndex}`);
     await fs.writeFile(chunkPath, chunkBuffer);
+
+    // Update progress state
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = "uploading";
+      entry.progress.phase = "client-upload";
+      entry.progress.progress.uploadedBytes =
+        (entry.progress.progress.uploadedBytes ?? 0) + chunkBuffer.length;
+    }
   }
 
   /**
@@ -109,6 +154,9 @@ export class ChunkedUploadService {
     if (!metadata) {
       throw new Error(`Upload session not found: ${uploadId}`);
     }
+
+    // Update progress to processing/assembling phase
+    this.updateProgress(uploadId, "processing", "server-assemble");
 
     let writeStream: ReturnType<typeof createWriteStream> | null = null;
 
@@ -144,24 +192,84 @@ export class ChunkedUploadService {
       // Create writable stream for final file
       writeStream = createWriteStream(finalPath);
 
+      // Track stream errors - use a single handler for the entire operation
+      let streamError: Error | null = null;
+      const handleStreamError = (error: Error) => {
+        streamError = error;
+      };
+      writeStream.on("error", handleStreamError);
+
       // Write each chunk in order to the final file
+      const writeChunk = (chunkData: Buffer): Promise<void> => {
+        return new Promise((resolve, reject) => {
+          if (streamError) {
+            return reject(streamError);
+          }
+
+          const writeCallback = (error?: Error | null) => {
+            if (error) {
+              return reject(error);
+            }
+            resolve();
+          };
+
+          const canContinue = writeStream!.write(chunkData, writeCallback);
+
+          if (!canContinue) {
+            // If the buffer is full, wait for the drain event.
+            // The callback to write() will still be called, so we don't need to resolve here.
+            writeStream!.once("drain", resolve);
+          }
+        });
+      };
+
+      let totalBytesWritten = 0;
       for (const chunkFile of chunkFiles) {
         const chunkPath = path.join(metadata.tempDir, chunkFile);
         const chunkData = await fs.readFile(chunkPath);
-        await new Promise<void>((resolve, reject) => {
-          writeStream!.write(chunkData, (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        totalBytesWritten += chunkData.length;
+        await writeChunk(chunkData);
       }
 
-      // Close the write stream
-      await new Promise<void>((resolve, reject) => {
-        writeStream!.once("finish", resolve);
-        writeStream!.once("error", reject);
+      // Close the write stream and ensure all data is flushed to disk
+      await new Promise<void>((resolve, _reject) => {
+        writeStream!.once("finish", () => {
+          appLogger.debug({ uploadId, totalBytesWritten }, "[finalizeUpload] Stream finished");
+          resolve();
+        });
+        // Error handler already registered above, so just end the stream
         writeStream!.end();
       });
+
+      // Validate that the assembled file size matches the expected total size
+      const stats = await fs.stat(finalPath);
+      if (stats.size !== metadata.totalSize) {
+        throw new Error(
+          `Assembled file size (${stats.size} bytes) does not match expected total size (${metadata.totalSize} bytes). Upload may be incomplete or corrupted.`,
+        );
+      }
+
+      // For zip files, validate the file signature
+      if (metadata.fileName.toLowerCase().endsWith(".zip")) {
+        const buffer = Buffer.alloc(4);
+        const fd = await fs.open(finalPath, "r");
+        try {
+          await fd.read(buffer, 0, 4, 0);
+          // ZIP files start with PK\x03\x04 or PK\x05\x06 or PK\x07\x08
+          if (
+            buffer[0] !== 0x50 ||
+            buffer[1] !== 0x4b ||
+            (buffer[2] !== 0x03 && buffer[2] !== 0x05 && buffer[2] !== 0x07) ||
+            (buffer[3] !== 0x04 && buffer[3] !== 0x06 && buffer[3] !== 0x08)
+          ) {
+            throw new Error(
+              "File does not appear to be a valid ZIP archive. The file signature is invalid.",
+            );
+          }
+        } finally {
+          await fd.close();
+        }
+      }
 
       return {
         success: true,
@@ -196,10 +304,13 @@ export class ChunkedUploadService {
     }
 
     uploadMetadata.delete(uploadId);
+    // Note: We don't delete progress state here - it's cleaned up separately
+    // so clients can poll for completion status after finalization
   }
 
   /**
    * Clean up all expired upload sessions.
+   * Also cleans up completed/failed progress states that have exceeded their TTL.
    * @returns The number of sessions that were cleaned up.
    */
   async cleanupExpiredUploads(): Promise<number> {
@@ -209,7 +320,16 @@ export class ChunkedUploadService {
     for (const [uploadId, metadata] of uploadMetadata.entries()) {
       if (now - metadata.createdAt > UPLOAD_TTL_MS) {
         await this.cleanupUpload(uploadId);
+        // Also remove progress state for expired uploads
+        uploadProgressState.delete(uploadId);
         cleanedCount++;
+      }
+    }
+
+    // Clean up completed/failed progress states that have exceeded their TTL
+    for (const [uploadId, entry] of uploadProgressState.entries()) {
+      if (entry.completedAt && now - entry.completedAt > PROGRESS_TTL_MS) {
+        uploadProgressState.delete(uploadId);
       }
     }
 
@@ -223,5 +343,81 @@ export class ChunkedUploadService {
    */
   getMetadata(uploadId: string): ChunkedUploadMetadata | undefined {
     return uploadMetadata.get(uploadId);
+  }
+
+  /**
+   * Get the current progress state for an upload.
+   * @param uploadId - The unique upload session identifier.
+   * @returns The current progress state, or undefined if not found.
+   */
+  getProgress(uploadId: string): UploadProgress | undefined {
+    const entry = uploadProgressState.get(uploadId);
+    return entry?.progress;
+  }
+
+  /**
+   * Update the progress state for an upload.
+   * @param uploadId - The unique upload session identifier.
+   * @param status - The new status.
+   * @param phase - The new phase.
+   * @param progressUpdate - Optional partial progress updates.
+   */
+  updateProgress(
+    uploadId: string,
+    status: UploadProgressStatus,
+    phase: UploadProgressPhase,
+    progressUpdate?: Partial<UploadProgress["progress"]>,
+  ): void {
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = status;
+      entry.progress.phase = phase;
+      if (progressUpdate) {
+        Object.assign(entry.progress.progress, progressUpdate);
+      }
+      // Set completedAt timestamp when status becomes completed or failed
+      if ((status === "completed" || status === "failed") && !entry.completedAt) {
+        entry.completedAt = Date.now();
+      }
+    }
+  }
+
+  /**
+   * Mark an upload as completed.
+   * @param uploadId - The unique upload session identifier.
+   */
+  markCompleted(uploadId: string): void {
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = "completed";
+      if (!entry.completedAt) {
+        entry.completedAt = Date.now();
+      }
+    }
+  }
+
+  /**
+   * Mark an upload as failed with an error message.
+   * @param uploadId - The unique upload session identifier.
+   * @param error - The error message.
+   */
+  markFailed(uploadId: string, error: string): void {
+    const entry = uploadProgressState.get(uploadId);
+    if (entry) {
+      entry.progress.status = "failed";
+      entry.progress.error = error;
+      if (!entry.completedAt) {
+        entry.completedAt = Date.now();
+      }
+    }
+  }
+
+  /**
+   * Clean up progress state for a specific upload.
+   * Called after the client has retrieved the final status or after a timeout.
+   * @param uploadId - The unique upload session identifier.
+   */
+  cleanupProgress(uploadId: string): void {
+    uploadProgressState.delete(uploadId);
   }
 }
