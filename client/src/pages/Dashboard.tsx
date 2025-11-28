@@ -1,10 +1,9 @@
-import { SetDefaultGuildButton } from "@/components/buttons/SetDefaultGuildButton";
-import { GallerySelect, GuildSelect } from "@/components/forms/Fields";
-import { Gallery } from "@/components/gallery/Gallery";
+import { SetDefaultGuildButton } from "@/components/buttons";
+import { GallerySelect, GuildSelect } from "@/components/forms";
+import { Gallery } from "@/components/gallery";
 import { Loader } from "@/components/Loader";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useAuth, useListGalleries } from "@/hooks";
-import { useGalleryContext } from "@/hooks";
+import { useAuth, useGalleryContext, useListGalleries } from "@/hooks";
 import { Box, Button, Flex, Heading, IconButton, Text } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { HiArrowUp } from "react-icons/hi";

@@ -1,4 +1,4 @@
-import { GalleryCard } from "@/components/gallery/GalleryCard";
+import { GalleryCard } from "@/components/gallery";
 import { Loader } from "@/components/Loader";
 import { Box, Button, Flex, Grid, GridItem, Heading, Text, VStack } from "@chakra-ui/react";
 import { HiPlus } from "react-icons/hi";

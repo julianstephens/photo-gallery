@@ -1,6 +1,5 @@
 import { Tooltip } from "@/components/ui/tooltip";
-import type { ActiveUpload } from "@/lib/upload/uploadProgressStore";
-import { uploadProgressStore } from "@/lib/upload/uploadProgressStore";
+import { uploadProgressStore, type ActiveUpload } from "@/lib/upload";
 import {
   Badge,
   Box,

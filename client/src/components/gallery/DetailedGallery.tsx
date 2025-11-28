@@ -1,6 +1,4 @@
-import { DeleteGalleryButton } from "@/components/buttons/DeleteGalleryButton";
-import { RenameGalleryButton } from "@/components/buttons/RenameGalleryButton";
-import { UploadPhotosButton } from "@/components/buttons/UploadPhotosButton";
+import { DeleteGalleryButton, RenameGalleryButton, UploadPhotosButton } from "@/components/buttons";
 import { getGallery } from "@/queries";
 import { Button, Heading, HStack, Icon, Spinner, Text, VStack } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";

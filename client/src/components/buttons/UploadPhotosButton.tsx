@@ -1,7 +1,6 @@
 import { toaster } from "@/components/ui/toaster";
 import { useUploadContext } from "@/hooks";
-import { uploadProgressStore } from "@/lib/upload/uploadProgressStore";
-import { uploadFileInChunks } from "@/lib/upload/uploadService";
+import { uploadFileInChunks, uploadProgressStore } from "@/lib/upload";
 import { Button, FileUpload, Icon, Menu, type FileUploadFileAcceptDetails } from "@chakra-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";

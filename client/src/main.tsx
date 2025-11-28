@@ -1,9 +1,7 @@
 import { queryClient } from "@/clients";
 import { Provider } from "@/components/ui/provider.tsx";
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { GalleryProvider } from "@/contexts/GalleryContext";
-import { UploadProvider } from "@/contexts/UploadContext";
+import { AuthProvider, GalleryProvider, UploadProvider } from "@/contexts";
 import { AppRoutes } from "@/routes.tsx";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";

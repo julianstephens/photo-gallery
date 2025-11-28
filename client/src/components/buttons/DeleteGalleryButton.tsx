@@ -1,5 +1,5 @@
 import { queryClient } from "@/clients";
-import { ConfirmDeleteModal } from "@/components/modals/ConfirmDelete";
+import { ConfirmDeleteModal } from "@/components/modals";
 import { toaster } from "@/components/ui/toaster";
 import { useGalleryContext } from "@/hooks";
 import type { ButtonProps } from "@/lib/types";

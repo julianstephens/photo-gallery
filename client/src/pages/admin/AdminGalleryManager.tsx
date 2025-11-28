@@ -1,9 +1,7 @@
-import { SetDefaultGuildButton } from "@/components/buttons/SetDefaultGuildButton";
-import { GuildSelect } from "@/components/forms/Fields";
-import { DetailedGallery } from "@/components/gallery/DetailedGallery";
-import { GalleryList } from "@/components/gallery/GalleryList";
-import { UploadMonitor } from "@/components/gallery/UploadMonitor";
-import { CreateGalleryModal } from "@/components/modals/CreateGalleryModal";
+import { SetDefaultGuildButton } from "@/components/buttons";
+import { GuildSelect } from "@/components/forms";
+import { DetailedGallery, GalleryList, UploadMonitor } from "@/components/gallery";
+import { CreateGalleryModal } from "@/components/modals";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useGalleryContext, useListGalleries, useUploadContext } from "@/hooks";
 import { Button, Flex, HStack, Icon, Presence, Spinner, Text, VStack } from "@chakra-ui/react";

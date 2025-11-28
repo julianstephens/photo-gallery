@@ -1,4 +1,4 @@
-import { GalleryContext } from "@/contexts/galleryContextStore";
+import { GalleryContext } from "@/contexts";
 import { useContext } from "react";
 
 export const useGalleryContext = () => {

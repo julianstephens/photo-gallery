@@ -1,6 +1,4 @@
-import { DeleteGalleryButton } from "@/components/buttons/DeleteGalleryButton";
-import { RenameGalleryButton } from "@/components/buttons/RenameGalleryButton";
-import { UploadPhotosButton } from "@/components/buttons/UploadPhotosButton";
+import { DeleteGalleryButton, RenameGalleryButton, UploadPhotosButton } from "@/components/buttons";
 import { Box, Button, Card, DataList, HStack, Icon, Text, VStack } from "@chakra-ui/react";
 import { HiOutlineEye } from "react-icons/hi2";
 import type { Gallery } from "utils";
