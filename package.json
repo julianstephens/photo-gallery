@@ -15,7 +15,7 @@
     "build:server": "pnpm --filter server build",
     "start": "pnpm --parallel --filter client --filter server start",
     "clean": "pnpm --recursive run clean",
-    "test": "pnpm --filter server test",
+    "test": "pnpm --recursive test",
     "test:server": "pnpm --filter server test",
     "test:server:watch": "pnpm --filter server test:watch",
     "test:server:coverage": "pnpm --filter server test:coverage",
