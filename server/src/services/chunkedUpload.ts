@@ -200,33 +200,35 @@ export class ChunkedUploadService {
       writeStream.on("error", handleStreamError);
 
       // Write each chunk in order to the final file
-      let totalBytesWritten = 0;
-      for (const chunkFile of chunkFiles) {
-        // Check if a stream error occurred in a previous iteration
-        if (streamError) {
-          throw streamError;
-        }
+      const writeChunk = (chunkData: Buffer): Promise<void> => {
+        return new Promise((resolve, reject) => {
+          if (streamError) {
+            return reject(streamError);
+          }
 
-        const chunkPath = path.join(metadata.tempDir, chunkFile);
-        const chunkData = await fs.readFile(chunkPath);
-        totalBytesWritten += chunkData.length;
-
-        await new Promise<void>((resolve, _reject) => {
-          // Use a single-use handler for this write operation
-          const drainHandler = () => {
+          const writeCallback = (error?: Error | null) => {
+            if (error) {
+              return reject(error);
+            }
             resolve();
           };
 
-          const canContinue = writeStream!.write(chunkData);
-          if (canContinue) {
-            // Data was written to the buffer immediately, resolve asynchronously
-            // to ensure proper event ordering and prevent synchronous resolution
-            setImmediate(resolve);
-          } else {
-            // Stream buffer full, wait for drain event before continuing
-            writeStream!.once("drain", drainHandler);
+          const canContinue = writeStream!.write(chunkData, writeCallback);
+
+          if (!canContinue) {
+            // If the buffer is full, wait for the drain event.
+            // The callback to write() will still be called, so we don't need to resolve here.
+            writeStream!.once("drain", resolve);
           }
         });
+      };
+
+      let totalBytesWritten = 0;
+      for (const chunkFile of chunkFiles) {
+        const chunkPath = path.join(metadata.tempDir, chunkFile);
+        const chunkData = await fs.readFile(chunkPath);
+        totalBytesWritten += chunkData.length;
+        await writeChunk(chunkData);
       }
 
       // Close the write stream and ensure all data is flushed to disk

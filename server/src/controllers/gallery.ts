@@ -8,21 +8,20 @@ import {
 import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 import { BucketService } from "../services/bucket.ts";
-import { UploadService } from "../services/upload.ts";
 import { InvalidInputError, normalizeGalleryFolderName, validateString } from "../utils.ts";
 
 const EXPIRES_ZSET = "galleries:expiries:v2";
 
 const GalleryNameError = "Gallery name cannot be empty";
-const ImagePathError = "Image path is required";
+// const ImagePathError = "Image path is required";
 
 export class GalleryController {
   #bucketService: BucketService;
-  #uploadService: UploadService;
+  // #uploadService: UploadService;
 
   constructor() {
     this.#bucketService = new BucketService();
-    this.#uploadService = new UploadService();
+    // this.#uploadService = new UploadService();
   }
 
   #isAppleDoubleFile = (pathLike: string | undefined | null) => {
@@ -46,7 +45,7 @@ export class GalleryController {
     return { listKey, memberKey, metaKey };
   };
 
-  #getGalleryFolderName = async (guildId: string, galleryName: string) => {
+  public getGalleryFolderName = async (guildId: string, galleryName: string) => {
     const validGuildId = validateString(guildId, "Guild ID is required");
     const validGalleryName = validateString(galleryName, GalleryNameError);
 
@@ -231,7 +230,7 @@ export class GalleryController {
 
   getGalleryContents = async (guildId: string, name: string) => {
     const validatedName = validateString(name, GalleryNameError);
-    const folderName = await this.#getGalleryFolderName(guildId, validatedName);
+    const folderName = await this.getGalleryFolderName(guildId, validatedName);
 
     appLogger.debug(
       { guildId, galleryName: name, folderName },
@@ -392,8 +391,50 @@ export class GalleryController {
     }
   };
 
-  getGalleryFolderName = async (guildId: string, galleryName: string): Promise<string> => {
-    return await this.#getGalleryFolderName(guildId, galleryName);
+  decrementGalleryItemCount = async (guildId: string, galleryName: string, count: number = 1) => {
+    try {
+      const validGuildId = validateString(guildId, "Guild ID is required");
+      const validGalleryName = validateString(galleryName, GalleryNameError);
+
+      const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+      if (!metaKey) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[decrementGalleryItemCount] Missing meta key, skipping decrement",
+        );
+        return;
+      }
+
+      const metadataJson = await redis.client.get(metaKey);
+      if (!metadataJson) {
+        appLogger.warn(
+          { guildId: validGuildId, galleryName: validGalleryName },
+          "[decrementGalleryItemCount] Gallery metadata not found, skipping decrement",
+        );
+        return;
+      }
+
+      const metadata = JSON.parse(metadataJson);
+      const previousCount = metadata.totalItems ?? 0;
+      metadata.totalItems = Math.max(0, previousCount - count);
+
+      await redis.client.set(metaKey, JSON.stringify(metadata));
+      appLogger.debug(
+        {
+          guildId: validGuildId,
+          galleryName: validGalleryName,
+          previousCount,
+          decrement: count,
+          newTotal: metadata.totalItems,
+        },
+        "[decrementGalleryItemCount] Gallery item count decremented",
+      );
+    } catch (error) {
+      appLogger.error(
+        { error, guildId, galleryName, count },
+        "[decrementGalleryItemCount] Failed to decrement gallery item count",
+      );
+    }
   };
 
   hasGallery = async (guildId: string, galleryName: string) => {
@@ -434,7 +475,7 @@ export class GalleryController {
       "[renameGallery] Starting gallery rename operation",
     );
 
-    const currentFolderName = await this.#getGalleryFolderName(validGuildId, validOldName);
+    const currentFolderName = await this.getGalleryFolderName(validGuildId, validOldName);
     const newFolderName = normalizeGalleryFolderName(validNewName);
 
     const {
@@ -721,7 +762,7 @@ export class GalleryController {
   removeGallery = async (guildId: string, galleryName: string) => {
     const validatedGuildId = validateString(guildId, "Guild ID is required");
     const validatedName = validateString(galleryName, GalleryNameError);
-    const folderName = await this.#getGalleryFolderName(validatedGuildId, validatedName);
+    const folderName = await this.getGalleryFolderName(validatedGuildId, validatedName);
 
     const { listKey, memberKey, metaKey } = this.#galleryKeys(validatedGuildId, validatedName);
     if (!metaKey) {
@@ -748,20 +789,5 @@ export class GalleryController {
     await redis.client.set(key, validatedGalleryName);
 
     return { defaultGallery: validatedGalleryName };
-  };
-
-  getImage = async (guildId: string, galleryName: string, imagePath: string) => {
-    const validatedGalleryName = validateString(galleryName, GalleryNameError);
-    const folderName = await this.#getGalleryFolderName(guildId, validatedGalleryName);
-    const validatedImagePath = validateString(imagePath, ImagePathError);
-
-    // Sanitize path to prevent traversal attacks
-    const sanitizedImagePath = this.#uploadService.sanitizeKeySegment(validatedImagePath);
-
-    // Build the full S3 key
-    const key = `${folderName}/uploads/${sanitizedImagePath}`;
-
-    // Get the object from S3
-    return await this.#bucketService.getObject(key);
   };
 }

@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { createReadStream, createWriteStream } from "fs";
 import { mkdir, rm } from "fs/promises";
 import { tmpdir } from "os";
-import { extname, join } from "path";
+import { join } from "path";
 import unzipper from "unzipper";
 import {
   finalizeUploadRequestSchema,
@@ -123,12 +123,34 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     );
 
     // If this looks like a zip upload, extract and upload individual files instead of the archive
-    const ext = extname(metadata.fileName || "").toLowerCase();
-    const looksLikeZipByExt = ext === ".zip";
-    const shouldTreatAsZip = looksLikeZipByExt;
+    // const ext = extname(metadata.fileName || "").toLowerCase();
+    const shouldTreatAsZip = false;
 
     if (!shouldTreatAsZip) {
       try {
+        // Validate that the file is an image based on MIME type
+        const validImageTypes = [
+          "image/jpeg",
+          "image/png",
+          "image/gif",
+          "image/webp",
+          "image/svg+xml",
+          "image/bmp",
+          "image/tiff",
+          "image/x-icon",
+        ];
+
+        if (!validImageTypes.includes(metadata.fileType)) {
+          await rm(finalizedPath, { force: true }).catch(() => {});
+          chunkedUploadService.markFailed(
+            uploadId,
+            `Invalid file type: ${metadata.fileType}. Only image files are supported.`,
+          );
+          return res.status(400).json({
+            error: `Invalid file type: ${metadata.fileType}. Only image files are supported.`,
+          });
+        }
+
         // Update progress for single file upload
         chunkedUploadService.updateProgress(uploadId, "processing", "server-upload", {
           totalFiles: 1,
@@ -174,41 +196,20 @@ export const finalizeUpload = async (req: Request, res: Response) => {
     chunkedUploadService.updateProgress(uploadId, "processing", "server-zip-extract");
 
     try {
-      // Pre-validate ZIP file structure before extraction
-      try {
-        const zipFile = await unzipper.Open.file(finalizedPath);
-        const fileCount = Object.keys(zipFile.files).length;
-        appLogger.debug(
-          { uploadId, fileCount },
-          "[finalizeUpload] ZIP file structure validation passed",
-        );
-      } catch (validationErr) {
-        appLogger.warn(
-          { err: validationErr, uploadId },
-          "[finalizeUpload] ZIP file structure validation failed",
-        );
-        // Check if this is a stream corruption issue (incomplete write)
-        const errorMsg =
-          validationErr instanceof Error ? validationErr.message : String(validationErr);
-        if (errorMsg.includes("unexpected end") || errorMsg.includes("Z_BUF_ERROR")) {
-          throw new Error(
-            "The ZIP file was corrupted during upload. This may be due to network instability or server issues. Please try uploading again.",
-          );
-        }
-        throw new Error(
-          "The ZIP file structure is corrupted. Please try re-creating the ZIP file.",
-        );
-      }
+      // Note: We skip pre-validation and go straight to extraction streaming.
+      // This allows us to process ZIPs even if they have minor structural issues,
+      // and provides more detailed error messages if extraction fails.
 
       // Track discovered files during extraction
       const discoveredFiles: string[] = [];
+      const extractionPromises: Promise<void>[] = [];
 
       await new Promise<void>((resolve, reject) => {
         const sourceStream = createReadStream(finalizedPath);
         sourceStream.on("error", (e) => reject(e));
         const stream = sourceStream
           .pipe(unzipper.Parse())
-          .on("entry", async (entry) => {
+          .on("entry", (entry) => {
             const fileName = entry.path || "";
             const type = entry.type; // "File" or "Directory"
 
@@ -235,13 +236,27 @@ export const finalizeUpload = async (req: Request, res: Response) => {
             const lastSlash = destPath.lastIndexOf("/");
             const destDir = lastSlash === -1 ? extractDir : destPath.slice(0, lastSlash);
 
-            // Ensure parent directory exists before writing the file
-            await mkdir(destDir, { recursive: true }).catch(() => {});
+            // Create a promise for this file extraction
+            const fileExtractionPromise = mkdir(destDir, { recursive: true }).then(() => {
+              return new Promise<void>((fileResolve, fileReject) => {
+                const writeStream = createWriteStream(destPath);
+                writeStream.on("finish", () => fileResolve());
+                writeStream.on("error", (err) => fileReject(err));
+                entry.pipe(writeStream);
+              });
+            });
 
-            const writeStream = createWriteStream(destPath);
-            entry.pipe(writeStream);
+            extractionPromises.push(fileExtractionPromise);
           })
-          .on("close", () => resolve())
+          .on("close", async () => {
+            // Wait for all file extractions to complete before resolving
+            try {
+              await Promise.all(extractionPromises);
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          })
           .on("error", (e) => reject(e));
 
         stream.on("error", (e) => reject(e));
@@ -258,6 +273,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       const { readdir, stat } = await import("fs/promises");
 
       let processedCount = 0;
+      let uploadedCount = 0;
 
       const walkAndUpload = async (dir: string) => {
         const entries = await readdir(dir, { withFileTypes: true });
@@ -276,6 +292,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
           await bucketService.uploadToBucket(galleryFolderName, objectName, fullPath);
 
           // Update progress after each file upload
+          uploadedCount++;
           processedCount++;
           chunkedUploadService.updateProgress(uploadId, "processing", "server-upload", {
             processedFiles: processedCount,
@@ -288,22 +305,24 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       // Mark upload as completed
       chunkedUploadService.updateProgress(uploadId, "completed", "server-upload");
 
-      // Increment gallery item count by the number of files extracted and uploaded from zip
-      await galleryController.incrementGalleryItemCount(
-        metadata.guildId,
-        metadata.galleryName,
-        discoveredFiles.length,
-      );
+      // Increment gallery item count by the number of files actually uploaded from zip
+      if (uploadedCount > 0) {
+        await galleryController.incrementGalleryItemCount(
+          metadata.guildId,
+          metadata.galleryName,
+          uploadedCount,
+        );
 
-      appLogger.debug(
-        {
-          uploadId,
-          guildId: metadata.guildId,
-          galleryName: metadata.galleryName,
-          filesAdded: discoveredFiles.length,
-        },
-        "[finalizeUpload] Gallery item count incremented after ZIP upload",
-      );
+        appLogger.debug(
+          {
+            uploadId,
+            guildId: metadata.guildId,
+            galleryName: metadata.galleryName,
+            filesAdded: uploadedCount,
+          },
+          "[finalizeUpload] Gallery item count incremented after ZIP upload",
+        );
+      }
     } catch (zipErr) {
       appLogger.error(
         { err: zipErr, uploadId, metadata },

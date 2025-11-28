@@ -1,15 +1,49 @@
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const bucketServiceMocks = vi.hoisted(() => ({
-  createPresignedUrl: vi.fn(),
+// Create mock instances
+const bucketServiceMock = {
   getObject: vi.fn(),
-}));
+};
+
+const galleryControllerMock = {
+  listGalleries: vi.fn(),
+  getGalleryFolderName: vi.fn(),
+};
 
 vi.mock("../services/bucket.ts", () => ({
-  BucketService: {
-    create: vi.fn().mockResolvedValue(bucketServiceMocks),
+  BucketService: class {
+    static async create() {
+      const instance = new this();
+      return instance;
+    }
+
+    getObject = bucketServiceMock.getObject;
   },
+}));
+
+vi.mock("../controllers/gallery.ts", () => ({
+  GalleryController: class {
+    async listGalleries(guildId: string) {
+      return galleryControllerMock.listGalleries(guildId);
+    }
+
+    async getGalleryFolderName(guildId: string, galleryName: string) {
+      return galleryControllerMock.getGalleryFolderName(guildId, galleryName);
+    }
+  },
+}));
+
+vi.mock("../middleware/logger.ts", () => ({
+  appLogger: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+vi.mock("../utils.ts", () => ({
+  normalizeGalleryFolderName: vi.fn((name: string) => name.toLowerCase().replace(/\s+/g, "-")),
 }));
 
 const handlers = await import("./media.ts");
@@ -20,242 +54,190 @@ const createRes = () => {
   res.status = vi.fn().mockReturnThis();
   res.json = vi.fn().mockReturnThis();
   res.send = vi.fn().mockReturnThis();
-  res.setHeader = vi.fn();
+  res.setHeader = vi.fn().mockReturnThis();
   return res as Response;
 };
 
 const createReq = (overrides: Partial<Request> = {}) => {
   const req: Partial<Request> = {
     query: {},
-    body: {},
     params: {},
-    headers: {},
+    path: "/test/path",
+    originalUrl: "/test/path",
     ...overrides,
   };
   return req as Request;
 };
 
-const resetMocks = () => {
-  bucketServiceMocks.createPresignedUrl.mockReset();
-  bucketServiceMocks.getObject.mockReset();
-};
-
 describe("media handlers", () => {
   beforeEach(() => {
-    resetMocks();
+    // Reset mocks before each test
+    bucketServiceMock.getObject.mockReset();
+    galleryControllerMock.listGalleries.mockReset();
+    galleryControllerMock.getGalleryFolderName.mockReset();
   });
 
   describe("streamMedia", () => {
-    describe("HTML rendering path", () => {
-      it("returns HTML page when Accept header includes text/html", async () => {
-        const req = createReq({
-          params: { galleryName: "summer", objectName: "photo.jpg" } as Request["params"],
-          headers: { accept: "text/html" },
-        });
-        const res = createRes();
-        bucketServiceMocks.createPresignedUrl.mockResolvedValue(
-          "https://example.com/presigned-url",
-        );
-
-        await streamMedia(req, res);
-
-        expect(bucketServiceMocks.createPresignedUrl).toHaveBeenCalledWith("summer/photo.jpg");
-        expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "text/html");
-        expect(res.send).toHaveBeenCalled();
-        const htmlContent = (res.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-        expect(htmlContent).toContain("<!DOCTYPE html>");
-        expect(htmlContent).toContain("https://example.com/presigned-url");
+    it("returns 400 when galleryName is missing", async () => {
+      const req = createReq({
+        params: { year: "2024", month: "01", day: "15", splat: "photo.jpg" } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
       });
+      const res = createRes();
 
-      it("handles nested object paths", async () => {
-        const req = createReq({
-          params: {
-            galleryName: "vacation",
-            objectName: ["2024", "summer", "beach.png"],
-          } as Request["params"],
-          headers: { accept: "text/html,application/xhtml+xml" },
-        });
-        const res = createRes();
-        bucketServiceMocks.createPresignedUrl.mockResolvedValue("https://example.com/nested-url");
+      await streamMedia(req, res);
 
-        await streamMedia(req, res);
-
-        expect(bucketServiceMocks.createPresignedUrl).toHaveBeenCalledWith(
-          "vacation/2024/summer/beach.png",
-        );
-        expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "text/html");
-      });
-
-      it("escapes HTML entities in fileName to prevent XSS", async () => {
-        // Realistically, angle brackets would be URL-encoded in the path,
-        // but the handler should still escape any dangerous characters
-        const req = createReq({
-          params: {
-            galleryName: "gallery",
-            objectName: 'file"onclick=alert(1)".jpg',
-          } as Request["params"],
-          headers: { accept: "text/html" },
-        });
-        const res = createRes();
-        bucketServiceMocks.createPresignedUrl.mockResolvedValue("https://example.com/url");
-
-        await streamMedia(req, res);
-
-        const htmlContent = (res.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-        // Quotes should be escaped to prevent attribute injection
-        expect(htmlContent).not.toContain('"onclick=');
-        expect(htmlContent).toContain("&quot;onclick=");
-      });
-
-      it("escapes HTML entities in presignedUrl to prevent XSS", async () => {
-        const req = createReq({
-          params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
-          headers: { accept: "text/html" },
-        });
-        const res = createRes();
-        // Simulate a malicious URL (though unlikely from S3, should still be safe)
-        bucketServiceMocks.createPresignedUrl.mockResolvedValue(
-          'https://example.com?foo="><script>alert("xss")</script>',
-        );
-
-        await streamMedia(req, res);
-
-        const htmlContent = (res.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-        expect(htmlContent).toContain('https://example.com?foo="><script>alert("xss")</script>');
-      });
-
-      it("correctly encodes legitimate presigned URLs with query parameters", async () => {
-        const req = createReq({
-          params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
-          headers: { accept: "text/html" },
-        });
-        const res = createRes();
-        // Simulate a typical S3 presigned URL with multiple query parameters
-        const presignedUrl =
-          "https://s3.example.com/bucket/photo.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLEFAKE123&X-Amz-Date=20231215T120000Z&X-Amz-Expires=3600&X-Amz-Signature=abc123";
-        bucketServiceMocks.createPresignedUrl.mockResolvedValue(presignedUrl);
-
-        await streamMedia(req, res);
-
-        const htmlContent = (res.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
-        // The URL should be included as-is in the HTML
-        expect(htmlContent).toContain(presignedUrl);
-        // Verify the URL is properly embedded in an img src attribute
-        expect(htmlContent).toMatch(/<img src="[^"]+X-Amz-/);
-      });
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing galleryName parameter" });
     });
 
-    describe("direct image serving path", () => {
-      it("returns image data when Accept header does not include text/html", async () => {
-        const req = createReq({
-          params: { galleryName: "photos", objectName: "image.png" } as Request["params"],
-          headers: { accept: "image/*" },
-        });
-        const res = createRes();
-        const imageBuffer = Buffer.from("fake-image-data");
-        bucketServiceMocks.getObject.mockResolvedValue({
-          data: imageBuffer,
-          contentType: "image/png",
-        });
-
-        await streamMedia(req, res);
-
-        expect(bucketServiceMocks.getObject).toHaveBeenCalledWith("photos/image.png");
-        expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "image/png");
-        expect(res.send).toHaveBeenCalledWith(imageBuffer);
+    it("returns 400 when guildId is missing", async () => {
+      const req = createReq({
+        params: {
+          galleryName: "summer",
+          year: "2024",
+          month: "01",
+          day: "15",
+          splat: "photo.jpg",
+        } as Request["params"],
+        query: {} as Request["query"],
       });
+      const res = createRes();
 
-      it("returns image data when Accept header is empty", async () => {
-        const req = createReq({
-          params: { galleryName: "photos", objectName: "image.jpg" } as Request["params"],
-          headers: {},
-        });
-        const res = createRes();
-        const imageBuffer = Buffer.from("jpeg-data");
-        bucketServiceMocks.getObject.mockResolvedValue({
-          data: imageBuffer,
-          contentType: "image/jpeg",
-        });
+      await streamMedia(req, res);
 
-        await streamMedia(req, res);
-
-        expect(bucketServiceMocks.getObject).toHaveBeenCalledWith("photos/image.jpg");
-        expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "image/jpeg");
-        expect(res.send).toHaveBeenCalledWith(imageBuffer);
-      });
-
-      it("handles nested object paths for direct serving", async () => {
-        const req = createReq({
-          params: {
-            galleryName: "archive",
-            objectName: ["year", "month", "day", "file.webp"],
-          } as Request["params"],
-          headers: { accept: "image/webp" },
-        });
-        const res = createRes();
-        const imageBuffer = Buffer.from("webp-data");
-        bucketServiceMocks.getObject.mockResolvedValue({
-          data: imageBuffer,
-          contentType: "image/webp",
-        });
-
-        await streamMedia(req, res);
-
-        expect(bucketServiceMocks.getObject).toHaveBeenCalledWith(
-          "archive/year/month/day/file.webp",
-        );
-        expect(res.send).toHaveBeenCalledWith(imageBuffer);
-      });
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
     });
 
-    describe("error handling", () => {
-      it("returns 500 when presigned URL creation fails", async () => {
-        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-        const req = createReq({
-          params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
-          headers: { accept: "text/html" },
-        });
-        const res = createRes();
-        bucketServiceMocks.createPresignedUrl.mockRejectedValue(new Error("S3 error"));
+    it("returns 404 when gallery is not found", async () => {
+      const req = createReq({
+        params: {
+          galleryName: "nonexistent",
+          year: "2024",
+          month: "01",
+          day: "15",
+          splat: "photo.jpg",
+        } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
+      });
+      const res = createRes();
+      galleryControllerMock.listGalleries.mockResolvedValue([
+        { name: "summer", meta: {} },
+        { name: "winter", meta: {} },
+      ]);
 
-        await streamMedia(req, res);
+      await streamMedia(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith("Error streaming media");
-        consoleSpy.mockRestore();
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Gallery not found" });
+    });
+
+    it("returns 400 for InvalidInputError exceptions", async () => {
+      const req = createReq({
+        params: {
+          galleryName: "summer",
+          year: "2024",
+          month: "01",
+          day: "15",
+          splat: "photo.jpg",
+        } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
+      });
+      const res = createRes();
+
+      galleryControllerMock.listGalleries.mockRejectedValue(
+        Object.assign(new Error("Invalid input"), { name: "InvalidInputError" }),
+      );
+
+      await streamMedia(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Invalid input" });
+    });
+
+    it("returns 500 for unexpected errors", async () => {
+      const req = createReq({
+        params: {
+          galleryName: "summer",
+          year: "2024",
+          month: "01",
+          day: "15",
+          splat: "photo.jpg",
+        } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
+      });
+      const res = createRes();
+
+      galleryControllerMock.listGalleries.mockRejectedValue(
+        new Error("Database connection failed"),
+      );
+
+      await streamMedia(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to retrieve media" });
+    });
+
+    it("returns 404 when image is not found", async () => {
+      const req = createReq({
+        params: {
+          galleryName: "summer",
+          year: "2024",
+          month: "01",
+          day: "15",
+          splat: "photo.jpg",
+        } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
+      });
+      const res = createRes();
+
+      // The normalizeGalleryFolderName mock returns lowercase with spaces replaced by dashes
+      // So "summer" stays "summer" and "Summer" becomes "summer"
+      galleryControllerMock.listGalleries.mockResolvedValue([{ name: "summer", meta: {} }]);
+      galleryControllerMock.getGalleryFolderName.mockResolvedValue("summer");
+
+      const noSuchKeyError = new Error("NoSuchKey");
+      noSuchKeyError.name = "NoSuchKey";
+      bucketServiceMock.getObject.mockRejectedValue(noSuchKeyError);
+
+      await streamMedia(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Image not found" });
+    });
+
+    it("successfully retrieves and streams media", async () => {
+      const req = createReq({
+        params: {
+          galleryName: "summer",
+          year: "2024",
+          month: "01",
+          day: "15",
+          splat: "photo.jpg",
+        } as Request["params"],
+        query: { guildId: "guild-1" } as Request["query"],
+      });
+      const res = createRes();
+      const imageBuffer = Buffer.from("image data");
+
+      // The normalizeGalleryFolderName mock returns lowercase with spaces replaced by dashes
+      // So "summer" stays "summer" and "Summer" becomes "summer"
+      galleryControllerMock.listGalleries.mockResolvedValue([{ name: "summer", meta: {} }]);
+      galleryControllerMock.getGalleryFolderName.mockResolvedValue("summer");
+      bucketServiceMock.getObject.mockResolvedValue({
+        data: imageBuffer,
+        contentType: "image/jpeg",
       });
 
-      it("returns 500 when object retrieval fails", async () => {
-        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-        const req = createReq({
-          params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
-          headers: { accept: "image/*" },
-        });
-        const res = createRes();
-        bucketServiceMocks.getObject.mockRejectedValue(new Error("Object not found"));
+      await streamMedia(req, res);
 
-        await streamMedia(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith("Error streaming media");
-        consoleSpy.mockRestore();
-      });
-
-      it("logs errors to console", async () => {
-        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-        const req = createReq({
-          params: { galleryName: "gallery", objectName: "photo.jpg" } as Request["params"],
-          headers: { accept: "image/*" },
-        });
-        const res = createRes();
-        const error = new Error("Test error");
-        bucketServiceMocks.getObject.mockRejectedValue(error);
-
-        await streamMedia(req, res);
-
-        expect(consoleSpy).toHaveBeenCalledWith("Error streaming media:", error);
-        consoleSpy.mockRestore();
-      });
+      expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "image/jpeg");
+      expect(res.setHeader).toHaveBeenCalledWith(
+        "Cache-Control",
+        "public, max-age=31536000, immutable",
+      );
+      expect(res.send).toHaveBeenCalledWith(imageBuffer);
     });
   });
 });

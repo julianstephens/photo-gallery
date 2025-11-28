@@ -80,9 +80,9 @@ export class BucketService {
         }),
       );
       return resp.Metadata ?? {};
-    } catch (error) {
-      // If HEAD is forbidden, return empty metadata to avoid failing the listing
-      console.warn(`Failed to get metadata for ${key}:`, error);
+    } catch {
+      // If HEAD fails (permission denied, not found, etc.), silently return empty metadata
+      // This is expected behavior - metadata is optional for displaying gallery items
       return {};
     }
   }

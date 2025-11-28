@@ -35,8 +35,7 @@ const galleryRouter = Router();
 galleryRouter.get("/galleries", handlers.listGalleries);
 galleryRouter.get("/galleries/single", handlers.getSingleGallery);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
-galleryRouter.get("/images/:galleryName/{*imagePath}", handlers.getImage);
-galleryRouter.post("/galleries", handlers.createGallery);
+galleryRouter.post("/galleries", requiresAdmin, handlers.createGallery);
 galleryRouter.post("/galleries/default", handlers.setDefaultGallery);
 galleryRouter.put("/galleries", requiresAdmin, handlers.updateGalleryName);
 galleryRouter.delete("/galleries", requiresAdmin, handlers.removeGallery);
@@ -63,7 +62,7 @@ uploadsRouter.post("/uploads/cleanup", requiresAdmin, handlers.cleanupExpiredUpl
  * MEDIA PROXY ROUTE
  **********************/
 const mediaRouter = Router();
-mediaRouter.get("/:galleryName/{*objectName}", streamMedia);
+mediaRouter.get("/:galleryName/:year-:month-:day/*splat", streamMedia);
 
 export default {
   healthRouter,

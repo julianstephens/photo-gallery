@@ -8,7 +8,6 @@ const controllerMocks = vi.hoisted(() => ({
   createGallery: vi.fn(),
   setDefaultGallery: vi.fn(),
   removeGallery: vi.fn(),
-  getImage: vi.fn(),
 }));
 
 const schemaMocks = vi.hoisted(() => ({
@@ -35,14 +34,8 @@ vi.mock("../middleware/logger.ts", () => ({
 vi.mock("utils", () => schemaMocks);
 
 const handlers = await import("./gallery.ts");
-const {
-  listGalleries,
-  listGalleryItems,
-  createGallery,
-  setDefaultGallery,
-  removeGallery,
-  getImage,
-} = handlers;
+const { listGalleries, listGalleryItems, createGallery, setDefaultGallery, removeGallery } =
+  handlers;
 
 const createRes = () => {
   const res: Partial<Response> = {};
@@ -247,60 +240,6 @@ describe("gallery handlers", () => {
       await removeGallery(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
-    });
-  });
-
-  describe("getImage", () => {
-    it("validates required params", async () => {
-      const res = createRes();
-
-      await getImage(createReq(), res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it("requires guildId", async () => {
-      const res = createRes();
-      const req = createReq({
-        params: { galleryName: "g", imagePath: "img.png" } as Request["params"],
-      });
-
-      await getImage(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
-    });
-
-    it("fetches images and sets headers", async () => {
-      const res = createRes();
-      const req = createReq({
-        params: { galleryName: "g", imagePath: "img.png" } as Request["params"],
-        query: { guildId: "guild-1" } as Request["query"],
-      });
-      controllerMocks.getImage.mockResolvedValue({
-        data: Buffer.from("123"),
-        contentType: "image/png",
-      });
-
-      await getImage(req, res);
-
-      expect(controllerMocks.getImage).toHaveBeenCalledWith("guild-1", "g", "img.png");
-      expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "image/png");
-      expect(res.send).toHaveBeenCalledWith(Buffer.from("123"));
-    });
-
-    it("maps missing objects", async () => {
-      const res = createRes();
-      const req = createReq({
-        params: { galleryName: "g", imagePath: "img.png" } as Request["params"],
-        query: { guildId: "guild-1" } as Request["query"],
-      });
-      controllerMocks.getImage.mockRejectedValue({ name: "NoSuchKey" });
-
-      await getImage(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ error: "Image not found" });
     });
   });
 });
