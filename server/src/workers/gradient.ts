@@ -116,6 +116,7 @@ export async function processJob(jobId: string): Promise<void> {
   } catch {
     appLogger.error({ jobId }, "[GradientWorker] Failed to parse job data");
     await redis.client.del(jobKey);
+    await redis.client.lRem(PROCESSING_KEY, 0, jobId);
     return;
   }
 
