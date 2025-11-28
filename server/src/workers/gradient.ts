@@ -335,7 +335,9 @@ export async function stopGradientWorker(): Promise<void> {
   // Move any jobs in processing back to queue
   try {
     let jobId: string | null;
-    while ((jobId = await redis.client.lMove(PROCESSING_KEY, QUEUE_KEY, "LEFT", "RIGHT")) !== null) {
+    while (
+      (jobId = await redis.client.lMove(PROCESSING_KEY, QUEUE_KEY, "LEFT", "RIGHT")) !== null
+    ) {
       appLogger.debug({ jobId }, "[GradientWorker] Moved job from processing back to queue");
     }
   } catch (error) {

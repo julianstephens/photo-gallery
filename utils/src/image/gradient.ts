@@ -194,6 +194,8 @@ async function generateGradientInternal(
       rgb: synthesized,
       lab: rgbToLab(synthesized),
       hsl: rgbToHsl(synthesized),
+      // delta = 0 for synthesized colors since they weren't extracted from image clusters
+      // (deltaE represents the CIE76 perceptual difference from the primary color)
       delta: 0,
     };
   }
