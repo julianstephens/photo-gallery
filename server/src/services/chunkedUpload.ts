@@ -1,8 +1,9 @@
-import { randomUUID } from "crypto";
-import { createWriteStream, promises as fs } from "fs";
+import { createHash, randomUUID } from "crypto";
+import { createReadStream, createWriteStream, promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import type {
+  FileChecksum,
   FinalizeUploadResponse,
   InitiateUploadRequest,
   InitiateUploadResponse,
@@ -58,6 +59,68 @@ interface ProgressStateEntry {
   completedAt: number | null;
 }
 const uploadProgressState = new Map<string, ProgressStateEntry>();
+
+class Crc32Accumulator {
+  #value = 0xffffffff;
+
+  update(buffer: Buffer) {
+    let crc = this.#value >>> 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const byte = buffer[i];
+      crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    }
+    this.#value = crc >>> 0;
+  }
+
+  digestUInt32() {
+    return (this.#value ^ 0xffffffff) >>> 0;
+  }
+
+  digestBase64() {
+    const buf = Buffer.allocUnsafe(4);
+    buf.writeUInt32BE(this.digestUInt32());
+    return buf.toString("base64");
+  }
+}
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let crc = i;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 1) !== 0) {
+        crc = (crc >>> 1) ^ 0xedb88320;
+      } else {
+        crc >>>= 1;
+      }
+    }
+    table[i] = crc >>> 0;
+  }
+  return table;
+})();
+
+const computeFileChecksums = async (filePath: string): Promise<FileChecksum> => {
+  const md5 = createHash("md5");
+  const crc32 = new Crc32Accumulator();
+  let byteLength = 0;
+
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(filePath);
+    stream.on("data", (chunk: Buffer) => {
+      md5.update(chunk);
+      crc32.update(chunk);
+      byteLength += chunk.length;
+    });
+    stream.on("end", () => resolve());
+    stream.on("error", (err) => reject(err));
+  });
+
+  return {
+    byteLength,
+    crc32Base64: crc32.digestBase64(),
+    md5Base64: md5.digest("base64"),
+  };
+};
 
 export class ChunkedUploadService {
   /**
@@ -314,9 +377,13 @@ export class ChunkedUploadService {
         }
       }
 
+      const checksums = await computeFileChecksums(finalPath);
+      appLogger.debug({ uploadId, checksums }, "[chunkedUpload] finalizeUpload computed checksums");
+
       return {
         success: true,
         filePath: finalPath,
+        checksums,
       };
     } catch (error) {
       appLogger.error({ err: error, uploadId }, "[chunkedUpload] finalizeUpload failed");

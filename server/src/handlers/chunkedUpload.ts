@@ -118,8 +118,9 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Upload session not found" });
     }
 
-    const result = await chunkedUploadService.finalizeUpload(uploadId);
-    const finalizedPath = result.filePath;
+    const finalizeResponse = await chunkedUploadService.finalizeUpload(uploadId);
+    const finalizedPath = finalizeResponse.filePath;
+    const checksums = finalizeResponse.checksums;
     const uploadDatePrefix = `uploads/${new Date().toISOString().split("T")[0]}`;
 
     // Get the normalized gallery folder name from metadata
@@ -172,11 +173,48 @@ export const finalizeUpload = async (req: Request, res: Response) => {
             fileType: metadata.fileType,
             expectedSize: metadata.totalSize,
             finalizedPath,
+            checksums,
           },
           "[finalizeUpload] Uploading assembled file to bucket",
         );
-        await bucketService.uploadToBucket(galleryFolderName, objectName, finalizedPath);
+        await bucketService.uploadToBucket(galleryFolderName, objectName, finalizedPath, {
+          meta: { "Content-Type": metadata.fileType },
+          checksums,
+        });
         await rm(finalizedPath, { force: true }).catch(() => {});
+
+        if (checksums) {
+          try {
+            const remoteChecksum = await bucketService.getObjectChecksums(storageKey);
+            const remoteCrc32 = remoteChecksum?.ChecksumCRC32;
+            if (!remoteCrc32) {
+              appLogger.warn(
+                { uploadId, storageKey },
+                "[finalizeUpload] Remote checksum unavailable after upload",
+              );
+            } else if (remoteCrc32 !== checksums.crc32Base64) {
+              appLogger.error(
+                {
+                  uploadId,
+                  storageKey,
+                  localCrc32: checksums.crc32Base64,
+                  remoteCrc32,
+                },
+                "[finalizeUpload] Remote checksum mismatch after upload",
+              );
+            } else {
+              appLogger.info(
+                { uploadId, storageKey, crc32: remoteCrc32 },
+                "[finalizeUpload] Remote checksum verified",
+              );
+            }
+          } catch (checksumErr) {
+            appLogger.warn(
+              { uploadId, storageKey, err: checksumErr },
+              "[finalizeUpload] Failed to fetch remote checksum metadata",
+            );
+          }
+        }
 
         // Enqueue gradient generation job (non-blocking)
         enqueueGradientJob({
@@ -205,7 +243,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
           "[finalizeUpload] Gallery item count incremented after single file upload",
         );
 
-        return res.status(200).json(result);
+        return res.status(200).json(finalizeResponse);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         chunkedUploadService.markFailed(uploadId, errorMessage);
@@ -406,7 +444,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       await rm(extractDir, { recursive: true, force: true }).catch(() => {});
     }
 
-    return res.status(200).json({ ...result, zipped: true });
+    return res.status(200).json({ ...finalizeResponse, zipped: true });
   } catch (err: unknown) {
     if (err instanceof ZodError) {
       return res.status(400).json({ error: "Invalid request body" });

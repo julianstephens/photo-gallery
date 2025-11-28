@@ -1,14 +1,15 @@
 import z from "zod";
 import type {
-  uploadJobSchema,
+  fileChecksumSchema,
+  finalizeUploadRequestSchema,
+  finalizeUploadResponseSchema,
   initiateUploadRequestSchema,
   initiateUploadResponseSchema,
   uploadChunkQuerySchema,
-  finalizeUploadRequestSchema,
-  finalizeUploadResponseSchema,
+  uploadJobSchema,
+  uploadProgressPhaseSchema,
   uploadProgressSchema,
   uploadProgressStatusSchema,
-  uploadProgressPhaseSchema,
 } from "../schemas/upload.ts";
 
 export type UploadJobStatus = "pending" | "processing" | "completed" | "failed";
@@ -28,6 +29,7 @@ export type InitiateUploadResponse = z.infer<typeof initiateUploadResponseSchema
 export type UploadChunkQuery = z.infer<typeof uploadChunkQuerySchema>;
 export type FinalizeUploadRequest = z.infer<typeof finalizeUploadRequestSchema>;
 export type FinalizeUploadResponse = z.infer<typeof finalizeUploadResponseSchema>;
+export type FileChecksum = z.infer<typeof fileChecksumSchema>;
 
 export interface ChunkedUploadProgress {
   uploadId: string;
