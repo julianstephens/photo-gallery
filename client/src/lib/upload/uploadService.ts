@@ -54,11 +54,12 @@ export const getUploadProgress = async (uploadId: string): Promise<UploadProgres
 
 /**
  * Upload a file in chunks with real-time progress tracking.
- * Uses chunkedUpload internally with server-side progress polling for a smooth progress bar.
+ * Uses chunkedUpload internally for reliable chunk uploads.
  *
- * Progress phases:
- * - 0-90%: Chunk upload progress
- * - 90-100%: Server-side processing (zip extraction, bucket uploads)
+ * Progress: 0-100% based on chunk upload completion.
+ * Note: Server-side processing happens after finalization but is typically fast
+ * for individual image uploads. For large zip uploads, consider using chunkedUpload
+ * directly with onServerProgress for more granular server-side progress tracking.
  */
 export const uploadFileInChunks = async (
   file: File,
@@ -66,35 +67,18 @@ export const uploadFileInChunks = async (
   guildId: string,
   onProgress: (progress: number) => void,
 ) => {
-  // Reserve 10% for server-side processing
-  const UPLOAD_PHASE_MAX = 90;
-
   try {
     const result = await chunkedUpload(file, {
       galleryName,
       guildId,
       baseUrl: API_BASE_URL,
       onProgress: (chunkProgress) => {
-        // Scale chunk progress to 0-90%
-        const scaledProgress = (chunkProgress.percentage / 100) * UPLOAD_PHASE_MAX;
-        onProgress(scaledProgress);
+        // Report chunk progress directly (0-100%)
+        onProgress(chunkProgress.percentage);
       },
-      onServerProgress: (serverProgress) => {
-        // Map server-side processing to 90-100%
-        const { progress } = serverProgress;
-        let serverPercentage = 0;
-
-        if (progress.totalFiles && progress.processedFiles) {
-          serverPercentage = (progress.processedFiles / progress.totalFiles) * 100;
-        } else if (progress.totalBytes && progress.uploadedBytes) {
-          serverPercentage = (progress.uploadedBytes / progress.totalBytes) * 100;
-        }
-
-        // Scale server progress to 90-100%
-        const scaledProgress =
-          UPLOAD_PHASE_MAX + (serverPercentage / 100) * (100 - UPLOAD_PHASE_MAX);
-        onProgress(scaledProgress);
-      },
+      // Don't use onServerProgress for simple uploads - it can cause
+      // the progress to get stuck if the server doesn't track progress
+      // or if the upload completes before polling starts
     });
 
     // Always report 100% on completion
