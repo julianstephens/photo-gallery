@@ -292,8 +292,8 @@ export function startGradientWorker(): void {
   workerRunning = true;
   activeJobCount = 0;
 
-  // Process queue at regular intervals
-  const pollIntervalMs = 1000; // Poll every second
+  // Process queue at regular intervals (configurable via GRADIENT_WORKER_POLL_INTERVAL_MS)
+  const pollIntervalMs = env.GRADIENT_WORKER_POLL_INTERVAL_MS;
   workerIntervalId = setInterval(() => {
     // Process delayed jobs first (move ready jobs to main queue)
     processDelayedJobs().catch((err) => {
