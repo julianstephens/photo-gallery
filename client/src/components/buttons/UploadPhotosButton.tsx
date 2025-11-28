@@ -25,6 +25,12 @@ export const UploadPhotosButton = ({
   buttonColorPalette = "gray",
   fullWidth = false,
 }: UploadPhotosButtonProps) => {
+  const MAX_FILE_UPLOAD_SIZE_BYTES = 500 * 1024 * 1024; // 500MB per file upload
+  const MAX_FILE_UPLOAD_COUNT = 50;
+  const MAX_FOLDER_UPLOAD_SIZE_BYTES = 150 * 1024 * 1024; // 150MB per file when uploading folders
+  const MAX_FOLDER_UPLOAD_COUNT = 200; // allow larger folder selections without overwhelming the UI
+  const formatBytesToMB = (bytes: number) => `${Math.round(bytes / (1024 * 1024))}MB`;
+
   const queryClient = useQueryClient();
   const { updateUploadMonitorVisibility, setHasActiveUploads } = useUploadContext();
   const [isLoading, setIsLoading] = useState(false);
@@ -161,18 +167,18 @@ export const UploadPhotosButton = ({
       <FileUpload.Root
         style={{ display: "none" }}
         accept={["image/*"]}
-        maxFileSize={500 * 1024 * 1024}
-        maxFiles={50}
+        maxFileSize={MAX_FILE_UPLOAD_SIZE_BYTES}
+        maxFiles={MAX_FILE_UPLOAD_COUNT}
         onFileReject={(details) => {
           if (details.files.some((f) => f.errors.includes("TOO_MANY_FILES"))) {
             toaster.error({
               title: "Too Many Files",
-              description: "Maximum 50 files per upload. Please select fewer files.",
+              description: `Maximum ${MAX_FILE_UPLOAD_COUNT} files per upload. Please select fewer files.`,
             });
           } else if (details.files.some((f) => f.errors.includes("TOO_LARGE"))) {
             toaster.error({
               title: "File Too Large",
-              description: "Maximum file size is 500MB. Please select smaller files.",
+              description: `Maximum file size is ${formatBytesToMB(MAX_FILE_UPLOAD_SIZE_BYTES)}. Please select smaller files.`,
             });
           } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
             toaster.error({
@@ -193,18 +199,18 @@ export const UploadPhotosButton = ({
       <FileUpload.Root
         style={{ display: "none" }}
         accept={["image/*"]}
-        maxFileSize={500 * 1024 * 1024}
-        maxFiles={10}
+        maxFileSize={MAX_FOLDER_UPLOAD_SIZE_BYTES}
+        maxFiles={MAX_FOLDER_UPLOAD_COUNT}
         onFileReject={(details) => {
           if (details.files.some((f) => f.errors.includes("TOO_MANY_FILES"))) {
             toaster.error({
               title: "Too Many Files",
-              description: "Maximum 10 folders per upload. Please select fewer folders.",
+              description: `Maximum ${MAX_FOLDER_UPLOAD_COUNT} items per folder upload. Please select fewer items.`,
             });
           } else if (details.files.some((f) => f.errors.includes("TOO_LARGE"))) {
             toaster.error({
               title: "File Too Large",
-              description: "Maximum file size is 500MB. Please select smaller files.",
+              description: `Maximum file size is ${formatBytesToMB(MAX_FOLDER_UPLOAD_SIZE_BYTES)}. Please select smaller files.`,
             });
           } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
             toaster.error({
