@@ -66,10 +66,23 @@ export const uploadFileInChunks = async (
   // Track bytes uploaded for each chunk to calculate overall progress
   const chunkBytesLoaded: number[] = new Array(totalParts).fill(0);
 
+  // Throttle progress updates to avoid excessive UI re-renders
+  const PROGRESS_THROTTLE_MS = 100;
+  let lastProgressUpdate = 0;
+  let pendingProgress: number | null = null;
+
   const updateTotalProgress = () => {
     const totalBytesLoaded = chunkBytesLoaded.reduce((sum, bytes) => sum + bytes, 0);
     const progress = (totalBytesLoaded / file.size) * 100;
-    onProgress(progress);
+
+    const now = Date.now();
+    if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS) {
+      lastProgressUpdate = now;
+      pendingProgress = null;
+      onProgress(progress);
+    } else {
+      pendingProgress = progress;
+    }
   };
 
   for (let i = 0; i < totalParts; i++) {
@@ -86,6 +99,11 @@ export const uploadFileInChunks = async (
   }
 
   await Promise.all(uploadPromises);
+
+  // Ensure final progress is reported (100%)
+  if (pendingProgress !== null) {
+    onProgress(pendingProgress);
+  }
 
   return finalizeUpload(uploadId);
 };
