@@ -3,11 +3,13 @@ import {
   galleryMetaSchema,
   type CreateGalleryRequest,
   type Gallery,
+  type GalleryItem,
   type SetDefaultGalleryRequest,
 } from "utils";
 import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 import { BucketService } from "../services/bucket.ts";
+import { GradientMetaService } from "../services/gradientMeta.ts";
 import { InvalidInputError, normalizeGalleryFolderName, validateString } from "../utils.ts";
 
 const EXPIRES_ZSET = "galleries:expiries:v2";
@@ -17,10 +19,12 @@ const GalleryNameError = "Gallery name cannot be empty";
 
 export class GalleryController {
   #bucketService: BucketService;
+  #gradientMetaService: GradientMetaService;
   // #uploadService: UploadService;
 
   constructor() {
     this.#bucketService = new BucketService();
+    this.#gradientMetaService = new GradientMetaService();
     // this.#uploadService = new UploadService();
   }
 
@@ -282,6 +286,25 @@ export class GalleryController {
       return isValid;
     });
 
+    // Enrich items with gradient metadata
+    const enrichedContents: GalleryItem[] = await Promise.all(
+      filteredContents.map(async (item) => {
+        try {
+          const storedGradient = await this.#gradientMetaService.getGradient(item.url);
+          if (storedGradient?.status === "completed" && storedGradient.gradient) {
+            return { ...item, gradient: storedGradient.gradient };
+          } else if (storedGradient?.status === "failed") {
+            return { ...item, gradient: null };
+          }
+          // For pending/processing or not found, leave gradient undefined
+          return item;
+        } catch {
+          // If there's an error getting gradient, just return the item without gradient
+          return item;
+        }
+      }),
+    );
+
     appLogger.debug(
       {
         guildId,
@@ -294,8 +317,8 @@ export class GalleryController {
 
     return {
       gallery: name,
-      count: filteredContents.length,
-      contents: filteredContents,
+      count: enrichedContents.length,
+      contents: enrichedContents,
     };
   };
 

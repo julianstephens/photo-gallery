@@ -49,3 +49,35 @@ export const updateGalleryNameSchema = z.object({
   galleryName: z.string().min(1).max(100),
   newGalleryName: z.string().min(1).max(100),
 });
+
+/**
+ * Job data schema for gradient generation background worker.
+ */
+export const generateGradientJobSchema = z.object({
+  guildId: z.string().min(1).max(100),
+  galleryName: z.string().min(1).max(100),
+  storageKey: z.string().min(1), // S3 object key for the image
+  itemId: z.string().min(1), // Unique identifier for the gallery item (derived from storage key)
+});
+
+/**
+ * Status of gradient generation for an image.
+ */
+export const gradientStatusSchema = z.enum([
+  "pending", // Job queued, not yet processed
+  "processing", // Currently being processed
+  "completed", // Successfully generated
+  "failed", // Failed after max retries, marked as no-gradient
+]);
+
+/**
+ * Stored gradient metadata including status.
+ */
+export const storedGradientSchema = z.object({
+  status: gradientStatusSchema,
+  gradient: imageGradientSchema.optional(), // Only present when status is 'completed'
+  attempts: z.number().int().min(0).default(0),
+  lastError: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});

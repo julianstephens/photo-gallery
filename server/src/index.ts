@@ -1,10 +1,14 @@
 import { appLogger } from "./middleware/logger.ts";
 import env from "./schemas/env.ts";
 import { createApp, printRegisteredRoutes } from "./server.ts";
+import { startGradientWorker, stopGradientWorker } from "./workers/index.ts";
 
 // Start server if run directly
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   const app = createApp();
+
+  // Start the gradient generation worker if enabled
+  startGradientWorker();
 
   appLogger.info("Registered Routes:");
   printRegisteredRoutes(app.router.stack);
@@ -13,8 +17,16 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   });
 
   // Graceful shutdown
-  const shutdown = (signal: string) => {
+  const shutdown = async (signal: string) => {
     appLogger.info({ signal }, `${signal} received, shutting down...`);
+
+    // Stop the gradient worker first
+    try {
+      await stopGradientWorker();
+    } catch (err) {
+      appLogger.error({ err }, "Error stopping gradient worker");
+    }
+
     server.close((err?: Error) => {
       if (err) {
         appLogger.error({ err }, "Error during server close");

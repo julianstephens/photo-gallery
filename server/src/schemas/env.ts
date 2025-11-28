@@ -45,6 +45,16 @@ export const envSchema = z.object({
       .map((id) => id.trim())
       .filter(Boolean),
   ),
+  // Gradient worker feature flag and configuration
+  GRADIENT_WORKER_ENABLED: z.coerce.boolean().default(false),
+  GRADIENT_WORKER_CONCURRENCY: z
+    .string()
+    .default("2")
+    .transform((val) => parseInt(val, 10)),
+  GRADIENT_JOB_MAX_RETRIES: z
+    .string()
+    .default("3")
+    .transform((val) => parseInt(val, 10)),
 });
 
 export type Env = z.infer<typeof envSchema>;

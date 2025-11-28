@@ -1,4 +1,10 @@
 packages:
-  - "client"
-  - "server"
-  - "utils"
+  - client
+  - server
+  - utils
+
+onlyBuiltDependencies:
+  - '@swc/core'
+  - esbuild
+  - sharp
+  - unrs-resolver

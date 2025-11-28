@@ -51,7 +51,7 @@ export async function generateGradientWithPlaceholder(
   const { result, placeholder } = await generateGradientInternal(buffer, options, {
     createPlaceholder: true,
   });
-  return { ...result, placeholder };
+  return { ...result, placeholder: placeholder ?? "" };
 }
 
 /* ---------------------------
@@ -194,6 +194,7 @@ async function generateGradientInternal(
       rgb: synthesized,
       lab: rgbToLab(synthesized),
       hsl: rgbToHsl(synthesized),
+      delta: 0,
     };
   }
 
