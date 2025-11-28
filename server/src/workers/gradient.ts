@@ -106,6 +106,7 @@ export async function processJob(jobId: string): Promise<void> {
   const jobDataStr = await redis.client.get(jobKey);
   if (!jobDataStr) {
     appLogger.warn({ jobId }, "[GradientWorker] Job not found, skipping");
+    await redis.client.lRem(PROCESSING_KEY, 0, jobId);
     return;
   }
 
