@@ -58,18 +58,20 @@ vi.mock("../services/gradientMeta.ts", () => ({
 }));
 
 // Mock utils gradient generation
+const mockGenerateGradient = vi.fn().mockResolvedValue({
+  palette: ["#FF0000", "#00FF00"],
+  primary: "#FF0000",
+  secondary: "#00FF00",
+  foreground: "#FFFFFF",
+  css: "linear-gradient(135deg, #FF0000 0%, #00FF00 100%)",
+  placeholder: "data:image/jpeg;base64,test",
+});
+
 vi.mock("utils", async () => {
   const actual = await vi.importActual("utils");
   return {
     ...actual,
-    generateGradientWithPlaceholder: vi.fn().mockResolvedValue({
-      palette: ["#FF0000", "#00FF00"],
-      primary: "#FF0000",
-      secondary: "#00FF00",
-      foreground: "#FFFFFF",
-      css: "linear-gradient(135deg, #FF0000 0%, #00FF00 100%)",
-      placeholder: "data:image/jpeg;base64,test",
-    }),
+    generateGradientWithPlaceholder: mockGenerateGradient,
   };
 });
 
@@ -79,6 +81,14 @@ describe("GradientWorker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    mockGenerateGradient.mockResolvedValue({
+      palette: ["#FF0000", "#00FF00"],
+      primary: "#FF0000",
+      secondary: "#00FF00",
+      foreground: "#FFFFFF",
+      css: "linear-gradient(135deg, #FF0000 0%, #00FF00 100%)",
+      placeholder: "data:image/jpeg;base64,test",
+    });
   });
 
   describe("enqueueGradientJob", () => {
@@ -154,7 +164,7 @@ describe("GradientWorker", () => {
   });
 
   describe("getGradientWorkerMetrics", () => {
-    it("should return worker metrics", async () => {
+    it("should return worker metrics including activeJobs", async () => {
       vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
 
       const { getGradientWorkerMetrics } = await import("./gradient.ts");
@@ -166,6 +176,7 @@ describe("GradientWorker", () => {
       expect(metrics).toHaveProperty("avgProcessingTimeMs");
       expect(metrics).toHaveProperty("isEnabled");
       expect(metrics).toHaveProperty("isRunning");
+      expect(metrics).toHaveProperty("activeJobs");
     });
   });
 
@@ -224,6 +235,20 @@ describe("GradientWorker", () => {
 
       expect(count).toBe(2);
       expect(redis.client.lLen).toHaveBeenCalledWith("gradient:processing");
+    });
+  });
+
+  describe("getDelayedCount", () => {
+    it("should return the delayed jobs count", async () => {
+      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.mocked(redis.client.zCard).mockResolvedValue(3);
+
+      const { getDelayedCount } = await import("./gradient.ts");
+
+      const count = await getDelayedCount();
+
+      expect(count).toBe(3);
+      expect(redis.client.zCard).toHaveBeenCalledWith("gradient:delayed");
     });
   });
 });

@@ -72,6 +72,7 @@ export const mockLoggerModule = () => mockLogger;
 export const mockRedisClient = {
   get: vi.fn(),
   set: vi.fn(),
+  mGet: vi.fn(),
   hGet: vi.fn(),
   hSet: vi.fn(),
   hGetAll: vi.fn(),
@@ -86,6 +87,10 @@ export const mockRedisClient = {
   sMembers: vi.fn(),
   sAdd: vi.fn(),
   sRem: vi.fn(),
+  zAdd: vi.fn(),
+  zRem: vi.fn(),
+  zCard: vi.fn(),
+  zRangeByScore: vi.fn(),
   multi: vi.fn(),
 };
 

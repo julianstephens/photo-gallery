@@ -26,6 +26,25 @@ export class GradientMetaService {
   };
 
   /**
+   * Get multiple gradient metadata entries using MGET for performance.
+   */
+  getGradients = async (storageKeys: string[]): Promise<(StoredGradient | null)[]> => {
+    if (storageKeys.length === 0) return [];
+
+    const keys = storageKeys.map((k) => this.#buildKey(k));
+    const results = await redis.client.mGet(keys);
+
+    return results.map((data) => {
+      if (!data) return null;
+      try {
+        return JSON.parse(data) as StoredGradient;
+      } catch {
+        return null;
+      }
+    });
+  };
+
+  /**
    * Set gradient metadata for an image.
    */
   setGradient = async (
@@ -41,7 +60,7 @@ export class GradientMetaService {
     const stored: StoredGradient = {
       status,
       gradient,
-      attempts: existing?.attempts ?? 0, // Attempts only incremented explicitly via incrementAttempts
+      attempts: existing?.attempts ?? 0,
       lastError: error,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -92,37 +111,6 @@ export class GradientMetaService {
    */
   markFailed = async (storageKey: string, error: string): Promise<void> => {
     await this.setGradient(storageKey, "failed", undefined, error);
-  };
-
-  /**
-   * Get the current attempt count for an image.
-   */
-  getAttempts = async (storageKey: string): Promise<number> => {
-    const existing = await this.getGradient(storageKey);
-    return existing?.attempts ?? 0;
-  };
-
-  /**
-   * Increment the attempt count for an image.
-   */
-  incrementAttempts = async (storageKey: string): Promise<number> => {
-    const key = this.#buildKey(storageKey);
-    const existing = await this.getGradient(storageKey);
-    const now = Date.now();
-
-    const stored: StoredGradient = {
-      status: existing?.status ?? "pending",
-      gradient: existing?.gradient,
-      attempts: (existing?.attempts ?? 0) + 1,
-      lastError: existing?.lastError,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    };
-
-    await redis.client.set(key, JSON.stringify(stored));
-    await redis.client.expire(key, GRADIENT_TTL_SECONDS);
-
-    return stored.attempts;
   };
 
   /**

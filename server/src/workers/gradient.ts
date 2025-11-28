@@ -12,6 +12,7 @@ import { GradientMetaService } from "../services/gradientMeta.ts";
 
 const QUEUE_KEY = "gradient:queue";
 const PROCESSING_KEY = "gradient:processing";
+const DELAYED_KEY = "gradient:delayed"; // Sorted set for delayed retry jobs
 const JOB_PREFIX = "gradient:job:";
 
 // Metrics for monitoring
@@ -22,6 +23,7 @@ let totalProcessingTimeMs = 0;
 // Worker state
 let workerRunning = false;
 let workerIntervalId: ReturnType<typeof setInterval> | null = null;
+let activeJobCount = 0; // Track currently processing jobs for concurrency control
 
 /**
  * Get current metrics for monitoring.
@@ -33,6 +35,7 @@ export function getGradientWorkerMetrics() {
     avgProcessingTimeMs: jobsProcessed > 0 ? totalProcessingTimeMs / jobsProcessed : 0,
     isEnabled: env.GRADIENT_WORKER_ENABLED,
     isRunning: workerRunning,
+    activeJobs: activeJobCount,
   };
 }
 
@@ -157,8 +160,6 @@ async function processJob(jobId: string): Promise<void> {
       blurDataUrl: gradientResult.placeholder,
     };
 
-    // Validate the result
-
     // Save to metadata
     await gradientMetaService.markCompleted(storageKey, gradient);
 
@@ -211,31 +212,62 @@ async function processJob(jobId: string): Promise<void> {
         "[GradientWorker] Max retries reached, marking as no-gradient",
       );
     } else {
-      // Re-queue for retry with exponential backoff
+      // Schedule for delayed retry using Redis sorted set with timestamp as score
       const backoffMs = Math.pow(2, currentAttempt) * 1000; // 2^attempt seconds
-      setTimeout(async () => {
-        await redis.client.rPush(QUEUE_KEY, jobId);
-        appLogger.debug(
-          { jobId, storageKey, backoffMs },
-          "[GradientWorker] Job re-queued for retry",
-        );
-      }, backoffMs);
+      const retryAt = Date.now() + backoffMs;
+      await redis.client.zAdd(DELAYED_KEY, { score: retryAt, value: jobId });
+      appLogger.debug(
+        { jobId, storageKey, backoffMs, retryAt },
+        "[GradientWorker] Job scheduled for delayed retry",
+      );
     }
   }
 }
 
 /**
- * Process jobs from the queue.
+ * Move delayed jobs that are ready back to the main queue.
+ */
+async function processDelayedJobs(): Promise<void> {
+  try {
+    const now = Date.now();
+    // Get all jobs that are ready (score <= now)
+    const readyJobs = await redis.client.zRangeByScore(DELAYED_KEY, 0, now);
+
+    for (const jobId of readyJobs) {
+      // Remove from delayed set and add to main queue
+      const removed = await redis.client.zRem(DELAYED_KEY, jobId);
+      if (removed > 0) {
+        await redis.client.rPush(QUEUE_KEY, jobId);
+        appLogger.debug({ jobId }, "[GradientWorker] Moved delayed job to queue");
+      }
+    }
+  } catch (error) {
+    appLogger.error({ error }, "[GradientWorker] Error processing delayed jobs");
+  }
+}
+
+/**
+ * Process jobs from the queue with concurrency control.
  */
 async function processQueue(): Promise<void> {
   if (!workerRunning) return;
+
+  // Check concurrency limit before acquiring a job
+  if (activeJobCount >= env.GRADIENT_WORKER_CONCURRENCY) {
+    return;
+  }
 
   try {
     // Move job from queue to processing list atomically
     const jobId = await redis.client.lMove(QUEUE_KEY, PROCESSING_KEY, "LEFT", "RIGHT");
 
     if (jobId) {
-      await processJob(jobId);
+      activeJobCount++;
+      try {
+        await processJob(jobId);
+      } finally {
+        activeJobCount--;
+      }
     }
   } catch (error) {
     appLogger.error({ error }, "[GradientWorker] Error processing queue");
@@ -257,11 +289,18 @@ export function startGradientWorker(): void {
   }
 
   workerRunning = true;
+  activeJobCount = 0;
 
   // Process queue at regular intervals
   const pollIntervalMs = 1000; // Poll every second
   workerIntervalId = setInterval(() => {
-    // Process multiple jobs concurrently based on concurrency setting
+    // Process delayed jobs first (move ready jobs to main queue)
+    processDelayedJobs().catch((err) => {
+      appLogger.error({ err }, "[GradientWorker] Error processing delayed jobs");
+    });
+
+    // Try to process jobs up to concurrency limit
+    // The processQueue function checks concurrency internally
     const promises: Promise<void>[] = [];
     for (let i = 0; i < env.GRADIENT_WORKER_CONCURRENCY; i++) {
       promises.push(processQueue());
@@ -317,4 +356,11 @@ export async function getQueueLength(): Promise<number> {
  */
 export async function getProcessingCount(): Promise<number> {
   return await redis.client.lLen(PROCESSING_KEY);
+}
+
+/**
+ * Get the count of delayed jobs waiting for retry.
+ */
+export async function getDelayedCount(): Promise<number> {
+  return await redis.client.zCard(DELAYED_KEY);
 }

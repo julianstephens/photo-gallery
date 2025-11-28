@@ -58,6 +58,59 @@ describe("GradientMetaService", () => {
     });
   });
 
+  describe("getGradients", () => {
+    it("should return empty array for empty input", async () => {
+      const results = await service.getGradients([]);
+
+      expect(results).toEqual([]);
+      expect(redis.client.mGet).not.toHaveBeenCalled();
+    });
+
+    it("should return multiple gradient data using mGet", async () => {
+      const storedData1 = {
+        status: "completed",
+        gradient: { primary: "#FF0000" },
+        attempts: 1,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      const storedData2 = {
+        status: "failed",
+        attempts: 3,
+        lastError: "Error",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(storedData1),
+        null,
+        JSON.stringify(storedData2),
+      ]);
+
+      const results = await service.getGradients(["key1", "key2", "key3"]);
+
+      expect(results).toHaveLength(3);
+      expect(results[0]?.status).toBe("completed");
+      expect(results[1]).toBeNull();
+      expect(results[2]?.status).toBe("failed");
+      expect(redis.client.mGet).toHaveBeenCalledWith([
+        "gradient:key1",
+        "gradient:key2",
+        "gradient:key3",
+      ]);
+    });
+
+    it("should return null for invalid JSON entries", async () => {
+      vi.mocked(redis.client.mGet).mockResolvedValue(["invalid json", null]);
+
+      const results = await service.getGradients(["key1", "key2"]);
+
+      expect(results).toHaveLength(2);
+      expect(results[0]).toBeNull();
+      expect(results[1]).toBeNull();
+    });
+  });
+
   describe("markPending", () => {
     it("should mark gradient as pending", async () => {
       vi.mocked(redis.client.get).mockResolvedValue(null);
@@ -151,30 +204,6 @@ describe("GradientMetaService", () => {
       const savedData = JSON.parse(callArgs[1] as string);
       expect(savedData.status).toBe("failed");
       expect(savedData.lastError).toBe("Download failed");
-    });
-  });
-
-  describe("getAttempts", () => {
-    it("should return 0 when gradient not found", async () => {
-      vi.mocked(redis.client.get).mockResolvedValue(null);
-
-      const attempts = await service.getAttempts("test/image.jpg");
-
-      expect(attempts).toBe(0);
-    });
-
-    it("should return attempts count from stored data", async () => {
-      const storedData = {
-        status: "processing",
-        attempts: 3,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(storedData));
-
-      const attempts = await service.getAttempts("test/image.jpg");
-
-      expect(attempts).toBe(3);
     });
   });
 

@@ -1,5 +1,6 @@
 export {
   enqueueGradientJob,
+  getDelayedCount,
   getGradientWorkerMetrics,
   getProcessingCount,
   getQueueLength,

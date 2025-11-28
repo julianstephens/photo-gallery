@@ -50,11 +50,13 @@ export const envSchema = z.object({
   GRADIENT_WORKER_CONCURRENCY: z
     .string()
     .default("2")
-    .transform((val) => parseInt(val, 10)),
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !isNaN(val) && val > 0, "Must be a positive integer"),
   GRADIENT_JOB_MAX_RETRIES: z
     .string()
     .default("3")
-    .transform((val) => parseInt(val, 10)),
+    .transform((val) => parseInt(val, 10))
+    .refine((val) => !isNaN(val) && val > 0, "Must be a positive integer"),
 });
 
 export type Env = z.infer<typeof envSchema>;
