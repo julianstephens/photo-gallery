@@ -51,6 +51,30 @@ export const listGalleryItems = async (req: Request, res: Response) => {
   }
 };
 
+export const getSingleGallery = async (req: Request, res: Response) => {
+  const galleryName = String(req.query.galleryName || "");
+  if (!galleryName) {
+    return res.status(400).json({ error: "Missing galleryName parameter" });
+  }
+
+  const guildId = String(req.query.guildId || "");
+  if (!guildId) {
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
+
+  try {
+    const gallery = await galleryController.getSingleGallery(guildId, galleryName);
+    appLogger.debug({ guildId, galleryName }, "[getSingleGallery] Retrieved gallery metadata");
+    res.json(gallery);
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "InvalidInputError") {
+      return res.status(404).json({ error: (err as Error).message });
+    }
+    console.error("[getSingleGallery] error:", err);
+    res.status(500).json({ error: "Failed to retrieve gallery" });
+  }
+};
+
 export const createGallery = async (req: Request, res: Response) => {
   try {
     const body = createGallerySchema.parse(req.body);

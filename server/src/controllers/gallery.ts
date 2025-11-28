@@ -145,6 +145,42 @@ export class GalleryController {
     return active;
   };
 
+  getSingleGallery = async (guildId: string, galleryName: string) => {
+    const validGuildId = validateString(guildId, "Guild ID is required");
+    const validGalleryName = validateString(galleryName, GalleryNameError);
+
+    const { metaKey } = this.#galleryKeys(validGuildId, validGalleryName);
+    if (!metaKey) {
+      throw new Error("Internal error: missing meta key");
+    }
+
+    const metadataJson = await redis.client.get(metaKey);
+    if (!metadataJson) {
+      throw new InvalidInputError("Gallery does not exist");
+    }
+
+    try {
+      const metadata = JSON.parse(metadataJson);
+      const now = Date.now();
+      const expiresAt = metadata.expiresAt;
+
+      if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+        throw new InvalidInputError("Gallery has expired");
+      }
+
+      return { name: validGalleryName, meta: metadata };
+    } catch (e) {
+      if (e instanceof InvalidInputError) {
+        throw e;
+      }
+      appLogger.error(
+        { error: e, galleryName: validGalleryName, metadataJson },
+        "Failed to parse gallery metadata in getSingleGallery",
+      );
+      throw new InvalidInputError("Failed to retrieve gallery");
+    }
+  };
+
   createGallery = async (req: CreateGalleryRequest, userId: string) => {
     const validUserId = validateString(userId, "User ID is required");
     const validatedGalleryName = validateString(req.galleryName, GalleryNameError);

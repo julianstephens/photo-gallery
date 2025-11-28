@@ -33,6 +33,7 @@ authRouter.get("/auth/me", handlers.getCurrentUser);
  **********************/
 const galleryRouter = Router();
 galleryRouter.get("/galleries", handlers.listGalleries);
+galleryRouter.get("/galleries/single", handlers.getSingleGallery);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
 galleryRouter.get("/images/:galleryName/{*imagePath}", handlers.getImage);
 galleryRouter.post("/galleries", handlers.createGallery);
