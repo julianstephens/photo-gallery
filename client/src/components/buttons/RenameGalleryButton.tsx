@@ -1,9 +1,9 @@
+import { RenameGalleryModal } from "@/components/modals/RenameGalleryModal";
+import { Tooltip } from "@/components/ui/tooltip";
+import type { ButtonProps } from "@/lib/types";
 import { Button, Icon, IconButton } from "@chakra-ui/react";
 import { useState } from "react";
 import { HiPencil } from "react-icons/hi2";
-import { RenameGalleryModal } from "./modals/RenameGalleryModal";
-import { Tooltip } from "./ui/tooltip";
-import type { ButtonProps } from "@/lib/types";
 
 export const RenameGalleryButton = ({ type, galleryName, guildId }: ButtonProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);

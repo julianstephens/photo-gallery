@@ -1,4 +1,5 @@
-import { GalleryCard } from "@/components/GalleryCard";
+import { GalleryCard } from "@/components/gallery/GalleryCard";
+import { Loader } from "@/components/Loader";
 import { Box, Button, Flex, Grid, GridItem, Heading, Text, VStack } from "@chakra-ui/react";
 import { HiPlus } from "react-icons/hi";
 import type { Gallery } from "utils";
@@ -43,9 +44,7 @@ export const GalleryList = ({
         </Button>
       </Flex>
       {isLoading ? (
-        <Flex w="full" h="full" justify="center" align="center">
-          <Text>Loading galleries...</Text>
-        </Flex>
+        <Loader />
       ) : error || !data ? (
         <Flex w="full" h="full" justify="center" align="center">
           <Text>Error loading galleries.</Text>

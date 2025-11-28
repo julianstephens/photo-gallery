@@ -1,3 +1,4 @@
+import { toaster } from "@/components/ui/toaster";
 import { useUploadContext } from "@/contexts/UploadContext";
 import { uploadProgressStore } from "@/lib/upload/uploadProgressStore";
 import { uploadFileInChunks } from "@/lib/upload/uploadService";
@@ -6,7 +7,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { useRef, useState } from "react";
 import { HiOutlineUpload } from "react-icons/hi";
-import { toaster } from "./ui/toaster";
 
 interface UploadPhotosButtonProps {
   guildId: string;
@@ -29,6 +29,11 @@ export const UploadPhotosButton = ({
   const [, setUploadProgress] = useState<number | null>(null);
   const fileUploadRef = useRef<HTMLInputElement>(null);
 
+  const isValidImageFile = (file: File): boolean => {
+    // Check if file is an image type
+    return file.type.startsWith("image/");
+  };
+
   const uploadFiles = async (details: FileUploadFileAcceptDetails) => {
     setIsLoading(true);
     setUploadProgress(0);
@@ -48,10 +53,30 @@ export const UploadPhotosButton = ({
       return;
     }
 
+    // Filter out non-image files
+    const validFiles = files.filter(isValidImageFile);
+    const invalidCount = files.length - validFiles.length;
+
+    if (invalidCount > 0) {
+      toaster.warning({
+        title: "Skipped Non-Image Files",
+        description: `${invalidCount} file${invalidCount !== 1 ? "s were" : " was"} skipped because ${invalidCount !== 1 ? "they are" : "it is"} not an image.`,
+      });
+    }
+
+    if (validFiles.length === 0) {
+      toaster.error({
+        title: "No Image Files",
+        description: "Please select at least one image file to upload.",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setHasActiveUploads(true);
       updateUploadMonitorVisibility(true);
-      const uploadPromises = files.map(async (file) => {
+      const uploadPromises = validFiles.map(async (file) => {
         const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
 
@@ -123,7 +148,7 @@ export const UploadPhotosButton = ({
   return (
     <FileUpload.Root
       w="45%"
-      accept={["image/*", ".zip"]}
+      accept={["image/*"]}
       maxW="100%"
       maxFileSize={500 * 1024 * 1024}
       maxFiles={50}
@@ -141,7 +166,7 @@ export const UploadPhotosButton = ({
         } else if (details.files.some((f) => f.errors.includes("FILE_INVALID_TYPE"))) {
           toaster.error({
             title: "Invalid File Type",
-            description: "Please select image files or ZIP archives.",
+            description: "Please select image files.",
           });
         } else {
           console.error("Rejected files:", details.files);

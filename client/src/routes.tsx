@@ -1,7 +1,9 @@
 import { Route, Routes } from "react-router";
+import { AdminLayout } from "./components/AdminLayout";
 import { Layout } from "./components/Layout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import AdminDashboard from "./pages/AdminDashboard";
+import AdminGalleryManagerPage from "./pages/admin/AdminGalleryManager";
+import AdminRequestsPage from "./pages/admin/AdminRequests";
 import Dashboard from "./pages/Dashboard";
 import LandingPage from "./pages/Landing";
 import NotFoundPage from "./pages/NotFound";
@@ -15,7 +17,10 @@ export const AppRoutes = () => {
           <Route path="home" element={<Dashboard />} />
         </Route>
         <Route element={<ProtectedRoute requiresAdmin={true} />}>
-          <Route path="admin" element={<AdminDashboard />} />
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminGalleryManagerPage />} />
+            <Route path="requests" element={<AdminRequestsPage />} />
+          </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

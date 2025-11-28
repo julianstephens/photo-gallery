@@ -1,4 +1,6 @@
 import { queryClient } from "@/clients";
+import { ConfirmDeleteModal } from "@/components/modals/ConfirmDelete";
+import { toaster } from "@/components/ui/toaster";
 import { useGalleryContext } from "@/contexts/GalleryContext";
 import type { ButtonProps } from "@/lib/types";
 import { removeGallery } from "@/queries";
@@ -6,8 +8,6 @@ import { Button, Icon, IconButton } from "@chakra-ui/react";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { HiTrash } from "react-icons/hi2";
-import { ConfirmDeleteModal } from "./modals/ConfirmDelete";
-import { toaster } from "./ui/toaster";
 
 interface DeleteGalleryButtonProps extends ButtonProps {
   postDelete?: () => void;

@@ -48,7 +48,12 @@ export const Gallery = ({
           )}
           <SimpleGrid id={`gallery-items-${galleryName}`} w="full" columns={columnCount} gap="8px">
             {data?.contents.map((item: GI) => (
-              <GalleryItem key={item.name} item={item} />
+              <GalleryItem
+                key={item.name}
+                item={item}
+                guildId={guildId}
+                galleryName={galleryName}
+              />
             ))}
           </SimpleGrid>
         </Flex>

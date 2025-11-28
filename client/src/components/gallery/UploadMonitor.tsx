@@ -1,3 +1,4 @@
+import { Tooltip } from "@/components/ui/tooltip";
 import type { ActiveUpload } from "@/lib/upload/uploadProgressStore";
 import { uploadProgressStore } from "@/lib/upload/uploadProgressStore";
 import {
@@ -13,7 +14,6 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { HiCheck, HiOutlineExclamationCircle } from "react-icons/hi2";
-import { Tooltip } from "./ui/tooltip";
 
 export interface UploadMonitorProps {
   onClose?: () => void;
@@ -182,6 +182,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
               <Progress.Track>
                 <Progress.Range />
               </Progress.Track>
+              <Progress.ValueText />
             </Progress.Root>
 
             {/* Error message */}

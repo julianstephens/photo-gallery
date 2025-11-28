@@ -1,32 +1,20 @@
-import { DetailedGallery } from "@/components/DetailedGallery";
+import { SetDefaultGuildButton } from "@/components/buttons/SetDefaultGuildButton";
 import { GuildSelect } from "@/components/forms/Fields";
-import { GalleryList } from "@/components/GalleryList";
+import { DetailedGallery } from "@/components/gallery/DetailedGallery";
+import { GalleryList } from "@/components/gallery/GalleryList";
+import { UploadMonitor } from "@/components/gallery/UploadMonitor";
 import { CreateGalleryModal } from "@/components/modals/CreateGalleryModal";
-import { SetDefaultGuildButton } from "@/components/SetDefaultGuild";
 import { Tooltip } from "@/components/ui/tooltip";
-import { UploadMonitor } from "@/components/UploadMonitor";
 import { useGalleryContext } from "@/contexts/GalleryContext";
 import { useUploadContext } from "@/contexts/UploadContext";
 import { useListGalleries } from "@/hooks";
-import {
-  Button,
-  Flex,
-  Heading,
-  HStack,
-  Icon,
-  IconButton,
-  Presence,
-  Spinner,
-  Text,
-  VStack,
-} from "@chakra-ui/react";
-import { useEffect, useState } from "react";
-import { HiOutlineHome, HiOutlineUpload } from "react-icons/hi";
+import { Button, Flex, HStack, Icon, Presence, Spinner, Text, VStack } from "@chakra-ui/react";
+import { useCallback, useEffect, useState } from "react";
+import { HiOutlineUpload } from "react-icons/hi";
 import { HiStar } from "react-icons/hi2";
-import { useNavigate } from "react-router";
 import type { Gallery } from "utils";
 
-const AdminDashboard = () => {
+const AdminGalleryManagerPage = () => {
   const [guildId, setGuildId] = useState<string | undefined>(undefined);
   const { data, error, isLoading } = useListGalleries(guildId || "");
   const [showCreateGalleryModal, setShowCreateGalleryModal] = useState(false);
@@ -43,9 +31,7 @@ const AdminDashboard = () => {
   const [guild, setGuild] = useState<string>("");
   const [galleryOpened, setGalleryOpened] = useState(false);
 
-  const goto = useNavigate();
-
-  const pageTitle = "Admin Dashboard";
+  const pageTitle = "Admin Gallery Manager";
   const pageSlug = pageTitle.toLowerCase().replace(/\s+/g, "-").toLowerCase();
 
   const openCreateGalleryModal = () => {
@@ -61,10 +47,10 @@ const AdminDashboard = () => {
     setGalleryOpened(true);
   };
 
-  const closeDetailedGalleryView = () => {
+  const closeDetailedGalleryView = useCallback(() => {
     clearActiveGallery();
     setGalleryOpened(false);
-  };
+  }, [clearActiveGallery]);
 
   const onGuildChange = (selectedGuild: string) => {
     setGuild(selectedGuild);
@@ -96,31 +82,11 @@ const AdminDashboard = () => {
         closeDetailedGalleryView();
       }
     }
-  }, [data, galleryOpened, activeGalleryName]);
+  }, [data, galleryOpened, activeGalleryName, closeDetailedGalleryView]);
 
   return (
     <>
-      <Flex id={pageSlug} direction="column" height="full" gap="6">
-        <HStack id={`${pageSlug}-header`} align="center" justify="space-between">
-          <VStack align="start" gap="0">
-            <Heading size="lg">{pageTitle}</Heading>
-            <Text fontSize="sm" color="gray.500">
-              Welcome to the admin dashboard. Here you can manage the application.
-            </Text>
-          </VStack>
-          <Tooltip content="Home">
-            <IconButton
-              variant="ghost"
-              size="xl"
-              aria-label="Home"
-              onClick={() => {
-                goto("/");
-              }}
-            >
-              <HiOutlineHome />
-            </IconButton>
-          </Tooltip>
-        </HStack>
+      <Flex id={pageSlug} direction="column" w="full" h="full" gap="6">
         <HStack
           id={`${pageSlug}-guild-select`}
           gap="4"
@@ -208,4 +174,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard;
+export default AdminGalleryManagerPage;

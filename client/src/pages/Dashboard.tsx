@@ -1,7 +1,7 @@
+import { SetDefaultGuildButton } from "@/components/buttons/SetDefaultGuildButton";
 import { GallerySelect, GuildSelect } from "@/components/forms/Fields";
-import { Gallery } from "@/components/Gallery";
+import { Gallery } from "@/components/gallery/Gallery";
 import { Loader } from "@/components/Loader";
-import { SetDefaultGuildButton } from "@/components/SetDefaultGuild";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useGalleryContext } from "@/contexts/GalleryContext";
 import { useAuth, useListGalleries } from "@/hooks";

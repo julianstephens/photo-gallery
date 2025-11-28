@@ -1,12 +1,12 @@
+import { DeleteGalleryButton } from "@/components/buttons/DeleteGalleryButton";
+import { RenameGalleryButton } from "@/components/buttons/RenameGalleryButton";
+import { UploadPhotosButton } from "@/components/buttons/UploadPhotosButton";
 import { getGallery } from "@/queries";
 import { Button, Heading, HStack, Icon, Spinner, Text, VStack } from "@chakra-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { HiArrowLongLeft } from "react-icons/hi2";
 import { TbCheckbox } from "react-icons/tb";
-import { DeleteGalleryButton } from "./DeleteGalleryButton";
 import { Gallery as GalleryDisplay } from "./Gallery";
-import { RenameGalleryButton } from "./RenameGalleryButton";
-import { UploadPhotosButton } from "./UploadPhotosButton";
 
 interface DetailedGalleryProps {
   pageSlug: string;

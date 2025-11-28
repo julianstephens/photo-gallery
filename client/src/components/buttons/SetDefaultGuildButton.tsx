@@ -1,8 +1,8 @@
+import { toaster } from "@/components/ui/toaster";
 import { setDefaultGuild } from "@/queries";
 import { Button, HStack, Icon } from "@chakra-ui/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HiOutlineStar } from "react-icons/hi2";
-import { toaster } from "./ui/toaster";
 
 export interface SetDefaultGuildButtonProps {
   defaultGuild: string;
