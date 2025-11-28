@@ -39,6 +39,7 @@ export const BlurredImage = ({
 }: BlurredImageProps) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [blurError, setBlurError] = useState(false);
 
   // Determine the background CSS gradient
   const backgroundCss =
@@ -55,6 +56,14 @@ export const BlurredImage = ({
     setHasError(true);
   };
 
+  const handleBlurError = () => {
+    setBlurError(true);
+  };
+
+  // Show blur placeholder if:
+  // - blurDataUrl exists AND hasn't errored AND (main image hasn't loaded OR main image errored)
+  const showBlurPlaceholder = blurDataUrl && !blurError && (!isLoaded || hasError);
+
   return (
     <Box
       position="relative"
@@ -65,7 +74,7 @@ export const BlurredImage = ({
       background={backgroundCss}
     >
       {/* Blurred placeholder layer (if available) */}
-      {blurDataUrl && !hasError && (
+      {showBlurPlaceholder && (
         <Image
           position="absolute"
           top={0}
@@ -75,29 +84,32 @@ export const BlurredImage = ({
           src={blurDataUrl}
           alt=""
           objectFit={objectFit}
-          opacity={isLoaded ? 0 : 1}
+          opacity={1}
           transition="opacity 0.3s ease-in-out"
           aria-hidden="true"
           loading="eager"
+          onError={handleBlurError}
         />
       )}
 
       {/* Full resolution image */}
-      <Image
-        position="absolute"
-        top={0}
-        left={0}
-        width="100%"
-        height="100%"
-        src={src}
-        alt={alt}
-        objectFit={objectFit}
-        loading={loading}
-        onLoad={handleLoad}
-        onError={handleError}
-        opacity={isLoaded ? 1 : 0}
-        transition="opacity 0.3s ease-in-out"
-      />
+      {!hasError && (
+        <Image
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          src={src}
+          alt={alt}
+          objectFit={objectFit}
+          loading={loading}
+          onLoad={handleLoad}
+          onError={handleError}
+          opacity={isLoaded ? 1 : 0}
+          transition="opacity 0.3s ease-in-out"
+        />
+      )}
     </Box>
   );
 };
