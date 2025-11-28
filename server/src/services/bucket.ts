@@ -89,21 +89,35 @@ export class BucketService {
   }
 
   async getObjectChecksums(key: string) {
-    await this.ensureBucket();
-    const resp: HeadObjectCommandOutput = await this.#s3.send(
-      new HeadObjectCommand({
-        Bucket: this.#bucketName,
-        Key: key,
-        ChecksumMode: "ENABLED",
-      }),
-    );
-    return {
-      ChecksumCRC32: resp.ChecksumCRC32,
-      ChecksumCRC32C: resp.ChecksumCRC32C,
-      ChecksumCRC64NVME: resp.ChecksumCRC64NVME,
-      ChecksumSHA1: resp.ChecksumSHA1,
-      ChecksumSHA256: resp.ChecksumSHA256,
-    };
+    try {
+      await this.ensureBucket();
+      const resp: HeadObjectCommandOutput = await this.#s3.send(
+        new HeadObjectCommand({
+          Bucket: this.#bucketName,
+          Key: key,
+          ChecksumMode: "ENABLED",
+        }),
+      );
+      return {
+        ChecksumCRC32: resp.ChecksumCRC32,
+        ChecksumCRC32C: resp.ChecksumCRC32C,
+        ChecksumCRC64NVME: resp.ChecksumCRC64NVME,
+        ChecksumSHA1: resp.ChecksumSHA1,
+        ChecksumSHA256: resp.ChecksumSHA256,
+      };
+    } catch (err) {
+      appLogger.warn(
+        { err, key },
+        "Failed to get object checksums (object may not exist or S3 does not support checksums)",
+      );
+      return {
+        ChecksumCRC32: undefined,
+        ChecksumCRC32C: undefined,
+        ChecksumCRC64NVME: undefined,
+        ChecksumSHA1: undefined,
+        ChecksumSHA256: undefined,
+      };
+    }
   }
 
   async getObject(key: string): Promise<{ data: Buffer; contentType: string }> {

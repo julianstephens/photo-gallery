@@ -60,7 +60,11 @@ interface ProgressStateEntry {
 }
 const uploadProgressState = new Map<string, ProgressStateEntry>();
 
-class Crc32Accumulator {
+/**
+ * CRC32 implementation using IEEE 802.3 polynomial (0xEDB88320).
+ * Used for S3 checksum verification.
+ */
+export class Crc32Accumulator {
   #value = 0xffffffff;
 
   update(buffer: Buffer) {

@@ -7,7 +7,44 @@ import { mockEnvModule } from "../utils/test-mocks.ts";
 // Mock env to prevent dotenv loading
 vi.mock("../schemas/env.ts", () => mockEnvModule());
 
-import { ChunkedUploadService } from "./chunkedUpload.ts";
+import { ChunkedUploadService, Crc32Accumulator } from "./chunkedUpload.ts";
+
+describe("Crc32Accumulator", () => {
+  it("should produce correct CRC32 for '123456789' test vector", () => {
+    // Standard CRC32 test: "123456789" should produce 0xCBF43926
+    const crc = new Crc32Accumulator();
+    crc.update(Buffer.from("123456789"));
+    expect(crc.digestUInt32()).toBe(0xcbf43926);
+  });
+
+  it("should produce correct base64 output for test vector", () => {
+    // CRC32 of "123456789" = 0xCBF43926
+    // Big-endian bytes: [0xCB, 0xF4, 0x39, 0x26]
+    // Base64: "y/Q5Jg=="
+    const crc = new Crc32Accumulator();
+    crc.update(Buffer.from("123456789"));
+    expect(crc.digestBase64()).toBe("y/Q5Jg==");
+  });
+
+  it("should handle empty input", () => {
+    const crc = new Crc32Accumulator();
+    crc.update(Buffer.alloc(0));
+    // CRC32 of empty input is 0x00000000
+    expect(crc.digestUInt32()).toBe(0);
+  });
+
+  it("should handle incremental updates", () => {
+    const crc1 = new Crc32Accumulator();
+    crc1.update(Buffer.from("123456789"));
+
+    const crc2 = new Crc32Accumulator();
+    crc2.update(Buffer.from("123"));
+    crc2.update(Buffer.from("456"));
+    crc2.update(Buffer.from("789"));
+
+    expect(crc2.digestUInt32()).toBe(crc1.digestUInt32());
+  });
+});
 
 describe("ChunkedUploadService", () => {
   let service: ChunkedUploadService;

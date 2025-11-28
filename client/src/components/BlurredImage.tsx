@@ -41,19 +41,19 @@ export const BlurredImage = ({
   const [hasError, setHasError] = useState(false);
   const [blurError, setBlurError] = useState(false);
 
+  // Determine if we have a blur data URL to show as an intermediate layer
+  const blurDataUrl = gradient?.blurDataUrl;
+
   // Reset internal state when the source image changes so each asset loads independently
   useEffect(() => {
     setIsLoaded(false);
     setHasError(false);
     setBlurError(false);
-  }, [src, gradient?.blurDataUrl]);
+  }, [src, blurDataUrl]);
 
   // Determine the background CSS gradient
   const backgroundCss =
     gradient?.css ?? `linear-gradient(135deg, ${fallbackPrimary} 0%, ${fallbackSecondary} 100%)`;
-
-  // Determine if we have a blur data URL to show as an intermediate layer
-  const blurDataUrl = gradient?.blurDataUrl;
 
   const handleLoad = () => {
     setIsLoaded(true);

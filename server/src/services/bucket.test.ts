@@ -255,6 +255,7 @@ describe("BucketService", () => {
   describe("uploadToBucket", () => {
     it("should upload file from path to bucket", async () => {
       // Create a temporary file for testing
+      // Note: Test files are created in the OS temp directory and will be cleaned up by the OS
       const { writeFileSync } = await import("fs");
       const { tmpdir } = await import("os");
       const path = await import("path");
@@ -273,6 +274,8 @@ describe("BucketService", () => {
     });
 
     it("should forward checksum hints when provided", async () => {
+      // Create a temporary file for testing
+      // Note: Test files are created in the OS temp directory and will be cleaned up by the OS
       const { writeFileSync } = await import("fs");
       const { tmpdir } = await import("os");
       const path = await import("path");

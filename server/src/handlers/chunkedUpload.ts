@@ -200,8 +200,29 @@ export const finalizeUpload = async (req: Request, res: Response) => {
                   localCrc32: checksums.crc32Base64,
                   remoteCrc32,
                 },
-                "[finalizeUpload] Remote checksum mismatch after upload",
+                "[finalizeUpload] Remote checksum mismatch after upload - deleting corrupted object",
               );
+              // Delete the corrupted S3 object
+              try {
+                await bucketService.deleteObjectFromBucket(storageKey);
+                appLogger.info(
+                  { uploadId, storageKey },
+                  "[finalizeUpload] Corrupted object deleted from S3",
+                );
+              } catch (deleteErr) {
+                appLogger.error(
+                  { uploadId, storageKey, err: deleteErr },
+                  "[finalizeUpload] Failed to delete corrupted object from S3",
+                );
+              }
+              // Mark upload as failed and return error response
+              chunkedUploadService.markFailed(
+                uploadId,
+                "Checksum mismatch: file may be corrupted during upload",
+              );
+              return res.status(500).json({
+                error: "Checksum verification failed. The uploaded file may be corrupted.",
+              });
             } else {
               appLogger.info(
                 { uploadId, storageKey, crc32: remoteCrc32 },
