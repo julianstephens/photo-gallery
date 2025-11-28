@@ -72,6 +72,7 @@ vi.mock("../schemas/env.ts", () => ({
     GRADIENT_WORKER_ENABLED: true,
     GRADIENT_WORKER_CONCURRENCY: 2,
     GRADIENT_JOB_MAX_RETRIES: 3,
+    GRADIENT_WORKER_POLL_INTERVAL_MS: 1000,
   },
 }));
 
