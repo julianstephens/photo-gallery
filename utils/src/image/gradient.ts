@@ -1,9 +1,10 @@
 import sharp from "sharp";
 
 // `quantize` is the median-cut quantizer used by color-thief / vibrant.
-// It has no bundled TypeScript types; we use a require with ts-ignore for simplicity.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const quantize = require("quantize");
+// It ships as CommonJS without types, so we import it with an explicit ts-ignore.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - quantize has no type definitions
+import quantize from "quantize";
 
 type RGB = [number, number, number];
 
@@ -51,7 +52,7 @@ export async function generateGradientWithPlaceholder(
   const { result, placeholder } = await generateGradientInternal(buffer, options, {
     createPlaceholder: true,
   });
-  return { ...result, placeholder };
+  return { ...result, placeholder: placeholder ?? "" };
 }
 
 /* ---------------------------
@@ -194,6 +195,9 @@ async function generateGradientInternal(
       rgb: synthesized,
       lab: rgbToLab(synthesized),
       hsl: rgbToHsl(synthesized),
+      // delta = 0 for synthesized colors since they weren't extracted from image clusters
+      // (deltaE represents the CIE76 perceptual difference from the primary color)
+      delta: 0,
     };
   }
 

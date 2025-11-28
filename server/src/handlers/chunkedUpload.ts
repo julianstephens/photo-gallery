@@ -15,6 +15,7 @@ import { appLogger } from "../middleware/logger.ts";
 import { BucketService } from "../services/bucket.ts";
 import { ChunkedUploadService } from "../services/chunkedUpload.ts";
 import { UploadService } from "../services/upload.ts";
+import { enqueueGradientJob } from "../workers/index.ts";
 
 const chunkedUploadService = new ChunkedUploadService();
 const bucketService = new BucketService();
@@ -158,8 +159,19 @@ export const finalizeUpload = async (req: Request, res: Response) => {
         });
 
         const objectName = uploadService.buildObjectName(uploadDatePrefix, metadata.fileName);
+        const storageKey = `${galleryFolderName}/${objectName}`;
         await bucketService.uploadToBucket(galleryFolderName, objectName, finalizedPath);
         await rm(finalizedPath, { force: true }).catch(() => {});
+
+        // Enqueue gradient generation job (non-blocking)
+        enqueueGradientJob({
+          guildId: metadata.guildId,
+          galleryName: metadata.galleryName,
+          storageKey,
+          itemId: storageKey.replace(/\//g, "-"),
+        }).catch((err) => {
+          appLogger.error({ err, storageKey }, "[finalizeUpload] Failed to enqueue gradient job");
+        });
 
         // Mark upload as completed
         chunkedUploadService.updateProgress(uploadId, "completed", "server-upload", {
@@ -289,7 +301,18 @@ export const finalizeUpload = async (req: Request, res: Response) => {
 
           const relPath = fullPath.replace(extractDir + "/", "");
           const objectName = uploadService.buildObjectName(uploadDatePrefix, relPath);
+          const storageKey = `${galleryFolderName}/${objectName}`;
           await bucketService.uploadToBucket(galleryFolderName, objectName, fullPath);
+
+          // Enqueue gradient generation job (non-blocking)
+          enqueueGradientJob({
+            guildId: metadata.guildId,
+            galleryName: metadata.galleryName,
+            storageKey,
+            itemId: storageKey.replace(/\//g, "-"),
+          }).catch((err) => {
+            appLogger.error({ err, storageKey }, "[finalizeUpload] Failed to enqueue gradient job");
+          });
 
           // Update progress after each file upload
           uploadedCount++;
