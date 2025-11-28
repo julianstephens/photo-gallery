@@ -1,8 +1,8 @@
-import { GalleryCard } from "@/components/gallery";
 import { Loader } from "@/components/Loader";
 import { Box, Button, Flex, Grid, GridItem, Heading, Text, VStack } from "@chakra-ui/react";
 import { HiPlus } from "react-icons/hi";
 import type { Gallery } from "utils";
+import { GalleryCard } from "./GalleryCard";
 
 interface GalleryListProps {
   data: Gallery[] | undefined;
