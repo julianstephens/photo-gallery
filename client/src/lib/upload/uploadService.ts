@@ -2,6 +2,7 @@ import { httpClient } from "@/clients.ts";
 import type { UploadProgress } from "utils";
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+const PROGRESS_THROTTLE_MS = 100; // Throttle progress callbacks to avoid excessive UI re-renders
 
 export const initiateUpload = async (
   fileName: string,
@@ -66,10 +67,8 @@ export const uploadFileInChunks = async (
   // Track bytes uploaded for each chunk to calculate overall progress
   const chunkBytesLoaded: number[] = new Array(totalParts).fill(0);
 
-  // Throttle progress updates to avoid excessive UI re-renders
-  const PROGRESS_THROTTLE_MS = 100;
+  // Throttle progress updates
   let lastProgressUpdate = 0;
-  let pendingProgress: number | null = null;
 
   const updateTotalProgress = () => {
     const totalBytesLoaded = chunkBytesLoaded.reduce((sum, bytes) => sum + bytes, 0);
@@ -78,10 +77,7 @@ export const uploadFileInChunks = async (
     const now = Date.now();
     if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS) {
       lastProgressUpdate = now;
-      pendingProgress = null;
       onProgress(progress);
-    } else {
-      pendingProgress = progress;
     }
   };
 
@@ -100,10 +96,8 @@ export const uploadFileInChunks = async (
 
   await Promise.all(uploadPromises);
 
-  // Ensure final progress is reported (100%)
-  if (pendingProgress !== null) {
-    onProgress(pendingProgress);
-  }
+  // Always report 100% completion
+  onProgress(100);
 
   return finalizeUpload(uploadId);
 };
