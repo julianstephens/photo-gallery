@@ -1,5 +1,5 @@
 import { Box, Image, type ImageProps } from "@chakra-ui/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ImageGradient } from "utils";
 
 export interface BlurredImageProps
@@ -40,6 +40,13 @@ export const BlurredImage = ({
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [blurError, setBlurError] = useState(false);
+
+  // Reset internal state when the source image changes so each asset loads independently
+  useEffect(() => {
+    setIsLoaded(false);
+    setHasError(false);
+    setBlurError(false);
+  }, [src, gradient?.blurDataUrl]);
 
   // Determine the background CSS gradient
   const backgroundCss =
