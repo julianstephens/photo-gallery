@@ -31,6 +31,29 @@ export const streamMedia = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing guildId parameter" });
   }
 
+  // Validate guild membership from authenticated session
+  const guildIds = req.session.guildIds;
+  if (!guildIds || guildIds.length === 0) {
+    appLogger.warn(
+      { userId: req.session.userId, guildId, path: req.path },
+      "[streamMedia] Guild access denied: Missing guild membership context",
+    );
+    return res.status(403).json({ error: "Forbidden: Missing guild membership context" });
+  }
+
+  if (!guildIds.includes(guildId as string)) {
+    appLogger.warn(
+      { userId: req.session.userId, requestedGuildId: guildId, path: req.path },
+      "[streamMedia] Guild access denied: Not a member of the requested guild",
+    );
+    return res.status(403).json({ error: "Forbidden: Not a member of the requested guild" });
+  }
+
+  appLogger.debug(
+    { userId: req.session.userId, guildId },
+    "[streamMedia] Guild membership validated",
+  );
+
   try {
     appLogger.debug({ galleryName, guildId }, "[streamMedia] Resolving gallery folder name");
     // Find the correct gallery by comparing the normalized folder name

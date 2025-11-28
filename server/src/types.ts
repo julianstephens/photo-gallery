@@ -13,6 +13,7 @@ export interface AuthSessionData {
   refreshToken: string;
   expiresAt: number;
   isAdmin: boolean;
+  guildIds: string[];
 }
 
 export interface TokenParam {
