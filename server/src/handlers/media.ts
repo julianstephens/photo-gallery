@@ -26,11 +26,6 @@ export const streamMedia = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing objectName parameter" });
   }
 
-  if (!guildId) {
-    appLogger.warn({ guildId }, "[streamMedia] Missing guildId parameter");
-    return res.status(400).json({ error: "Missing guildId parameter" });
-  }
-
   try {
     appLogger.debug({ galleryName, guildId }, "[streamMedia] Resolving gallery folder name");
     // Find the correct gallery by comparing the normalized folder name

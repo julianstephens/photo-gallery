@@ -39,6 +39,7 @@ export class AuthController {
       refreshToken: data.refresh_token,
       expiresAt: Date.now() + data.expires_in * 1000,
       isAdmin: this.#isAdminUser(user.id),
+      guildIds: user.guilds.map((g) => g.id),
     };
   };
 

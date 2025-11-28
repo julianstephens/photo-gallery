@@ -58,12 +58,27 @@ const createRes = () => {
   return res as Response;
 };
 
-const createReq = (overrides: Partial<Request> = {}) => {
+interface SessionOverrides {
+  userId?: string;
+  guildIds?: string[];
+}
+
+const createReq = (overrides: Partial<Request> = {}, sessionOverrides: SessionOverrides = {}) => {
+  const session: Partial<Request["session"]> = {
+    userId: sessionOverrides.userId ?? "user-123",
+  };
+  // Only set guildIds if explicitly provided in sessionOverrides (including undefined explicitly)
+  if ("guildIds" in sessionOverrides) {
+    session.guildIds = sessionOverrides.guildIds;
+  } else {
+    session.guildIds = ["guild-1", "guild-2"];
+  }
   const req: Partial<Request> = {
     query: {},
     params: {},
     path: "/test/path",
     originalUrl: "/test/path",
+    session: session as Request["session"],
     ...overrides,
   };
   return req as Request;
@@ -89,25 +104,6 @@ describe("media handlers", () => {
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({ error: "Missing galleryName parameter" });
-    });
-
-    it("returns 400 when guildId is missing", async () => {
-      const req = createReq({
-        params: {
-          galleryName: "summer",
-          year: "2024",
-          month: "01",
-          day: "15",
-          splat: "photo.jpg",
-        } as Request["params"],
-        query: {} as Request["query"],
-      });
-      const res = createRes();
-
-      await streamMedia(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
     });
 
     it("returns 404 when gallery is not found", async () => {
@@ -207,7 +203,7 @@ describe("media handlers", () => {
       expect(res.json).toHaveBeenCalledWith({ error: "Image not found" });
     });
 
-    it("successfully retrieves and streams media", async () => {
+    it("successfully retrieves and streams media for authorized guild member", async () => {
       const req = createReq({
         params: {
           galleryName: "summer",

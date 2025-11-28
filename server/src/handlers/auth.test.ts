@@ -101,6 +101,7 @@ describe("auth handlers", () => {
       refreshToken: "refresh",
       expiresAt: 123,
       isAdmin: true,
+      guildIds: ["guild-1", "guild-2"],
     });
 
     await discordCallback(req, res);
@@ -113,6 +114,7 @@ describe("auth handlers", () => {
       refreshToken: "refresh",
       expiresAt: 123,
       isAdmin: true,
+      guildIds: ["guild-1", "guild-2"],
     });
     expect(res.redirect).toHaveBeenCalledWith(envMock.CLIENT_URL);
   });

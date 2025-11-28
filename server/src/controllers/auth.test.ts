@@ -56,6 +56,7 @@ describe("AuthController", () => {
         accessToken: "test-access-token",
         refreshToken: "test-refresh-token",
         isAdmin: false,
+        guildIds: ["guild-1", "guild-2"],
       });
       expect(result.expiresAt).toBeGreaterThan(Date.now());
       expect(mockAxios.post).toHaveBeenCalledWith(
@@ -91,6 +92,7 @@ describe("AuthController", () => {
       const result = await controller.login("test-code");
 
       expect(result.isAdmin).toBe(true);
+      expect(result.guildIds).toEqual([]);
     });
   });
 

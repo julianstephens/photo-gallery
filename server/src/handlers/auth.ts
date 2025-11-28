@@ -16,6 +16,7 @@ export const discordCallback = async (req: Request, res: Response) => {
     req.session.refreshToken = session.refreshToken;
     req.session.expiresAt = session.expiresAt;
     req.session.isAdmin = session.isAdmin;
+    req.session.guildIds = session.guildIds;
 
     req.session.save((err) => {
       if (err) {
