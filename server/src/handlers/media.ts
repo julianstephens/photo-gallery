@@ -6,6 +6,8 @@ import { normalizeGalleryFolderName } from "../utils.ts";
 const bucketService = await BucketService.create();
 const galleryController = new GalleryController();
 
+type AwsLikeError = Error & { $metadata?: { httpStatusCode?: number }; code?: string };
+
 export const streamMedia = async (req: Request, res: Response) => {
   const { galleryName, year, month, day, splat } = req.params;
   const objectName = `${year}-${month}-${day}/${splat}`;
@@ -26,10 +28,18 @@ export const streamMedia = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Missing objectName parameter" });
   }
 
+  if (!guildId || typeof guildId !== "string") {
+    appLogger.warn(
+      { galleryName, guildId, path: req.path },
+      "[streamMedia] Missing guildId query parameter",
+    );
+    return res.status(400).json({ error: "Missing guildId parameter" });
+  }
+
   try {
     appLogger.debug({ galleryName, guildId }, "[streamMedia] Resolving gallery folder name");
     // Find the correct gallery by comparing the normalized folder name
-    const galleries = await galleryController.listGalleries(guildId as string);
+    const galleries = await galleryController.listGalleries(guildId);
     const foundGallery = galleries.find((g) => normalizeGalleryFolderName(g.name) === galleryName);
 
     if (!foundGallery) {
@@ -41,10 +51,7 @@ export const streamMedia = async (req: Request, res: Response) => {
     }
 
     // Get the normalized folder name from the gallery
-    const folderName = await galleryController.getGalleryFolderName(
-      guildId as string,
-      foundGallery.name,
-    );
+    const folderName = await galleryController.getGalleryFolderName(guildId, foundGallery.name);
     appLogger.debug({ galleryName, folderName }, "[streamMedia] Gallery folder name resolved");
 
     const candidateKeys = [`${folderName}/uploads/${objectName}`, `${folderName}/${objectName}`];
@@ -68,16 +75,34 @@ export const streamMedia = async (req: Request, res: Response) => {
         appLogger.debug({ candidate }, "[streamMedia] Object fetched from bucket");
         break;
       } catch (candidateError) {
-        if ((candidateError as Error)?.name === "NoSuchKey") {
-          lastError = candidateError;
+        const err = candidateError as AwsLikeError;
+        const statusCode = err?.$metadata?.httpStatusCode;
+        const isMissing = err?.name === "NoSuchKey" || statusCode === 404;
+        if (isMissing) {
+          lastError = err;
           appLogger.debug({ candidate }, "[streamMedia] Candidate key missing, trying next");
           continue;
         }
-        throw candidateError;
+
+        appLogger.error(
+          { candidate, statusCode, errorName: err?.name, errorMessage: err?.message },
+          "[streamMedia] Failed to fetch object from bucket",
+        );
+        throw err;
       }
     }
 
     if (!resolvedKey || !mediaData || !contentType) {
+      appLogger.error(
+        {
+          galleryName,
+          objectName,
+          candidateKeys,
+          lastErrorName: (lastError as Error | undefined)?.name,
+          lastErrorMessage: (lastError as Error | undefined)?.message,
+        },
+        "[streamMedia] Exhausted candidate keys without locating object",
+      );
       throw (
         (lastError as Error) ?? Object.assign(new Error("Key not found"), { name: "NoSuchKey" })
       );
@@ -91,14 +116,17 @@ export const streamMedia = async (req: Request, res: Response) => {
     );
     res.send(mediaData);
   } catch (error) {
-    const errorMessage = (error as Error)?.message || "Unknown error";
-    const errorName = (error as Error)?.name || "UnknownError";
+    const err = error as AwsLikeError;
+    const errorMessage = err?.message || "Unknown error";
+    const errorName = err?.name || "UnknownError";
+    const statusCode = err?.$metadata?.httpStatusCode;
 
     appLogger.error(
       {
-        error,
+        error: err,
         errorName,
         errorMessage,
+        statusCode,
         galleryName,
         objectName,
         guildId,
@@ -107,10 +135,10 @@ export const streamMedia = async (req: Request, res: Response) => {
       "[streamMedia] Error serving media",
     );
 
-    if ((error as Error)?.name === "InvalidInputError") {
-      return res.status(400).json({ error: (error as Error).message });
+    if (errorName === "InvalidInputError") {
+      return res.status(400).json({ error: errorMessage });
     }
-    if ((error as Error)?.name === "NoSuchKey") {
+    if (errorName === "NoSuchKey" || statusCode === 404) {
       return res.status(404).json({ error: "Image not found" });
     }
     res.status(500).json({ error: "Failed to retrieve media" });

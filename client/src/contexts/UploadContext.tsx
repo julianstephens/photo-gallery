@@ -1,48 +1,29 @@
-import React, { createContext, useContext, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { UploadContext, type UploadContextValue } from "./uploadContextStore";
 
-interface UploadContextType {
-  showUploadMonitor: boolean;
-  uploadMonitorEverShown: boolean;
-  hasActiveUploads: boolean;
-  setShowUploadMonitor: (show: boolean) => void;
-  updateUploadMonitorVisibility: (show: boolean) => void;
-  setHasActiveUploads: (hasActive: boolean) => void;
-}
-
-const UploadContext = createContext<UploadContextType | undefined>(undefined);
-
-export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const UploadProvider = ({ children }: { children: ReactNode }) => {
   const [showUploadMonitor, setShowUploadMonitor] = useState(false);
   const [uploadMonitorEverShown, setUploadMonitorEverShown] = useState(false);
   const [hasActiveUploads, setHasActiveUploads] = useState(false);
 
-  const updateUploadMonitorVisibility = (show: boolean) => {
+  const updateUploadMonitorVisibility = useCallback((show: boolean) => {
     setShowUploadMonitor(show);
     if (show) {
       setUploadMonitorEverShown(true);
     }
-  };
+  }, []);
 
-  return (
-    <UploadContext.Provider
-      value={{
-        showUploadMonitor,
-        uploadMonitorEverShown,
-        hasActiveUploads,
-        setShowUploadMonitor,
-        updateUploadMonitorVisibility,
-        setHasActiveUploads,
-      }}
-    >
-      {children}
-    </UploadContext.Provider>
+  const value: UploadContextValue = useMemo(
+    () => ({
+      showUploadMonitor,
+      uploadMonitorEverShown,
+      hasActiveUploads,
+      setShowUploadMonitor,
+      updateUploadMonitorVisibility,
+      setHasActiveUploads,
+    }),
+    [showUploadMonitor, uploadMonitorEverShown, hasActiveUploads, updateUploadMonitorVisibility],
   );
-};
 
-export const useUploadContext = () => {
-  const context = useContext(UploadContext);
-  if (context === undefined) {
-    throw new Error("useUploadContext must be used within an UploadProvider");
-  }
-  return context;
+  return <UploadContext.Provider value={value}>{children}</UploadContext.Provider>;
 };

@@ -115,6 +115,7 @@ export class ChunkedUploadService {
   async saveChunk(uploadId: string, chunkIndex: number, chunkBuffer: Buffer): Promise<void> {
     const metadata = uploadMetadata.get(uploadId);
     if (!metadata) {
+      appLogger.error({ uploadId, chunkIndex }, "[chunkedUpload] saveChunk missing session");
       throw new Error(`Upload session not found: ${uploadId}`);
     }
 
@@ -122,6 +123,10 @@ export class ChunkedUploadService {
     try {
       await fs.access(metadata.tempDir);
     } catch {
+      appLogger.error(
+        { uploadId, chunkIndex, tempDir: metadata.tempDir },
+        "[chunkedUpload] temp directory missing",
+      );
       throw new Error(`Upload session expired or temp directory missing: ${uploadId}`);
     }
 
@@ -136,6 +141,16 @@ export class ChunkedUploadService {
       entry.progress.progress.uploadedBytes =
         (entry.progress.progress.uploadedBytes ?? 0) + chunkBuffer.length;
     }
+
+    appLogger.debug(
+      {
+        uploadId,
+        chunkIndex,
+        bytes: chunkBuffer.length,
+        uploadedBytes: uploadProgressState.get(uploadId)?.progress.progress.uploadedBytes,
+      },
+      "[chunkedUpload] Chunk persisted",
+    );
   }
 
   /**
@@ -152,8 +167,20 @@ export class ChunkedUploadService {
   async finalizeUpload(uploadId: string): Promise<FinalizeUploadResponse> {
     const metadata = uploadMetadata.get(uploadId);
     if (!metadata) {
+      appLogger.error({ uploadId }, "[chunkedUpload] finalizeUpload missing session");
       throw new Error(`Upload session not found: ${uploadId}`);
     }
+
+    appLogger.debug(
+      {
+        uploadId,
+        fileName: metadata.fileName,
+        fileType: metadata.fileType,
+        totalSize: metadata.totalSize,
+        tempDir: metadata.tempDir,
+      },
+      "[chunkedUpload] Starting finalizeUpload",
+    );
 
     // Update progress to processing/assembling phase
     this.updateProgress(uploadId, "processing", "server-assemble");
@@ -172,6 +199,10 @@ export class ChunkedUploadService {
         });
 
       if (chunkFiles.length === 0) {
+        appLogger.error(
+          { uploadId, tempDir: metadata.tempDir },
+          "[chunkedUpload] finalizeUpload found zero chunks",
+        );
         throw new Error(`No chunks found for upload: ${uploadId}`);
       }
 
@@ -180,6 +211,10 @@ export class ChunkedUploadService {
         const expectedIndex = i;
         const actualIndex = parseInt(chunkFiles[i].replace(CHUNK_FILE_PREFIX, ""), 10);
         if (actualIndex !== expectedIndex) {
+          appLogger.error(
+            { uploadId, expectedIndex, actualIndex, chunkFile: chunkFiles[i] },
+            "[chunkedUpload] finalizeUpload chunk order mismatch",
+          );
           throw new Error(
             `Missing or out-of-order chunk: expected index ${expectedIndex}, found ${actualIndex}`,
           );
@@ -244,6 +279,10 @@ export class ChunkedUploadService {
       // Validate that the assembled file size matches the expected total size
       const stats = await fs.stat(finalPath);
       if (stats.size !== metadata.totalSize) {
+        appLogger.error(
+          { uploadId, expected: metadata.totalSize, assembled: stats.size },
+          "[chunkedUpload] finalizeUpload size mismatch",
+        );
         throw new Error(
           `Assembled file size (${stats.size} bytes) does not match expected total size (${metadata.totalSize} bytes). Upload may be incomplete or corrupted.`,
         );
@@ -262,6 +301,10 @@ export class ChunkedUploadService {
             (buffer[2] !== 0x03 && buffer[2] !== 0x05 && buffer[2] !== 0x07) ||
             (buffer[3] !== 0x04 && buffer[3] !== 0x06 && buffer[3] !== 0x08)
           ) {
+            appLogger.error(
+              { uploadId, signature: buffer.toString("hex") },
+              "[chunkedUpload] finalizeUpload invalid zip signature",
+            );
             throw new Error(
               "File does not appear to be a valid ZIP archive. The file signature is invalid.",
             );
@@ -276,6 +319,7 @@ export class ChunkedUploadService {
         filePath: finalPath,
       };
     } catch (error) {
+      appLogger.error({ err: error, uploadId }, "[chunkedUpload] finalizeUpload failed");
       // Destroy stream on error to prevent resource leaks
       if (writeStream) {
         writeStream.destroy();

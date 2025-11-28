@@ -1,5 +1,5 @@
 import { queryClient } from "@/clients";
-import { useGalleryContext } from "@/contexts/GalleryContext";
+import { useGalleryContext } from "@/hooks";
 import type { FormProps } from "@/lib/types";
 import { toErrorMessage } from "@/lib/utils";
 import { renameGallery } from "@/queries";

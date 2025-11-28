@@ -1,4 +1,4 @@
-import { RenameGalleryForm } from "@/components/forms/RenameGalleryForm";
+import { RenameGalleryForm } from "@/components/forms";
 import { useState } from "react";
 import { BaseModal } from "./base";
 

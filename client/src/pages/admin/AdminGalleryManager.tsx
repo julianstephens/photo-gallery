@@ -1,13 +1,9 @@
-import { SetDefaultGuildButton } from "@/components/buttons/SetDefaultGuildButton";
-import { GuildSelect } from "@/components/forms/Fields";
-import { DetailedGallery } from "@/components/gallery/DetailedGallery";
-import { GalleryList } from "@/components/gallery/GalleryList";
-import { UploadMonitor } from "@/components/gallery/UploadMonitor";
-import { CreateGalleryModal } from "@/components/modals/CreateGalleryModal";
+import { SetDefaultGuildButton } from "@/components/buttons";
+import { GuildSelect } from "@/components/forms";
+import { DetailedGallery, GalleryList, UploadMonitor } from "@/components/gallery";
+import { CreateGalleryModal } from "@/components/modals";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useGalleryContext } from "@/contexts/GalleryContext";
-import { useUploadContext } from "@/contexts/UploadContext";
-import { useListGalleries } from "@/hooks";
+import { useAuth, useGalleryContext, useListGalleries, useUploadContext } from "@/hooks";
 import { Button, Flex, HStack, Icon, Presence, Spinner, Text, VStack } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
 import { HiOutlineUpload } from "react-icons/hi";
@@ -16,7 +12,11 @@ import type { Gallery } from "utils";
 
 const AdminGalleryManagerPage = () => {
   const [guildId, setGuildId] = useState<string | undefined>(undefined);
-  const { data, error, isLoading } = useListGalleries(guildId || "");
+  const { currentUser } = useAuth();
+  const userGuilds = currentUser?.guilds ?? [];
+  const hasGuilds = userGuilds.length > 0;
+  const effectiveGuildId = hasGuilds ? guildId || "" : "";
+  const { data, error, isLoading } = useListGalleries(effectiveGuildId);
   const [showCreateGalleryModal, setShowCreateGalleryModal] = useState(false);
   const { uploadMonitorEverShown, hasActiveUploads } = useUploadContext();
   const {
@@ -53,25 +53,26 @@ const AdminGalleryManagerPage = () => {
   }, [clearActiveGallery]);
 
   const onGuildChange = (selectedGuild: string) => {
+    if (!hasGuilds) return;
     setGuild(selectedGuild);
     setGuildId(selectedGuild);
   };
 
   useEffect(() => {
-    if (defaultGuildId) {
+    if (defaultGuildId && hasGuilds) {
       setGuild(defaultGuildId);
       setGuildId(defaultGuildId);
       // Immediately update context when default guild loads
       setActiveGuild(defaultGuildId);
     }
-  }, [defaultGuildId, setActiveGuild]);
+  }, [defaultGuildId, hasGuilds, setActiveGuild]);
 
   // Update GalleryContext when guild changes (for manual guild selection)
   useEffect(() => {
-    if (guildId) {
+    if (guildId && hasGuilds) {
       setActiveGuild(guildId);
     }
-  }, [guildId, setActiveGuild]);
+  }, [guildId, hasGuilds, setActiveGuild]);
 
   // Check if gallery was deleted or renamed
   useEffect(() => {
@@ -86,89 +87,102 @@ const AdminGalleryManagerPage = () => {
 
   return (
     <>
-      <Flex id={pageSlug} direction="column" w="full" h="full" gap="6">
-        <HStack
-          id={`${pageSlug}-guild-select`}
-          gap="4"
-          w="full"
-          align="center"
-          backgroundColor="gray.900"
-          p="4"
-          borderRadius="md"
-        >
-          <VStack w="full" align="start">
-            <HStack w="full" justify="space-between" align="last baseline" gap="4">
-              <GuildSelect w="50%" value={guild} onChange={onGuildChange} />
-              <SetDefaultGuildButton defaultGuild={guild} disabled={defaultGuildId === guild} />
-            </HStack>
-            {isDefaultGuild && (
-              <HStack>
-                <Icon fill="green.400">
-                  <HiStar />
-                </Icon>
-                <Text fontSize="sm" color="green.400">
-                  This is your default guild
-                </Text>
-              </HStack>
-            )}
-          </VStack>
-        </HStack>
-        <Presence
-          id={`${pageSlug}-gallery-list-presence`}
-          present={!galleryOpened}
-          w="full"
-          h="full"
-        >
-          <GalleryList
-            data={data || undefined}
-            error={error}
-            isLoading={isLoading}
-            guildId={guildId}
-            openCreateGalleryModal={openCreateGalleryModal}
-            openDetailedGalleryView={openDetailedGalleryView}
-            pageSlug={pageSlug}
-          />
-        </Presence>
-        {galleryOpened && activeGalleryName && (
-          <DetailedGallery
-            galleryName={activeGalleryName}
-            guildId={guild}
-            pageSlug={pageSlug}
-            closeGallery={closeDetailedGalleryView}
-          />
-        )}
-      </Flex>
-      <CreateGalleryModal
-        guildId={guildId ?? ""}
-        open={showCreateGalleryModal}
-        closeModal={closeCreateGalleryModal}
-      />
-      <UploadMonitor
-        isVisible={isUploadMonitorVisible}
-        onClose={() => setIsUploadMonitorVisible(false)}
-      />
-      {uploadMonitorEverShown && !isUploadMonitorVisible && (
-        <Tooltip content="View uploads">
-          <Button
-            zIndex={0}
-            position="fixed"
-            bottom="1rem"
-            right="1rem"
-            size="lg"
-            colorPalette={hasActiveUploads ? "blue" : "gray"}
-            aria-label="Show uploads"
-            onClick={() => setIsUploadMonitorVisible(true)}
+      {!hasGuilds ? (
+        <Flex w="full" h="full" align="center" justify="center">
+          <Text color="gray.400" textAlign="center">
+            You don&apos;t belong to any guilds with admin access yet. Ask another admin to add you
+            to a guild before managing galleries.
+          </Text>
+        </Flex>
+      ) : (
+        <Flex id={pageSlug} direction="column" w="full" h="full" gap="6">
+          <HStack
+            id={`${pageSlug}-guild-select`}
+            gap="4"
+            w="full"
+            align="center"
+            backgroundColor="gray.900"
+            p="4"
+            borderRadius="md"
           >
-            {hasActiveUploads ? (
-              <Spinner />
-            ) : (
-              <Icon>
-                <HiOutlineUpload />
-              </Icon>
-            )}
-            {hasActiveUploads ? "Uploading" : "View Uploads"}
-          </Button>
-        </Tooltip>
+            <VStack w="full" align="start">
+              <HStack w="full" justify="space-between" align="last baseline" gap="4">
+                <GuildSelect w="50%" value={guild} onChange={onGuildChange} />
+                <SetDefaultGuildButton defaultGuild={guild} disabled={defaultGuildId === guild} />
+              </HStack>
+              {isDefaultGuild && (
+                <HStack>
+                  <Icon fill="green.400">
+                    <HiStar />
+                  </Icon>
+                  <Text fontSize="sm" color="green.400">
+                    This is your default guild
+                  </Text>
+                </HStack>
+              )}
+            </VStack>
+          </HStack>
+          <Presence
+            id={`${pageSlug}-gallery-list-presence`}
+            present={!galleryOpened}
+            w="full"
+            h="full"
+          >
+            <GalleryList
+              data={data || undefined}
+              error={error}
+              isLoading={isLoading}
+              guildId={guildId}
+              openCreateGalleryModal={openCreateGalleryModal}
+              openDetailedGalleryView={openDetailedGalleryView}
+              pageSlug={pageSlug}
+            />
+          </Presence>
+          {galleryOpened && activeGalleryName && (
+            <DetailedGallery
+              galleryName={activeGalleryName}
+              guildId={guild}
+              pageSlug={pageSlug}
+              closeGallery={closeDetailedGalleryView}
+            />
+          )}
+        </Flex>
+      )}
+      {hasGuilds && (
+        <>
+          <CreateGalleryModal
+            guildId={guildId ?? ""}
+            open={showCreateGalleryModal}
+            closeModal={closeCreateGalleryModal}
+          />
+          <UploadMonitor
+            isVisible={isUploadMonitorVisible}
+            onClose={() => setIsUploadMonitorVisible(false)}
+          />
+          {uploadMonitorEverShown && !isUploadMonitorVisible && (
+            <Tooltip content="View uploads">
+              <Button
+                zIndex={0}
+                position="fixed"
+                bottom="1rem"
+                right="1rem"
+                size="lg"
+                colorPalette={hasActiveUploads ? "blue" : "gray"}
+                aria-label="Show uploads"
+                onClick={() => setIsUploadMonitorVisible(true)}
+              >
+                {hasActiveUploads ? (
+                  <Spinner />
+                ) : (
+                  <Icon>
+                    <HiOutlineUpload />
+                  </Icon>
+                )}
+                {hasActiveUploads ? "Uploading" : "View Uploads"}
+              </Button>
+            </Tooltip>
+          )}
+        </>
       )}
     </>
   );

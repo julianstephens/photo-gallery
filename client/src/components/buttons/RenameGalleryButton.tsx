@@ -1,4 +1,4 @@
-import { RenameGalleryModal } from "@/components/modals/RenameGalleryModal";
+import { RenameGalleryModal } from "@/components/modals";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ButtonProps } from "@/lib/types";
 import { Button, Icon, IconButton } from "@chakra-ui/react";

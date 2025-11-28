@@ -93,7 +93,7 @@ describe("guild handlers", () => {
     it("sets the default guild", async () => {
       const req = createReq({
         body: { guildId: "guild-2" },
-        session: { userId: "user-2" } as Request["session"],
+        session: { userId: "user-2", guildIds: ["guild-2"] } as Request["session"],
       });
       const res = createRes();
 
@@ -104,10 +104,26 @@ describe("guild handlers", () => {
       expect(res.json).toHaveBeenCalledWith({ message: "Default guild set successfully" });
     });
 
+    it("returns 403 when user is not a member of requested guild", async () => {
+      const req = createReq({
+        body: { guildId: "guild-2" },
+        session: { userId: "user-2", guildIds: ["guild-1"] } as Request["session"],
+      });
+      const res = createRes();
+
+      await setDefaultGuild(req, res);
+
+      expect(controllerMocks.setDefaultGuild).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "Forbidden: Not a member of the requested guild",
+      });
+    });
+
     it("maps invalid input errors", async () => {
       const req = createReq({
         body: { guildId: "guild-2" },
-        session: { userId: "user-2" } as Request["session"],
+        session: { userId: "user-2", guildIds: ["guild-2"] } as Request["session"],
       });
       const res = createRes();
       controllerMocks.setDefaultGuild.mockRejectedValue({
@@ -124,7 +140,7 @@ describe("guild handlers", () => {
     it("returns 500 for unexpected failures", async () => {
       const req = createReq({
         body: { guildId: "guild-2" },
-        session: { userId: "user-2" } as Request["session"],
+        session: { userId: "user-2", guildIds: ["guild-2"] } as Request["session"],
       });
       const res = createRes();
       controllerMocks.setDefaultGuild.mockRejectedValue(new Error("boom"));

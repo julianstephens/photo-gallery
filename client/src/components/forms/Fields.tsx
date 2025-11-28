@@ -1,5 +1,5 @@
-import { useGalleryContext } from "@/contexts/GalleryContext";
 import { useAuth, useListGalleries } from "@/hooks";
+import { useGalleryContext } from "@/hooks";
 import {
   createListCollection,
   Field,

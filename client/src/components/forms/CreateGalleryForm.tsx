@@ -1,7 +1,7 @@
 import { queryClient } from "@/clients";
-import { Input } from "@/components/forms/Fields";
 import { toaster } from "@/components/ui/toaster";
 import { useAuth } from "@/hooks";
+import type { FormProps } from "@/lib/types";
 import { toErrorMessage } from "@/lib/utils";
 import { createGallery } from "@/queries";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,7 +10,7 @@ import React, { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Navigate } from "react-router";
 import { type CreateGalleryRequest, createGallerySchema } from "utils";
-import type { FormProps } from "@/lib/types";
+import { Input } from "./Fields";
 
 export const CreateGalleryForm = ({
   doSubmit,
