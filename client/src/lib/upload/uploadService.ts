@@ -1,8 +1,6 @@
-import { httpClient } from "@/clients.ts";
+import { API_BASE_URL, httpClient } from "@/clients.ts";
 import type { UploadProgress } from "utils";
-
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
-const PROGRESS_THROTTLE_MS = 100; // Throttle progress callbacks to avoid excessive UI re-renders
+import { chunkedUpload } from "./chunkedUpload";
 
 export const initiateUpload = async (
   fileName: string,
@@ -54,53 +52,59 @@ export const getUploadProgress = async (uploadId: string): Promise<UploadProgres
   return data;
 };
 
+/**
+ * Upload a file in chunks with real-time progress tracking.
+ * Uses chunkedUpload internally with server-side progress polling for a smooth progress bar.
+ *
+ * Progress phases:
+ * - 0-90%: Chunk upload progress
+ * - 90-100%: Server-side processing (zip extraction, bucket uploads)
+ */
 export const uploadFileInChunks = async (
   file: File,
   galleryName: string,
   guildId: string,
   onProgress: (progress: number) => void,
 ) => {
-  const { uploadId } = await initiateUpload(file.name, file.type, galleryName, file.size, guildId);
-  const totalParts = Math.ceil(file.size / CHUNK_SIZE);
-  const uploadPromises = [];
-
-  // Track bytes uploaded for each chunk to calculate overall progress
-  const chunkBytesLoaded: number[] = new Array(totalParts).fill(0);
-
-  // Throttle progress updates
-  let lastProgressUpdate = 0;
-
-  const updateTotalProgress = () => {
-    const totalBytesLoaded = chunkBytesLoaded.reduce((sum, bytes) => sum + bytes, 0);
-    const progress = (totalBytesLoaded / file.size) * 100;
-
-    const now = Date.now();
-    if (now - lastProgressUpdate >= PROGRESS_THROTTLE_MS) {
-      lastProgressUpdate = now;
-      onProgress(progress);
-    }
-  };
+  // Reserve 10% for server-side processing
+  const UPLOAD_PHASE_MAX = 90;
 
   try {
-    for (let i = 0; i < totalParts; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
+    const result = await chunkedUpload(file, {
+      galleryName,
+      guildId,
+      baseUrl: API_BASE_URL,
+      onProgress: (chunkProgress) => {
+        // Scale chunk progress to 0-90%
+        const scaledProgress = (chunkProgress.percentage / 100) * UPLOAD_PHASE_MAX;
+        onProgress(scaledProgress);
+      },
+      onServerProgress: (serverProgress) => {
+        // Map server-side processing to 90-100%
+        const { progress } = serverProgress;
+        let serverPercentage = 0;
 
-      uploadPromises.push(
-        uploadChunk(uploadId, i, chunk, (bytesLoaded: number) => {
-          chunkBytesLoaded[i] = bytesLoaded;
-          updateTotalProgress();
-        }),
-      );
-    }
+        if (progress.totalFiles && progress.processedFiles) {
+          serverPercentage = (progress.processedFiles / progress.totalFiles) * 100;
+        } else if (progress.totalBytes && progress.uploadedBytes) {
+          serverPercentage = (progress.uploadedBytes / progress.totalBytes) * 100;
+        }
 
-    await Promise.all(uploadPromises);
+        // Scale server progress to 90-100%
+        const scaledProgress =
+          UPLOAD_PHASE_MAX + (serverPercentage / 100) * (100 - UPLOAD_PHASE_MAX);
+        onProgress(scaledProgress);
+      },
+    });
 
-    // Always report 100% completion
+    // Always report 100% on completion
     onProgress(100);
 
-    return finalizeUpload(uploadId);
+    if (!result.success) {
+      throw new Error(result.error || "Upload failed");
+    }
+
+    return result;
   } catch (error) {
     // Set progress to 100% on error to show 'complete but errored' state
     onProgress(100);
