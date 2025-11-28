@@ -41,7 +41,7 @@ export class GradientMetaService {
     const stored: StoredGradient = {
       status,
       gradient,
-      attempts: (existing?.attempts ?? 0) + (status === "processing" ? 0 : 1),
+      attempts: existing?.attempts ?? 0, // Attempts only incremented explicitly via incrementAttempts
       lastError: error,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
