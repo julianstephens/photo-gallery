@@ -76,11 +76,10 @@ export const uploadFileInChunks = async (
     const start = i * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE, file.size);
     const chunk = file.slice(start, end);
-    const chunkIndex = i;
 
     uploadPromises.push(
       uploadChunk(uploadId, i, chunk, (bytesLoaded: number) => {
-        chunkBytesLoaded[chunkIndex] = bytesLoaded;
+        chunkBytesLoaded[i] = bytesLoaded;
         updateTotalProgress();
       }),
     );
