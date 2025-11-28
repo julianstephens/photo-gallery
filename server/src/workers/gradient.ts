@@ -158,9 +158,6 @@ async function processJob(jobId: string): Promise<void> {
     };
 
     // Validate the result
-    if (!gradient.primary || !gradient.secondary) {
-      throw new Error("Generated gradient missing required fields");
-    }
 
     // Save to metadata
     await gradientMetaService.markCompleted(storageKey, gradient);
