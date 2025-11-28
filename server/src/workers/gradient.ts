@@ -100,8 +100,9 @@ export async function enqueueGradientJob(data: GenerateGradientJobData): Promise
 
 /**
  * Process a single gradient generation job.
+ * Exported for testing purposes.
  */
-async function processJob(jobId: string): Promise<void> {
+export async function processJob(jobId: string): Promise<void> {
   const jobKey = `${JOB_PREFIX}${jobId}`;
   const startTime = Date.now();
 
