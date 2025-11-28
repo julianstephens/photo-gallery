@@ -161,7 +161,7 @@ describe("media handlers", () => {
           } as Request["params"],
           query: { guildId: "guild-1" } as Request["query"],
         },
-        { guildIds: undefined as unknown as string[] },
+        { guildIds: undefined },
       );
       const res = createRes();
 
