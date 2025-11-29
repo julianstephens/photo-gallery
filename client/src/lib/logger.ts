@@ -3,7 +3,7 @@ import pino from "pino";
 // --- Loki Configuration (only used in production) ---
 const LOKI_LABELS = {
   app: "photo-gallery-client",
-  env: "production",
+  env: import.meta.env.MODE || "development",
 };
 const BATCH_INTERVAL_MS = 5000;
 const BATCH_SIZE_LIMIT = 100;
@@ -41,20 +41,34 @@ async function sendBatchToLoki() {
     {} as Record<string, { stream: Record<string, string>; values: [string, string][] }>,
   );
 
+  const lokiEndpoint = import.meta.env.VITE_LOKI_ENDPOINT;
+  if (!lokiEndpoint) {
+    console.warn("[Loki Transport] VITE_LOKI_ENDPOINT not configured, skipping log batch");
+    return;
+  }
+
   try {
-    await fetch(import.meta.env.VITE_LOKI_ENDPOINT, {
+    const response = await fetch(lokiEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ streams: Object.values(streams) }),
       keepalive: true,
     });
+
+    if (!response.ok) {
+      console.warn(
+        "[Loki Transport] Failed to send log batch:",
+        response.status,
+        response.statusText,
+      );
+    }
   } catch (error) {
     console.error("[Loki Transport] Failed to send log batch:", error);
   }
 }
 
 // --- Dynamic Configuration ---
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = import.meta.env.MODE === "production";
 
 // Helper to determine the log level
 const getLogLevel = (): pino.LevelWithSilent => {
@@ -125,4 +139,12 @@ export const logger = pino({
 });
 
 // --- Log the final configuration for debugging ---
-logger.debug(`Logger initialized. Level: ${getLogLevel()}. Production: ${isProduction}`);
+logger.debug(
+  {
+    mode: import.meta.env.MODE,
+    logLevel: getLogLevel(),
+    isProduction,
+    lokiEndpointConfigured: !!import.meta.env.VITE_LOKI_ENDPOINT,
+  },
+  "Logger initialized",
+);

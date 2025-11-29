@@ -212,10 +212,15 @@ export const appLogger = createAppLogger();
  */
 export const httpLogger = pinoHttp<IncomingMessage, ServerResponse>({
   logger,
-  autoLogging: {
-    ignore: (req) => req.url?.startsWith("/healthz") || req.url?.startsWith("/metrics") || false,
-  },
-  customLogLevel: (res, err) => {
+  autoLogging: true, // Enable all auto logging
+  customLogLevel: (res, req, err) => {
+    // Suppress logging for health checks and metrics
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const url = (req as any)?.url || "";
+    if (url.startsWith("/healthz") || url.startsWith("/readyz") || url.startsWith("/metrics")) {
+      return "silent";
+    }
+
     if (err || (res.statusCode && res.statusCode >= 500)) return "error";
     if (res.statusCode && res.statusCode >= 400) return "warn";
     return "debug"; // Successful requests logged at debug level to reduce noise
