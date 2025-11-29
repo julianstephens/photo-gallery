@@ -24,6 +24,25 @@ export function applySecurity(app: Express) {
     }),
   );
 
+  const hardenedHeaders: Record<string, string> = {
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Opener-Policy": "same-origin",
+  };
+
+  // Cloudflare terminates TLS first, but we still enforce the headers once traffic hits Express.
+  app.use((_, res, next) => {
+    Object.entries(hardenedHeaders).forEach(([header, value]) => {
+      if (!res.getHeader(header)) {
+        res.setHeader(header, value);
+      }
+    });
+    next();
+  });
+
   // Parameter pollution protection
   app.use(hpp());
 
