@@ -113,7 +113,7 @@ const AdminGalleryManagerPage = () => {
           </Text>
         </Flex>
       ) : (
-        <Flex id={pageSlug} direction="column" w="full" h="full" gap="6">
+        <Flex id={pageSlug} direction="column" w="full" h="full" gap="6" pb="10">
           <HStack
             id={`${pageSlug}-guild-select`}
             gap="4"

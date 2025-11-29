@@ -42,6 +42,22 @@ export const UploadPhotosButton = ({
     directory: "",
   } as InputHTMLAttributes<HTMLInputElement>;
 
+  const getNormalizedUploadPath = (file: File) => {
+    const typedFile = file as File & { webkitRelativePath?: string };
+    const relativePath = typedFile.webkitRelativePath ?? "";
+    return (relativePath || file.name).replace(/\\/g, "/");
+  };
+
+  const isAppleDoubleFile = (file: File): boolean => {
+    const normalizedPath = getNormalizedUploadPath(file);
+    if (normalizedPath.includes("/__MACOSX/")) {
+      return true;
+    }
+    const segments = normalizedPath.split("/");
+    const lastSegment = segments[segments.length - 1] ?? normalizedPath;
+    return lastSegment.startsWith("._");
+  };
+
   const isValidImageFile = (file: File): boolean => {
     // Check if file is an image type
     return file.type.startsWith("image/");
@@ -66,9 +82,32 @@ export const UploadPhotosButton = ({
       return;
     }
 
+    const filteredMetadataFiles: File[] = [];
+    let appleDoubleCount = 0;
+
+    for (const file of files) {
+      if (isAppleDoubleFile(file)) {
+        appleDoubleCount++;
+        continue;
+      }
+      filteredMetadataFiles.push(file);
+    }
+
+    if (appleDoubleCount > 0) {
+      toaster.info({
+        title: "Skipped macOS helper files",
+        description: `${appleDoubleCount} AppleDouble file${appleDoubleCount !== 1 ? "s were" : " was"} ignored automatically.`,
+      });
+    }
+
+    if (filteredMetadataFiles.length === 0) {
+      setIsLoading(false);
+      return;
+    }
+
     // Filter out non-image files
-    const validFiles = files.filter(isValidImageFile);
-    const invalidCount = files.length - validFiles.length;
+    const validFiles = filteredMetadataFiles.filter(isValidImageFile);
+    const invalidCount = filteredMetadataFiles.length - validFiles.length;
 
     if (invalidCount > 0) {
       toaster.warning({

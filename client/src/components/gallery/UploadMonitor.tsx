@@ -12,8 +12,19 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
+import { keyframes } from "@emotion/react";
 import { useEffect, useState } from "react";
 import { HiCheck, HiOutlineExclamationCircle, HiXMark } from "react-icons/hi2";
+
+const CLEAR_ANIMATION_MS = 250;
+const fadeOut = keyframes`
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+`;
 
 export interface UploadMonitorProps {
   onClose?: () => void;
@@ -22,6 +33,7 @@ export interface UploadMonitorProps {
 
 export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps) => {
   const [uploads, setUploads] = useState<ActiveUpload[]>([]);
+  const [clearingIds, setClearingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const unsubscribe = uploadProgressStore.subscribe((activeUploads) => {
@@ -31,11 +43,48 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
   }, []);
 
   const handleClearAll = () => {
-    uploadProgressStore.clearCompleted();
+    const removable = uploads.filter((upload) => upload.status !== "uploading");
+    if (removable.length === 0) return;
+
+    setClearingIds((prev) => {
+      const next = new Set(prev);
+      for (const upload of removable) {
+        next.add(upload.id);
+      }
+      return next;
+    });
+
+    setTimeout(() => {
+      for (const upload of removable) {
+        uploadProgressStore.removeUpload(upload.id);
+      }
+      setClearingIds((prev) => {
+        const next = new Set(prev);
+        for (const upload of removable) {
+          next.delete(upload.id);
+        }
+        return next;
+      });
+    }, CLEAR_ANIMATION_MS + 50);
   };
 
-  const handleClearSingle = (uploadId: string) => {
-    uploadProgressStore.removeUpload(uploadId);
+  const handleClearSingle = (upload: ActiveUpload) => {
+    if (upload.status === "uploading") return;
+
+    setClearingIds((prev) => {
+      const next = new Set(prev);
+      next.add(upload.id);
+      return next;
+    });
+
+    setTimeout(() => {
+      uploadProgressStore.removeUpload(upload.id);
+      setClearingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(upload.id);
+        return next;
+      });
+    }, CLEAR_ANIMATION_MS + 50);
   };
 
   // Show the monitor if there are uploads to display AND it's not hidden
@@ -95,7 +144,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
               onClick={handleClearAll}
               aria-label="Clear all completed uploads"
             >
-              Clear All
+              Clear All Completed
             </Button>
           )}
           {onClose && <CloseButton size="sm" onClick={onClose} aria-label="Close upload monitor" />}
@@ -110,113 +159,119 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
         overflowY="auto"
         p={3}
       >
-        {uploads.map((upload) => (
-          <VStack
-            id={`upload-monitor-item-${upload.id}`}
-            key={upload.id}
-            align="start"
-            gap={2}
-            p={3}
-            borderWidth="1px"
-            borderColor="gray.700"
-            borderRadius="md"
-            bg="gray.900"
-            mb={2}
-            _last={{ mb: 0 }}
-          >
-            {/* Header with file name and status */}
-            <HStack
-              id={`upload-monitor-item-header-${upload.id}`}
-              w="full"
-              justify="space-between"
+        {uploads.map((upload) => {
+          const isClearing = clearingIds.has(upload.id);
+
+          return (
+            <VStack
+              id={`upload-monitor-item-${upload.id}`}
+              key={upload.id}
               align="start"
               gap={2}
+              p={3}
+              borderWidth="1px"
+              borderColor="gray.700"
+              borderRadius="md"
+              bg="gray.900"
+              mb={2}
+              _last={{ mb: 0 }}
+              animation={
+                isClearing ? `${fadeOut} ${CLEAR_ANIMATION_MS}ms ease forwards` : undefined
+              }
             >
-              <VStack
-                id={`upload-monitor-item-header-info-${upload.id}`}
+              {/* Header with file name and status */}
+              <HStack
+                id={`upload-monitor-item-header-${upload.id}`}
+                w="full"
+                justify="space-between"
                 align="start"
-                gap={0}
-                flex={1}
-                minW={0}
+                gap={2}
               >
-                <Tooltip content={upload.fileName} positioning={{ overlap: true }}>
-                  <Text fontSize="sm" fontWeight="medium" truncate w="full">
-                    {upload.fileName}
+                <VStack
+                  id={`upload-monitor-item-header-info-${upload.id}`}
+                  align="start"
+                  gap={0}
+                  flex={1}
+                  minW={0}
+                >
+                  <Tooltip content={upload.fileName} positioning={{ overlap: true }}>
+                    <Text fontSize="sm" fontWeight="medium" truncate w="full">
+                      {upload.fileName}
+                    </Text>
+                  </Tooltip>
+                  <Text fontSize="xs" color="gray.500" truncate w="full">
+                    {upload.galleryName}
                   </Text>
-                </Tooltip>
-                <Text fontSize="xs" color="gray.500" truncate w="full">
-                  {upload.galleryName}
-                </Text>
-              </VStack>
+                </VStack>
 
-              <HStack gap={1}>
-                {upload.status === "uploading" && (
-                  <Badge colorPalette="blue" variant="subtle">
-                    <Spinner size="xs" mr={1} />
-                    Uploading
-                  </Badge>
-                )}
-                {upload.status === "completed" && (
-                  <Badge colorPalette="green" variant="subtle">
-                    <HiCheck />
-                    Done
-                  </Badge>
-                )}
-                {upload.status === "failed" && (
-                  <Badge colorPalette="red" variant="subtle">
-                    <HiOutlineExclamationCircle />
-                    Failed
-                  </Badge>
-                )}
-                {upload.status !== "uploading" && (
+                <HStack gap={1}>
+                  {upload.status === "uploading" && (
+                    <Badge colorPalette="blue" variant="subtle">
+                      <Spinner size="xs" mr={1} />
+                      Uploading
+                    </Badge>
+                  )}
+                  {upload.status === "completed" && (
+                    <Badge colorPalette="green" variant="subtle">
+                      <HiCheck />
+                      Done
+                    </Badge>
+                  )}
+                  {upload.status === "failed" && (
+                    <Badge colorPalette="red" variant="subtle">
+                      <HiOutlineExclamationCircle />
+                      Failed
+                    </Badge>
+                  )}
                   <IconButton
                     aria-label={`Clear ${upload.fileName}`}
                     size="xs"
                     variant="ghost"
-                    onClick={() => handleClearSingle(upload.id)}
+                    disabled={upload.status === "uploading" || clearingIds.has(upload.id)}
+                    onClick={() => handleClearSingle(upload)}
                   >
                     <HiXMark />
                   </IconButton>
-                )}
+                </HStack>
               </HStack>
-            </HStack>
 
-            {/* Progress bar */}
-            <Progress.Root
-              w="full"
-              value={upload.status != "failed" ? upload.progress : 100}
-              max={100}
-              striped={upload.status === "uploading"}
-              animated={upload.status === "uploading"}
-              colorPalette={
-                upload.status === "uploading"
-                  ? "blue"
-                  : upload.status === "completed"
-                    ? "green"
-                    : "red"
-              }
-            >
-              <Progress.Track>
-                <Progress.Range />
-              </Progress.Track>
-              <Progress.ValueText />
-            </Progress.Root>
+              {/* Progress bar */}
+              <Progress.Root
+                w="full"
+                value={upload.status != "failed" ? upload.progress : 100}
+                max={100}
+                striped={upload.status === "uploading"}
+                animated={upload.status === "uploading"}
+                colorPalette={
+                  upload.status === "uploading"
+                    ? "blue"
+                    : upload.status === "completed"
+                      ? "green"
+                      : "red"
+                }
+              >
+                <Progress.Track>
+                  <Progress.Range />
+                </Progress.Track>
+                <Progress.ValueText />
+              </Progress.Root>
 
-            {/* Error message */}
-            {upload.status === "failed" && upload.error && (
-              <Text fontSize="xs" color="red.300">
-                {upload.error}
-              </Text>
-            )}
+              {/* Error message */}
+              {upload.status === "failed" && upload.error && (
+                <Text fontSize="xs" color="red.300">
+                  {upload.error}
+                </Text>
+              )}
 
-            {/* Completion info */}
-            {upload.completedTime && (
-              <Text fontSize="xs" color="gray.400">
-                {formatTime(upload.completedTime - upload.startTime)} total
-              </Text>
-            )}
-          </VStack>
-        ))}
+              {/* Completion info */}
+              {upload.completedTime != null && (
+                <Text fontSize="xs" color="gray.400">
+                  {formatTime(upload.completedTime - upload.startTime)} total
+                </Text>
+              )}
+            </VStack>
+          );
+        })}
       </VStack>
 
       {/* Summary */}

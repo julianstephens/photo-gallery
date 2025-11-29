@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type { UploadJob, UploadJobProgress, UploadJobStatus } from "utils";
+import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 
 const UPLOAD_JOBS_PREFIX = "upload:job:";
@@ -32,6 +33,8 @@ export class UploadJobService {
     await redis.client.expire(jobKey, JOB_TTL_SECONDS);
     await redis.client.rPush(UPLOAD_JOBS_LIST, jobId);
 
+    appLogger.debug({ jobId, guildId, galleryName, filename, fileSize }, "[uploadJob] created job");
+
     return jobId;
   };
 
@@ -40,6 +43,7 @@ export class UploadJobService {
     const jobJson = await redis.client.get(jobKey);
 
     if (!jobJson) {
+      appLogger.warn({ jobId }, "[uploadJob] getJob cache miss");
       return null;
     }
 
@@ -47,7 +51,7 @@ export class UploadJobService {
       const job = JSON.parse(jobJson) as UploadJob;
       return job;
     } catch (error) {
-      console.error(`Failed to parse upload job ${jobId}:`, error);
+      appLogger.error({ jobId, err: error }, "[uploadJob] failed to parse job JSON");
       return null;
     }
   };
@@ -62,6 +66,7 @@ export class UploadJobService {
     }
 
     const job = JSON.parse(jobJson) as UploadJob;
+    const previousStatus = job.status;
     job.status = status;
 
     if (status === "processing" && !job.startedAt) {
@@ -77,6 +82,11 @@ export class UploadJobService {
     }
 
     await redis.client.set(jobKey, JSON.stringify(job));
+
+    appLogger.debug(
+      { jobId, previousStatus, nextStatus: status, error },
+      "[uploadJob] status updated",
+    );
   };
 
   updateJobProgress = async (jobId: string, progress: UploadJobProgress) => {
@@ -93,24 +103,39 @@ export class UploadJobService {
 
     const updatedJson = JSON.stringify(job);
     await redis.client.set(jobKey, updatedJson);
+
+    appLogger.debug(
+      {
+        jobId,
+        processedFiles: progress.processedFiles,
+        totalFiles: progress.totalFiles,
+        uploadedCount: progress.uploadedFiles.length,
+        failedCount: progress.failedFiles.length,
+      },
+      "[uploadJob] progress update",
+    );
   };
 
   deleteJob = async (jobId: string) => {
     const jobKey = this.#buildJobKey(jobId);
     await redis.client.del(jobKey);
     await redis.client.lRem(UPLOAD_JOBS_LIST, 0, jobId);
+
+    appLogger.debug({ jobId }, "[uploadJob] deleted job");
   };
 
   finalizeJob = async (jobId: string) => {
     const jobKey = this.#buildJobKey(jobId);
     const exists = await redis.client.exists(jobKey);
     if (!exists) {
+      appLogger.debug({ jobId }, "[uploadJob] finalizeJob skipped (missing key)");
       return;
     }
     // For completed/failed jobs, keep them in the list for a short time so clients can see final state
     // They will be automatically removed when the key expires
     await redis.client.expire(jobKey, TERMINAL_JOB_TTL_SECONDS);
     // Don't remove from list immediately - let clients see the final state
+    appLogger.debug({ jobId, ttlSeconds: TERMINAL_JOB_TTL_SECONDS }, "[uploadJob] finalized job");
   };
 
   getAllJobs = async (): Promise<UploadJob[]> => {
@@ -123,6 +148,8 @@ export class UploadJobService {
         jobs.push(job);
       }
     }
+
+    appLogger.debug({ jobCount: jobs.length }, "[uploadJob] fetched active jobs");
 
     return jobs;
   };
