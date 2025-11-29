@@ -9,10 +9,15 @@ import { appLogger } from "./logger.ts";
 const DEFAULT_LOKI_TARGET = "http://loki-csss4s88ks00s80k8w4o440c:3100";
 
 /**
+ * Resolved Loki target URL
+ */
+const LOKI_TARGET = env.LOKI_PROXY_TARGET ?? DEFAULT_LOKI_TARGET;
+
+/**
  * Proxy configuration options for Loki log forwarding
  */
 const proxyOptions: Options = {
-  target: env.LOKI_PROXY_TARGET ?? DEFAULT_LOKI_TARGET,
+  target: LOKI_TARGET,
   changeOrigin: true,
   timeout: 10000, // 10 second timeout
   on: {
@@ -29,11 +34,8 @@ const proxyOptions: Options = {
  * Proxy middleware that forwards client-side logs to the internal Loki instance.
  * Only proxies requests to /loki/api/v1/push to ensure no other Loki endpoints are exposed.
  */
-export const lokiProxy = (req: Request, res: Response, next: NextFunction) => {
-  const target = env.LOKI_PROXY_TARGET ?? DEFAULT_LOKI_TARGET;
-  if (!target) {
-    res.status(503).json({ error: "Loki proxy not configured" });
-    return;
-  }
-  return createProxyMiddleware(proxyOptions)(req, res, next);
-};
+export const lokiProxy = createProxyMiddleware(proxyOptions) as (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => void;
