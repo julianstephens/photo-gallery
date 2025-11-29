@@ -109,8 +109,11 @@ export const queryClient = new QueryClient({
         }
         return computeBackoffMs(attempt);
       },
-      staleTime: 30_000, // reduce refetch pressure
-      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes - data is fresh for 5 minutes before refetch
+      gcTime: 10 * 60 * 1000, // 10 minutes - keep cached data for 10 minutes
+      refetchOnWindowFocus: false, // don't refetch when user returns to window
+      refetchOnReconnect: true, // refetch when connection restored (user went offline)
+      refetchOnMount: false, // don't refetch just because component mounted
     },
     mutations: {
       retry: (failureCount, error) => {
