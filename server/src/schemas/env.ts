@@ -80,6 +80,8 @@ export const envSchema = z.object({
   // both: stdout + file (useful for debugging)
   LOG_OUTPUT: z.enum(["stdout", "file", "both"]).optional(),
   // TODO: Add LOKI_URL and Loki logging support if/when direct Loki push is implemented.
+  // Loki proxy endpoint for client-side log forwarding
+  LOKI_PROXY_TARGET: z.string().url().optional(),
   // Log file rotation settings (for file-based logging)
   LOG_FILE_PATH: z.string().default("logs/app.log"),
   LOG_FILE_MAX_SIZE: z
