@@ -97,15 +97,15 @@ describe("ChunkedUploadService", () => {
 
     it("stores file metadata", async () => {
       const result = await service.initiateUpload({
-        fileName: "myfile.zip",
-        fileType: "application/zip",
+        fileName: "myfile.jpg",
+        fileType: "image/jpeg",
         galleryName: "test-gallery",
         totalSize: 1024,
       });
 
       const metadata = service.getMetadata(result.uploadId);
-      expect(metadata?.fileName).toBe("myfile.zip");
-      expect(metadata?.fileType).toBe("application/zip");
+      expect(metadata?.fileName).toBe("myfile.jpg");
+      expect(metadata?.fileType).toBe("image/jpeg");
       expect(metadata?.createdAt).toBeLessThanOrEqual(Date.now());
 
       // Cleanup
@@ -429,14 +429,14 @@ describe("ChunkedUploadService", () => {
         totalSize: 1024,
       });
 
-      service.updateProgress(uploadId, "processing", "server-zip-extract", {
+      service.updateProgress(uploadId, "processing", "server-upload", {
         totalFiles: 10,
         processedFiles: 5,
       });
 
       const progress = service.getProgress(uploadId);
       expect(progress?.status).toBe("processing");
-      expect(progress?.phase).toBe("server-zip-extract");
+      expect(progress?.phase).toBe("server-upload");
       expect(progress?.progress.totalFiles).toBe(10);
       expect(progress?.progress.processedFiles).toBe(5);
 

@@ -21,7 +21,7 @@ describe("UploadJobService", () => {
     it("should create a new upload job", async () => {
       const guildId = "guild123";
       const galleryName = "test-gallery";
-      const filename = "test.zip";
+      const filename = "test.jpg";
       const fileSize = 1024;
 
       const jobId = await service.createJob(guildId, galleryName, filename, fileSize);
@@ -49,7 +49,7 @@ describe("UploadJobService", () => {
         status: "pending",
         galleryName: "test-gallery",
         guildId: "guild123",
-        filename: "test.zip",
+        filename: "test.jpg",
         fileSize: 1024,
         createdAt: Date.now(),
       };
@@ -77,7 +77,7 @@ describe("UploadJobService", () => {
         status: "processing",
         galleryName: "test-gallery",
         guildId: "guild123",
-        filename: "test.zip",
+        filename: "test.jpg",
         fileSize: 1024,
         createdAt: Date.now(),
         progress,
@@ -100,7 +100,7 @@ describe("UploadJobService", () => {
         status: "pending",
         galleryName: "test-gallery",
         guildId: "guild123",
-        filename: "test.zip",
+        filename: "test.jpg",
         fileSize: 1024,
         createdAt: Date.now(),
       };
@@ -123,7 +123,7 @@ describe("UploadJobService", () => {
         status: "pending",
         galleryName: "test-gallery",
         guildId: "guild123",
-        filename: "test.zip",
+        filename: "test.jpg",
         fileSize: 1024,
         createdAt: Date.now(),
       };
@@ -143,7 +143,7 @@ describe("UploadJobService", () => {
         status: "processing",
         galleryName: "test-gallery",
         guildId: "guild123",
-        filename: "test.zip",
+        filename: "test.jpg",
         fileSize: 1024,
         createdAt: Date.now(),
       };
@@ -163,7 +163,7 @@ describe("UploadJobService", () => {
         status: "processing",
         galleryName: "test-gallery",
         guildId: "guild123",
-        filename: "test.zip",
+        filename: "test.jpg",
         fileSize: 1024,
         createdAt: Date.now(),
       };
@@ -185,7 +185,7 @@ describe("UploadJobService", () => {
         status: "processing",
         galleryName: "test-gallery",
         guildId: "guild123",
-        filename: "test.zip",
+        filename: "test.jpg",
         fileSize: 1024,
         createdAt: Date.now(),
       };
