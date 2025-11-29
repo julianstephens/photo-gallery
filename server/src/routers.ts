@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as handlers from "./handlers/index.ts";
 import { streamMedia } from "./handlers/media.ts";
 import { requiresAdmin, requiresAuth, requiresGuildMembership } from "./middleware/auth.ts";
+import { uploadRateLimiter } from "./middleware/rateLimit.ts";
 import env from "./schemas/env.ts";
 
 /**********************
@@ -54,6 +55,7 @@ guildRouter.post("/guilds/default", handlers.setDefaultGuild);
  * UPLOAD ROUTES
  **********************/
 const uploadsRouter = Router();
+uploadsRouter.use(uploadRateLimiter);
 uploadsRouter.use(requiresAuth);
 uploadsRouter.use(requiresGuildMembership);
 uploadsRouter.use(requiresAdmin);

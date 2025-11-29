@@ -6,7 +6,7 @@ export const apiRateLimiter: RateLimitRequestHandler = rateLimit({
   max: 100,
   standardHeaders: "draft-7", // RateLimit-* headers
   legacyHeaders: false,
-  validate: { trustProxy: false },
+  validate: { trustProxy: true },
   message: { error: "Too many requests, please try again later." },
   skip: (req) => {
     if (req.ip === "::1") {
@@ -14,6 +14,30 @@ export const apiRateLimiter: RateLimitRequestHandler = rateLimit({
     }
     const originalUrl = req.originalUrl || "";
     if (req.method === "GET" && originalUrl.includes("/galleries/upload/")) {
+      return true;
+    }
+    return false;
+  },
+  handler: (req, res, _next, options) => {
+    const reset = (req as typeof req & { rateLimit?: { resetTime?: Date } }).rateLimit?.resetTime;
+    if (reset instanceof Date) {
+      const deltaSec = Math.max(1, Math.ceil((reset.getTime() - Date.now()) / 1000));
+      res.setHeader("Retry-After", String(deltaSec));
+    }
+    res.status(options.statusCode).json(options.message);
+  },
+});
+
+// Lenient limiter for chunked uploads (5 min window, 500 reqs per IP)
+export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 500,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  validate: { trustProxy: true },
+  message: { error: "Too many upload requests, please try again later." },
+  skip: (req) => {
+    if (req.ip === "::1") {
       return true;
     }
     return false;
