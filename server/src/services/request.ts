@@ -97,10 +97,7 @@ export class RequestService {
     multi.sAdd(guildKey, id);
     multi.sAdd(userKey, id);
     multi.sAdd(statusKey, id);
-    // Set TTL on index keys to prevent orphaned references
-    multi.expire(guildKey, REQUEST_TTL_SECONDS);
-    multi.expire(userKey, REQUEST_TTL_SECONDS);
-    multi.expire(statusKey, REQUEST_TTL_SECONDS);
+    // No TTL on index keys; orphaned references are filtered during reads in #getRequestsBatch
     await multi.exec();
 
     appLogger.debug(
@@ -268,8 +265,7 @@ export class RequestService {
       multi.expire(requestKey, REQUEST_TTL_SECONDS);
       multi.sRem(previousStatusKey, requestId);
       multi.sAdd(newStatusKey, requestId);
-      // Update TTL on status index keys
-      multi.expire(newStatusKey, REQUEST_TTL_SECONDS);
+      // No TTL on index keys; orphaned references are filtered during reads
 
       const results = await multi.exec();
 
