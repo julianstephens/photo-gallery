@@ -94,6 +94,13 @@ export const requiresAdmin = (req: Request, res: Response, next: NextFunction) =
   next();
 };
 
+/**
+ * Middleware to validate that the user is a super admin.
+ * Checks that the user's session has the isSuperAdmin flag set to true.
+ *
+ * Requires the `requiresAuth` middleware to be applied before this middleware.
+ * Assumes that `req.session.userId` and `req.session.isSuperAdmin` are present and valid.
+ */
 export const requiresSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
   if (!req.session.isSuperAdmin) {
     return res.status(403).json({ error: "Forbidden: Super admins only" });
