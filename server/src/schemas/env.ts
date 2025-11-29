@@ -39,12 +39,15 @@ export const envSchema = z.object({
   COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).optional(),
   SESSION_COOKIE_DOMAIN: z.string().optional(),
   TRUST_PROXY: z.string().optional(),
-  ADMIN_USER_IDS: z.string().transform((val) =>
-    val
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean),
-  ),
+  ADMIN_USER_IDS: z
+    .string()
+    .default("")
+    .transform((val) =>
+      val
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
   SUPER_ADMIN_USER_IDS: z
     .string()
     .default("")
