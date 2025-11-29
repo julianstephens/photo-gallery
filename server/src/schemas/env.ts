@@ -62,6 +62,25 @@ export const envSchema = z.object({
     .default("1000")
     .transform((val) => parseInt(val, 10))
     .refine((val) => !isNaN(val) && val >= 100, "Must be at least 100ms"),
+  // Logging configuration
+  // stdout: JSON logs to stdout/stderr (default for production)
+  // file: Rotating file logs (default for development)
+  // both: stdout + file (useful for debugging)
+  LOG_OUTPUT: z.enum(["stdout", "file", "both"]).optional(),
+  // TODO: Add LOKI_URL and Loki logging support if/when direct Loki push is implemented.
+  // Log file rotation settings (for file-based logging)
+  LOG_FILE_PATH: z.string().default("logs/app.log"),
+  LOG_FILE_MAX_SIZE: z
+    .string()
+    .default("10M")
+    .refine(
+      (val) => /^\d+[KMG]$/.test(val),
+      "Must be a valid size format (e.g., '10M', '100K', '1G')",
+    ), // rotating-file-stream size format
+  LOG_FILE_MAX_FILES: z
+    .string()
+    .default("7")
+    .transform((val) => parseInt(val, 10)), // days of retention
 });
 
 export type Env = z.infer<typeof envSchema>;

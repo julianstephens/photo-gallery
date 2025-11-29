@@ -37,6 +37,11 @@ export const mockEnv = {
   GRADIENT_WORKER_CONCURRENCY: 2,
   GRADIENT_JOB_MAX_RETRIES: 3,
   GRADIENT_WORKER_POLL_INTERVAL_MS: 1000,
+  LOG_OUTPUT: undefined,
+  LOKI_URL: undefined,
+  LOG_FILE_PATH: "logs/app.log",
+  LOG_FILE_MAX_SIZE: "10M",
+  LOG_FILE_MAX_FILES: 7,
 };
 
 /**
