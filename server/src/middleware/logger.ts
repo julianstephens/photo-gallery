@@ -61,8 +61,11 @@ function createRotatingFileStream(): DestinationStream {
   // Ensure log directory exists
   try {
     mkdirSync(logDir, { recursive: true });
-  } catch {
-    // best-effort: directory might already exist
+  } catch (error) {
+    // Only ignore EEXIST errors - log others to stderr
+    if (error instanceof Error && "code" in error && error.code !== "EEXIST") {
+      console.error(`Failed to create log directory ${logDir}:`, error.message);
+    }
   }
 
   const stream = createStream(logFileName, {
@@ -73,8 +76,9 @@ function createRotatingFileStream(): DestinationStream {
     compress: "gzip", // compress rotated logs
   });
 
-  // Wrap the stream to match pino's DestinationStream interface
-  return stream as unknown as DestinationStream;
+  // The stream from rotating-file-stream is a Writable that implements
+  // write() and end() methods compatible with pino's DestinationStream
+  return stream as DestinationStream;
 }
 
 /**
@@ -115,9 +119,10 @@ function createAppLogger(): pino.Logger {
 
   if (logOutput === "stdout") {
     // Production: JSON logs to stdout for container logging
+    const transportConfig = createStdoutTransport();
     const transport = pino.transport({
-      target: createStdoutTransport().target,
-      options: createStdoutTransport().options,
+      target: transportConfig.target,
+      options: transportConfig.options,
     });
     return pino(baseLoggerOptions, transport);
   }
