@@ -88,19 +88,8 @@ function createRotatingFileStream(): DestinationStream {
  */
 function createStdoutTransport(): TransportTargetOptions {
   if (env.NODE_ENV === "production") {
-    // Production: raw JSON to stdout for Loki
-    // Use pino-pretty with minimal formatting for better console visibility in production debug scenarios
-    if (env.LOG_LEVEL === "debug") {
-      // When debug logging is enabled in production, use pretty-printing for readability
-      return {
-        target: "pino-pretty",
-        options: {
-          colorize: false, // disable colors for production logs
-          translateTime: "SYS:standard",
-          singleLine: true,
-        },
-      };
-    }
+    // Production: always output raw JSON to stdout for Loki/Grafana ingestion
+    // Never use pretty-printing in production to ensure log pipeline compatibility
     return {
       target: "pino/file",
       options: { destination: 1 }, // stdout
