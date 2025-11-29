@@ -218,7 +218,7 @@ export const httpLogger = pinoHttp<IncomingMessage, ServerResponse>({
   customLogLevel: (res, err) => {
     if (err || (res.statusCode && res.statusCode >= 500)) return "error";
     if (res.statusCode && res.statusCode >= 400) return "warn";
-    return "info";
+    return "debug"; // Successful requests logged at debug level to reduce noise
   },
   genReqId: (req, res) => {
     const hdr = req.headers["x-request-id"];
