@@ -1,11 +1,7 @@
 // Web worker for polling upload progress without blocking the main thread.
 
 export type UploadProgressStatus = "pending" | "uploading" | "processing" | "completed" | "failed";
-export type UploadProgressPhase =
-  | "client-upload"
-  | "server-assemble"
-  | "server-zip-extract"
-  | "server-upload";
+export type UploadProgressPhase = "client-upload" | "server-assemble" | "server-upload";
 
 // Progress format from /api/uploads/:uploadId/progress
 export interface UploadProgress {

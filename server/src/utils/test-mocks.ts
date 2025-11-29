@@ -163,10 +163,8 @@ export const mockBucketServiceModule = () => ({
  */
 export const mockUploadService = {
   isImageMime: vi.fn().mockReturnValue(false),
-  isZipMime: vi.fn().mockReturnValue(false),
   sanitizeKeySegment: vi.fn(),
   allowedImageExts: new Set([".jpg", ".png", ".jpeg", ".gif", ".webp"]),
-  looksLikeZip: vi.fn().mockReturnValue(true),
 };
 
 /**
