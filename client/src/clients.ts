@@ -1,6 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
 import axios, { AxiosError, type AxiosInstance } from "axios";
-import { logger } from "./lib/logger";
 
 type RetriableAxiosError = AxiosError & { retryAfterMs?: number };
 
@@ -71,11 +70,6 @@ export const httpClient = createHttpClient(defaultBaseURL);
 
 // Export base URLs as strings for use in other modules (login fallback behavior, etc.)
 export const API_BASE_URL = defaultBaseURL;
-
-// Debug: log which base URLs are being used
-if (typeof window !== "undefined") {
-  logger.debug({ defaultBaseURL }, "[clients] API base URL");
-}
 
 // Exponential backoff with jitter (±20%) capped
 const computeBackoffMs = (attempt: number, base = 1000, max = 30000) => {
