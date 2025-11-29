@@ -1,6 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { requiresAdmin, requiresAuth, requiresGuildMembership } from "./auth.ts";
+import {
+  requiresAdmin,
+  requiresAuth,
+  requiresGuildMembership,
+  requiresSuperAdmin,
+} from "./auth.ts";
 
 const { mockGetMetadata } = vi.hoisted(() => ({
   mockGetMetadata: vi.fn(),
@@ -104,6 +109,31 @@ describe("requiresAdmin", () => {
     const next = createNext();
 
     requiresAdmin(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+});
+
+describe("requiresSuperAdmin", () => {
+  it("blocks non-superadmins", () => {
+    const req = createReq({ userId: "123", isSuperAdmin: false });
+    const res = createRes();
+    const next = createNext();
+
+    requiresSuperAdmin(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: "Forbidden: Super admins only" });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("allows superadmin sessions", () => {
+    const req = createReq({ userId: "123", isSuperAdmin: true });
+    const res = createRes();
+    const next = createNext();
+
+    requiresSuperAdmin(req, res, next);
 
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
