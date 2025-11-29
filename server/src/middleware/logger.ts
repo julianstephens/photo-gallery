@@ -97,7 +97,7 @@ function createStdoutTransport(): TransportTargetOptions {
         options: {
           colorize: false, // disable colors for production logs
           translateTime: "SYS:standard",
-          singleLine: false,
+          singleLine: true,
         },
       };
     }
