@@ -13,6 +13,7 @@ export interface AuthSessionData {
   refreshToken: string;
   expiresAt: number;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   /** Array of Discord guild IDs that the user is a member of */
   guildIds: string[];
 }

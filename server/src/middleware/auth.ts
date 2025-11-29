@@ -94,6 +94,13 @@ export const requiresAdmin = (req: Request, res: Response, next: NextFunction) =
   next();
 };
 
+export const requiresSuperAdmin = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.session.isSuperAdmin) {
+    return res.status(403).json({ error: "Forbidden: Super admins only" });
+  }
+  next();
+};
+
 /**
  * Middleware to validate guild membership for the given guildId.
  * Checks that the user's session contains guild memberships and that the

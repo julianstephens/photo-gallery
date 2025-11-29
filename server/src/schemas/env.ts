@@ -45,6 +45,12 @@ export const envSchema = z.object({
       .map((id) => id.trim())
       .filter(Boolean),
   ),
+  SUPER_ADMIN_USER_IDS: z.string().transform((val) =>
+    val
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
+  ),
   // Gradient worker feature flag and configuration
   GRADIENT_WORKER_ENABLED: z.coerce.boolean().default(false),
   GRADIENT_WORKER_CONCURRENCY: z
