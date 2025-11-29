@@ -147,7 +147,11 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
               Clear All Completed
             </Button>
           )}
-          {onClose && <CloseButton size="sm" onClick={onClose} aria-label="Close upload monitor" />}
+          {onClose && (
+            <Tooltip content="Collapse Uploads" positioning={{ placement: "top" }}>
+              <CloseButton size="sm" onClick={onClose} aria-label="Close upload monitor" />
+            </Tooltip>
+          )}
         </HStack>
       </HStack>
 
