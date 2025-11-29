@@ -59,7 +59,7 @@ export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   max: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
-  validate: { trustProxy: false },
+  validate: { trustProxy: true },
   message: { error: "Too many auth attempts. Please wait." },
   handler: createRateLimitHandler(),
 });
