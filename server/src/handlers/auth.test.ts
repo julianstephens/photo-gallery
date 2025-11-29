@@ -1,35 +1,10 @@
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockEnv, mockEnvModule } from "../utils/test-mocks.ts";
 
 const controllerMocks = vi.hoisted(() => ({
   login: vi.fn(),
   getCurrentUser: vi.fn(),
-}));
-
-const envMock = vi.hoisted(() => ({
-  NODE_ENV: "test",
-  LOG_LEVEL: "info",
-  PORT: 4000,
-  S3_ENDPOINT: "http://s3.test",
-  S3_ACCESS_KEY: "test-access",
-  S3_SECRET_KEY: "test-secret",
-  MASTER_BUCKET_NAME: "master-bucket",
-  DISCORD_API_URL: "https://discord.com/api/v10",
-  DISCORD_CLIENT_ID: "test-client-id",
-  DISCORD_CLIENT_SECRET: "test-client-secret",
-  DISCORD_REDIRECT_URI: "http://localhost/callback",
-  CLIENT_URL: "https://client.example",
-  REDIS_HOST: "localhost",
-  REDIS_PORT: 6379,
-  REDIS_USER: "test-user",
-  REDIS_PASSWORD: "test-password",
-  REDIS_DB: 1,
-  SESSION_SECRET: "test-session-secret",
-  CORS_ORIGINS: "http://localhost:3000",
-  CORS_CREDENTIALS: true,
-  JSON_LIMIT: "1mb",
-  URLENCODED_LIMIT: "1mb",
-  ADMIN_USER_IDS: ["admin1", "admin2"],
 }));
 
 vi.mock("../controllers/index.ts", () => ({
@@ -38,9 +13,7 @@ vi.mock("../controllers/index.ts", () => ({
   }),
 }));
 
-vi.mock("../schemas/env.ts", () => ({
-  default: envMock,
-}));
+vi.mock("../schemas/env.ts", () => mockEnvModule());
 
 const handlers = await import("./auth.ts");
 const { discordCallback, logout, getCurrentUser } = handlers;
@@ -116,7 +89,7 @@ describe("auth handlers", () => {
       isAdmin: true,
       guildIds: ["guild-1", "guild-2"],
     });
-    expect(res.redirect).toHaveBeenCalledWith(envMock.CLIENT_URL);
+    expect(res.redirect).toHaveBeenCalledWith(mockEnv.CLIENT_URL);
   });
   it("returns the upstream error when Discord login fails", async () => {
     const req = createRequest({ query: { code: "bad" } as Request["query"] });

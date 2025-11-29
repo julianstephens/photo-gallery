@@ -1,18 +1,9 @@
 import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mockEnv, mockRedisModule } from "../utils/test-mocks.ts";
+import { mockEnvModule, mockRedisModule } from "../utils/test-mocks.ts";
 
 // Mock environment variables before any imports
-vi.mock("../schemas/env.ts", () => ({
-  default: mockEnv,
-  envSchema: {
-    safeParse: vi.fn().mockReturnValue({
-      success: true,
-      data: mockEnv,
-    }),
-  },
-  parsedCorsOrigins: vi.fn().mockReturnValue([mockEnv.CORS_ORIGINS]),
-}));
+vi.mock("../schemas/env.ts", () => mockEnvModule());
 
 // Mock Redis module to prevent actual connection attempts
 vi.mock("../redis.ts", () => mockRedisModule());

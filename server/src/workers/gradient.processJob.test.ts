@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { mockEnvModule } from "../utils/test-mocks.ts";
 
 // Use vi.hoisted to define mocks that need to be accessed in vi.mock factories
 const {
@@ -44,37 +45,11 @@ const {
 }));
 
 // Set up mocks BEFORE any imports - inline all data since vi.mock is hoisted
-vi.mock("../schemas/env.ts", () => ({
-  default: {
-    NODE_ENV: "test",
-    LOG_LEVEL: "info",
-    PORT: 4000,
-    S3_ENDPOINT: "http://s3.test",
-    S3_ACCESS_KEY: "test-access",
-    S3_SECRET_KEY: "test-secret",
-    MASTER_BUCKET_NAME: "master-bucket",
-    DISCORD_API_URL: "https://discord.com/api",
-    DISCORD_CLIENT_ID: "test-client-id",
-    DISCORD_CLIENT_SECRET: "test-client-secret",
-    DISCORD_REDIRECT_URI: "http://localhost/callback",
-    CLIENT_URL: "http://localhost:3000",
-    REDIS_HOST: "localhost",
-    REDIS_PORT: 6379,
-    REDIS_USER: "test-user",
-    REDIS_PASSWORD: "test-password",
-    REDIS_DB: 1,
-    SESSION_SECRET: "test-session-secret",
-    CORS_ORIGINS: "http://localhost:3000",
-    CORS_CREDENTIALS: true,
-    JSON_LIMIT: "1mb",
-    URLENCODED_LIMIT: "1mb",
-    ADMIN_USER_IDS: ["admin-user-1", "admin-user-2"],
+vi.mock("../schemas/env.ts", () =>
+  mockEnvModule({
     GRADIENT_WORKER_ENABLED: true,
-    GRADIENT_WORKER_CONCURRENCY: 2,
-    GRADIENT_JOB_MAX_RETRIES: 3,
-    GRADIENT_WORKER_POLL_INTERVAL_MS: 1000,
-  },
-}));
+  }),
+);
 
 vi.mock("../middleware/logger.ts", () => ({
   appLogger: {
