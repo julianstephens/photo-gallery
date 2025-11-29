@@ -33,6 +33,7 @@ export const mockEnv = {
   JSON_LIMIT: "1mb",
   URLENCODED_LIMIT: "1mb",
   ADMIN_USER_IDS: ["admin-user-1", "admin-user-2"],
+  SUPER_ADMIN_USER_IDS: ["super-admin-user-1", "super-admin-user-2"],
   GRADIENT_WORKER_ENABLED: false,
   GRADIENT_WORKER_CONCURRENCY: 2,
   GRADIENT_JOB_MAX_RETRIES: 3,

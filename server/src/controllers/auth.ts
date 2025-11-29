@@ -14,7 +14,10 @@ export class AuthController {
     });
   }
 
-  #isAdminUser = (userId: string): boolean => {
+  #isAdminUser = (userId: string, opts?: { super: boolean }): boolean => {
+    if (opts?.super) {
+      return env.SUPER_ADMIN_USER_IDS.includes(userId);
+    }
     return env.ADMIN_USER_IDS.includes(userId);
   };
 
@@ -32,15 +35,18 @@ export class AuthController {
 
     const user = await this.getCurrentUser({ accessToken: data.access_token });
 
-    return {
+    const sess: AuthSessionData = {
       userId: user.id,
       username: user.username,
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       expiresAt: Date.now() + data.expires_in * 1000,
-      isAdmin: this.#isAdminUser(user.id),
+      isSuperAdmin: this.#isAdminUser(user.id, { super: true }),
+      isAdmin: false,
       guildIds: user.guilds.map((g) => g.id),
     };
+    sess.isAdmin = sess.isSuperAdmin ? true : this.#isAdminUser(user.id);
+    return sess;
   };
 
   logout() {
