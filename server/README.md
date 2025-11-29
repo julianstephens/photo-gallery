@@ -74,6 +74,63 @@ DISCORD_CLIENT_SECRET=your-discord-client-secret
 DISCORD_REDIRECT_URI=your-redirect-uri
 ```
 
+### Logging Configuration
+
+The server uses [pino](https://github.com/pinojs/pino) for structured logging with environment-aware output configuration:
+
+| Variable             | Default        | Description                                                                                         |
+| -------------------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| `LOG_LEVEL`          | `info`         | Log level: `debug`, `info`, `warn`, `error`                                                         |
+| `LOG_OUTPUT`         | Auto           | Output mode: `stdout`, `file`, or `both`. Defaults to `stdout` in production, `file` in development |
+| `LOKI_URL`           | -              | Optional Loki push URL for direct log ingestion                                                     |
+| `LOG_FILE_PATH`      | `logs/app.log` | Path for file-based logging                                                                         |
+| `LOG_FILE_MAX_SIZE`  | `10M`          | Max file size before rotation                                                                       |
+| `LOG_FILE_MAX_FILES` | `7`            | Number of rotated files to retain (days)                                                            |
+
+#### Production Logging
+
+In production (`NODE_ENV=production`), logs are written to stdout/stderr in JSON format for ingestion by Loki/Grafana:
+
+```bash
+# Container logs are automatically JSON-formatted
+LOG_OUTPUT=stdout  # default in production
+```
+
+#### Development Logging
+
+In development, logs are written to rotating files with optional pretty console output:
+
+```bash
+LOG_OUTPUT=file    # rotating file logs (default in development)
+LOG_OUTPUT=both    # file + pretty console output
+LOG_OUTPUT=stdout  # pretty console output only
+```
+
+File rotation ensures logs don't consume excessive disk space:
+
+- Files rotate daily and when exceeding `LOG_FILE_MAX_SIZE`
+- Rotated logs are gzip compressed
+- Old logs are automatically removed after `LOG_FILE_MAX_FILES` days
+
+#### Child Loggers
+
+Use `createChildLogger` to add request/job context to log entries:
+
+```typescript
+import { createChildLogger } from "./middleware/logger.ts";
+
+const reqLogger = createChildLogger({ requestId: req.id, userId: user.id });
+reqLogger.info("Processing request");
+```
+
+#### PII Safety
+
+All loggers automatically redact sensitive fields:
+
+- Authorization headers
+- Cookies and session data
+- Passwords, tokens, and API keys
+
 ## Tech Stack
 
 - **Express** - Web framework
