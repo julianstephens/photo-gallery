@@ -123,19 +123,40 @@ export class RequestService {
   };
 
   /**
+   * Batch fetch multiple requests using MGET for performance.
+   */
+  #getRequestsBatch = async (requestIds: string[]): Promise<Request[]> => {
+    if (requestIds.length === 0) return [];
+
+    const keys = requestIds.map((id) => this.#buildRequestKey(id));
+    const results = await redis.client.mGet(keys);
+
+    const requests: Request[] = [];
+    for (let i = 0; i < results.length; i++) {
+      const data = results[i];
+      if (data) {
+        try {
+          requests.push(JSON.parse(data) as Request);
+        } catch (error) {
+          appLogger.error(
+            { requestId: requestIds[i], err: error },
+            "[request] failed to parse request JSON in batch",
+          );
+        }
+      }
+    }
+
+    return requests;
+  };
+
+  /**
    * Get all requests for a guild.
    */
   getRequestsByGuild = async (guildId: string): Promise<Request[]> => {
     const guildKey = this.#buildGuildKey(guildId);
     const requestIds = await redis.client.sMembers(guildKey);
 
-    const requests: Request[] = [];
-    for (const requestId of requestIds) {
-      const request = await this.getRequest(requestId);
-      if (request) {
-        requests.push(request);
-      }
-    }
+    const requests = await this.#getRequestsBatch(requestIds);
 
     appLogger.debug({ guildId, requestCount: requests.length }, "[request] fetched guild requests");
 
@@ -149,13 +170,7 @@ export class RequestService {
     const userKey = this.#buildUserKey(userId);
     const requestIds = await redis.client.sMembers(userKey);
 
-    const requests: Request[] = [];
-    for (const requestId of requestIds) {
-      const request = await this.getRequest(requestId);
-      if (request) {
-        requests.push(request);
-      }
-    }
+    const requests = await this.#getRequestsBatch(requestIds);
 
     appLogger.debug({ userId, requestCount: requests.length }, "[request] fetched user requests");
 
@@ -169,13 +184,7 @@ export class RequestService {
     const statusKey = this.#buildStatusKey(status);
     const requestIds = await redis.client.sMembers(statusKey);
 
-    const requests: Request[] = [];
-    for (const requestId of requestIds) {
-      const request = await this.getRequest(requestId);
-      if (request) {
-        requests.push(request);
-      }
-    }
+    const requests = await this.#getRequestsBatch(requestIds);
 
     appLogger.debug(
       { status, requestCount: requests.length },
@@ -284,22 +293,30 @@ export class RequestService {
 
   /**
    * Get all comments for a request (sorted by timestamp).
+   * Uses zRange with REV option for chronological order and MGET for batch retrieval.
    */
   getComments = async (requestId: string): Promise<RequestComment[]> => {
     const commentsKey = this.#buildCommentsKey(requestId);
-    const commentIds = await redis.client.zRangeByScore(commentsKey, 0, "+inf");
+    // Use zRange which is more efficient than zRangeByScore for getting all elements
+    const commentIds = await redis.client.zRange(commentsKey, 0, -1);
+
+    if (commentIds.length === 0) return [];
+
+    // Batch fetch all comments using MGET
+    const keys = commentIds.map((id) => this.#buildCommentKey(id));
+    const results = await redis.client.mGet(keys);
 
     const comments: RequestComment[] = [];
-    for (const commentId of commentIds) {
-      const commentKey = this.#buildCommentKey(commentId);
-      const data = await redis.client.get(commentKey);
-
+    for (let i = 0; i < results.length; i++) {
+      const data = results[i];
       if (data) {
         try {
-          const comment = JSON.parse(data) as RequestComment;
-          comments.push(comment);
+          comments.push(JSON.parse(data) as RequestComment);
         } catch (error) {
-          appLogger.error({ commentId, err: error }, "[request] failed to parse comment JSON");
+          appLogger.error(
+            { commentId: commentIds[i], err: error },
+            "[request] failed to parse comment JSON",
+          );
         }
       }
     }
@@ -326,8 +343,8 @@ export class RequestService {
     const userKey = this.#buildUserKey(request.userId);
     const statusKey = this.#buildStatusKey(request.status);
 
-    // Get all comment IDs before deleting
-    const commentIds = await redis.client.zRangeByScore(commentsKey, 0, "+inf");
+    // Get all comment IDs before deleting using zRange (more efficient than zRangeByScore)
+    const commentIds = await redis.client.zRange(commentsKey, 0, -1);
 
     // Use MULTI/EXEC for atomic operations
     const multi = redis.client.multi();

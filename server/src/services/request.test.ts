@@ -114,9 +114,10 @@ describe("RequestService", () => {
       };
 
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2"]);
-      vi.mocked(redis.client.get)
-        .mockResolvedValueOnce(JSON.stringify(mockRequest1))
-        .mockResolvedValueOnce(JSON.stringify(mockRequest2));
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest1),
+        JSON.stringify(mockRequest2),
+      ]);
 
       const requests = await service.getRequestsByGuild("guild123");
 
@@ -124,6 +125,7 @@ describe("RequestService", () => {
       expect(requests[0].id).toBe("req1");
       expect(requests[1].id).toBe("req2");
       expect(redis.client.sMembers).toHaveBeenCalledWith("request:guild:guild123");
+      expect(redis.client.mGet).toHaveBeenCalledWith(["request:req1", "request:req2"]);
     });
 
     it("should return empty array when no requests exist", async () => {
@@ -149,7 +151,7 @@ describe("RequestService", () => {
       };
 
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1"]);
-      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockRequest));
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest)]);
 
       const requests = await service.getRequestsByUser("user456");
 
@@ -173,7 +175,7 @@ describe("RequestService", () => {
       };
 
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1"]);
-      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockRequest));
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest)]);
 
       const requests = await service.getRequestsByStatus("approved");
 
@@ -329,21 +331,26 @@ describe("RequestService", () => {
         createdAt: 2000,
       };
 
-      vi.mocked(redis.client.zRangeByScore).mockResolvedValue(["comment1", "comment2"]);
-      vi.mocked(redis.client.get)
-        .mockResolvedValueOnce(JSON.stringify(mockComment1))
-        .mockResolvedValueOnce(JSON.stringify(mockComment2));
+      vi.mocked(redis.client.zRange).mockResolvedValue(["comment1", "comment2"]);
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockComment1),
+        JSON.stringify(mockComment2),
+      ]);
 
       const comments = await service.getComments("req123");
 
       expect(comments).toHaveLength(2);
       expect(comments[0].id).toBe("comment1");
       expect(comments[1].id).toBe("comment2");
-      expect(redis.client.zRangeByScore).toHaveBeenCalledWith("request:comments:req123", 0, "+inf");
+      expect(redis.client.zRange).toHaveBeenCalledWith("request:comments:req123", 0, -1);
+      expect(redis.client.mGet).toHaveBeenCalledWith([
+        "request:comment:comment1",
+        "request:comment:comment2",
+      ]);
     });
 
     it("should return empty array when no comments exist", async () => {
-      vi.mocked(redis.client.zRangeByScore).mockResolvedValue([]);
+      vi.mocked(redis.client.zRange).mockResolvedValue([]);
 
       const comments = await service.getComments("req123");
 
@@ -351,8 +358,8 @@ describe("RequestService", () => {
     });
 
     it("should skip invalid JSON comments", async () => {
-      vi.mocked(redis.client.zRangeByScore).mockResolvedValue(["comment1", "comment2"]);
-      vi.mocked(redis.client.get).mockResolvedValueOnce("invalid json").mockResolvedValueOnce(null);
+      vi.mocked(redis.client.zRange).mockResolvedValue(["comment1", "comment2"]);
+      vi.mocked(redis.client.mGet).mockResolvedValue(["invalid json", null]);
 
       const comments = await service.getComments("req123");
 
@@ -374,7 +381,7 @@ describe("RequestService", () => {
       };
 
       vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockRequest));
-      vi.mocked(redis.client.zRangeByScore).mockResolvedValue(["comment1", "comment2"]);
+      vi.mocked(redis.client.zRange).mockResolvedValue(["comment1", "comment2"]);
 
       await service.deleteRequest("req123");
 

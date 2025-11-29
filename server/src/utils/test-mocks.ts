@@ -126,6 +126,7 @@ export const mockRedisClient = {
   zAdd: vi.fn(),
   zRem: vi.fn(),
   zCard: vi.fn(),
+  zRange: vi.fn(),
   zRangeByScore: vi.fn(),
   multi: vi.fn(),
 };
