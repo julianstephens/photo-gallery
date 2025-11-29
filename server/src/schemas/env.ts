@@ -75,7 +75,7 @@ export const envSchema = z.object({
     .default("10M")
     .refine(
       (val) => /^\d+[KMG]$/.test(val),
-      "Must be a valid size format (e.g., '10M', '100K', '1G')"
+      "Must be a valid size format (e.g., '10M', '100K', '1G')",
     ), // rotating-file-stream size format
   LOG_FILE_MAX_FILES: z
     .string()
