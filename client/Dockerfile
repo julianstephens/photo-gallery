@@ -20,10 +20,7 @@ COPY client client
 COPY --from=deps /app/utils ./utils
 
 ARG VITE_API_URL
-ARG VITE_UPLOAD_BASE_URL
-RUN test -n "$VITE_API_URL" && test -n "$VITE_UPLOAD_BASE_URL"
 ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_UPLOAD_BASE_URL=${VITE_UPLOAD_BASE_URL}
 
 RUN pnpm --filter client build
 
