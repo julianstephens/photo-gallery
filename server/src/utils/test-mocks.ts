@@ -126,8 +126,11 @@ export const mockRedisClient = {
   zAdd: vi.fn(),
   zRem: vi.fn(),
   zCard: vi.fn(),
+  zRange: vi.fn(),
   zRangeByScore: vi.fn(),
   multi: vi.fn(),
+  watch: vi.fn(),
+  unwatch: vi.fn(),
 };
 
 /**
@@ -256,6 +259,32 @@ export const mockChunkedUploadService = {
  */
 export const mockChunkedUploadServiceModule = () => ({
   ChunkedUploadService: vi.fn().mockImplementation(() => mockChunkedUploadService),
+});
+
+/**
+ * Mock for RequestService.
+ * Provides RequestService methods with vi.fn() mocks.
+ */
+export const mockRequestService = {
+  createRequest: vi.fn(),
+  getRequest: vi.fn(),
+  getRequestsByGuild: vi.fn(),
+  getRequestsByUser: vi.fn(),
+  getRequestsByStatus: vi.fn(),
+  updateRequestStatus: vi.fn(),
+  addComment: vi.fn(),
+  getComments: vi.fn(),
+  deleteRequest: vi.fn(),
+};
+
+/**
+ * Mock for the RequestService module.
+ * Use with: vi.mock("../services/request.ts", () => mockRequestServiceModule);
+ */
+export const mockRequestServiceModule = () => ({
+  RequestService: vi.fn().mockImplementation(() => mockRequestService),
+  isValidStatusTransition: vi.fn(),
+  canUserModifyRequest: vi.fn(),
 });
 
 /**
