@@ -1,4 +1,4 @@
-import { uploadHttpClient } from "@/clients";
+import { httpClient } from "@/clients";
 import type {
   ChunkedUploadProgress,
   FinalizeUploadResponse,
@@ -120,7 +120,7 @@ async function uploadChunkWithRetry(
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       // Use Blob directly to reduce memory overhead
-      await uploadHttpClient.post("uploads/chunk", chunk, {
+      await httpClient.post("uploads/chunk", chunk, {
         params: { uploadId, index },
         headers: {
           "Content-Type": "application/octet-stream",
@@ -168,7 +168,7 @@ export async function chunkedUpload(
       guildId: options.guildId || "unknown",
     };
 
-    const { data: initiateResponse } = await uploadHttpClient.post<InitiateUploadResponse>(
+    const { data: initiateResponse } = await httpClient.post<InitiateUploadResponse>(
       "uploads/initiate",
       initiateRequest,
     );
@@ -195,7 +195,7 @@ export async function chunkedUpload(
     }
 
     // Step 3: Finalize upload
-    const { data: finalizeResponse } = await uploadHttpClient.post<FinalizeUploadResponse>(
+    const { data: finalizeResponse } = await httpClient.post<FinalizeUploadResponse>(
       "uploads/finalize",
       { uploadId },
     );
@@ -213,7 +213,7 @@ export async function chunkedUpload(
     // Cleanup server session on error to prevent orphaned temporary files
     if (uploadId) {
       try {
-        await uploadHttpClient.delete(`uploads/${uploadId}`);
+        await httpClient.delete(`uploads/${uploadId}`);
       } catch {
         // Ignore cleanup errors - the session will be cleaned up by TTL
       }
@@ -261,7 +261,7 @@ export class ChunkedUploader {
         guildId: this.options.guildId || "unknown",
       };
 
-      const { data: initiateResponse } = await uploadHttpClient.post<InitiateUploadResponse>(
+      const { data: initiateResponse } = await httpClient.post<InitiateUploadResponse>(
         "uploads/initiate",
         initiateRequest,
       );
@@ -301,7 +301,7 @@ export class ChunkedUploader {
       }
 
       // Step 3: Finalize upload
-      const { data: finalizeResponse } = await uploadHttpClient.post<FinalizeUploadResponse>(
+      const { data: finalizeResponse } = await httpClient.post<FinalizeUploadResponse>(
         "uploads/finalize",
         { uploadId: this.uploadId },
       );
@@ -323,7 +323,7 @@ export class ChunkedUploader {
       // Cleanup server session on error to prevent orphaned temporary files
       if (this.uploadId) {
         try {
-          await uploadHttpClient.delete(`uploads/${this.uploadId}`);
+          await httpClient.delete(`uploads/${this.uploadId}`);
         } catch {
           // Ignore cleanup errors - the session will be cleaned up by TTL
         }
@@ -350,7 +350,7 @@ export class ChunkedUploader {
   private async cleanupServerSession(): Promise<void> {
     if (!this.uploadId) return;
     try {
-      await uploadHttpClient.delete(`uploads/${this.uploadId}`);
+      await httpClient.delete(`uploads/${this.uploadId}`);
     } catch {
       // Ignore errors during cleanup - the session will be cleaned up by TTL
     }
