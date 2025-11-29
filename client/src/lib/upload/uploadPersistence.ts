@@ -124,11 +124,11 @@ export const clearPersistedUploads = (userId: string, guildId: string): void => 
 };
 
 /**
- * Converts an ActiveUpload to a PersistedUpload with seen flag set to false.
+ * Converts an ActiveUpload to a PersistedUpload, preserving the seen flag if present.
  */
 export const toPersistedUpload = (upload: ActiveUpload): PersistedUpload => ({
   ...upload,
-  seen: false,
+  seen: upload.seen ?? false,
 });
 
 /**

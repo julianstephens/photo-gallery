@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getStorageKey, type PersistedUpload } from "./uploadPersistence";
 import { uploadProgressStore } from "./uploadProgressStore";
 
@@ -7,10 +7,14 @@ describe("uploadProgressStore with persistence", () => {
   const mockGuildId = "guild456";
 
   beforeEach(() => {
+    vi.useFakeTimers();
     localStorage.clear();
     // Reset the store between tests
     uploadProgressStore.disablePersistence();
-    uploadProgressStore.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe("enablePersistence", () => {
@@ -81,9 +85,12 @@ describe("uploadProgressStore with persistence", () => {
       expect(stored[0].id).toBe("new-1");
     });
 
-    it("should persist when updating progress", () => {
+    it("should persist when updating progress (debounced)", () => {
       uploadProgressStore.addUpload("new-1", "new.jpg", "gallery", mockGuildId);
       uploadProgressStore.updateProgress("new-1", 50);
+
+      // Progress updates are debounced, so we need to advance timers
+      vi.advanceTimersByTime(600); // PERSIST_DEBOUNCE_MS is 500
 
       const key = getStorageKey(mockUserId, mockGuildId);
       const stored = JSON.parse(localStorage.getItem(key)!) as PersistedUpload[];
@@ -169,6 +176,19 @@ describe("uploadProgressStore with persistence", () => {
       uploadProgressStore.addUpload("2", "2.jpg", "gallery", mockGuildId);
 
       uploadProgressStore.clear();
+
+      expect(uploadProgressStore.getUploads()).toHaveLength(0);
+    });
+  });
+
+  describe("disablePersistence", () => {
+    it("should clear in-memory uploads when disabled", () => {
+      uploadProgressStore.enablePersistence(mockUserId);
+      uploadProgressStore.addUpload("1", "1.jpg", "gallery", mockGuildId);
+
+      expect(uploadProgressStore.getUploads()).toHaveLength(1);
+
+      uploadProgressStore.disablePersistence();
 
       expect(uploadProgressStore.getUploads()).toHaveLength(0);
     });

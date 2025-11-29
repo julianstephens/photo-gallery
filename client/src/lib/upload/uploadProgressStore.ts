@@ -4,6 +4,7 @@
  */
 
 import {
+  clearPersistedUploads,
   loadAllPersistedUploadsForUser,
   markAllUploadsAsSeen,
   markUploadAsSeen,
@@ -31,10 +32,15 @@ type PersistenceConfig = {
   enabled: boolean;
 };
 
+// Debounce delay for progress updates (in ms)
+const PERSIST_DEBOUNCE_MS = 500;
+
 class UploadProgressStore {
   private uploads = new Map<string, ActiveUpload>();
   private listeners: Set<UploadListener> = new Set();
   private persistenceConfig: PersistenceConfig | null = null;
+  private persistDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private knownGuildIds: Set<string> = new Set();
 
   subscribe(listener: UploadListener): () => void {
     this.listeners.add(listener);
@@ -50,15 +56,18 @@ class UploadProgressStore {
   /**
    * Persists current uploads to localStorage if persistence is enabled.
    * Groups uploads by guildId and saves them separately.
+   * Also cleans up storage for guilds that no longer have active uploads.
    */
   private persistState(): void {
     if (!this.persistenceConfig?.enabled || !this.persistenceConfig.userId) return;
 
     const { userId } = this.persistenceConfig;
     const uploadsByGuild = new Map<string, PersistedUpload[]>();
+    const currentGuildIds = new Set<string>();
 
     // Group uploads by guildId
     for (const upload of this.uploads.values()) {
+      currentGuildIds.add(upload.guildId);
       const guildUploads = uploadsByGuild.get(upload.guildId) || [];
       guildUploads.push(toPersistedUpload(upload));
       uploadsByGuild.set(upload.guildId, guildUploads);
@@ -68,6 +77,29 @@ class UploadProgressStore {
     for (const [guildId, uploads] of uploadsByGuild) {
       savePersistedUploads(userId, guildId, uploads);
     }
+
+    // Clean up storage for guilds that no longer have active uploads
+    for (const guildId of this.knownGuildIds) {
+      if (!currentGuildIds.has(guildId)) {
+        clearPersistedUploads(userId, guildId);
+      }
+    }
+
+    // Update known guild IDs
+    this.knownGuildIds = currentGuildIds;
+  }
+
+  /**
+   * Debounced version of persistState for frequent updates like progress.
+   */
+  private persistStateDebounced(): void {
+    if (this.persistDebounceTimer) {
+      clearTimeout(this.persistDebounceTimer);
+    }
+    this.persistDebounceTimer = setTimeout(() => {
+      this.persistState();
+      this.persistDebounceTimer = null;
+    }, PERSIST_DEBOUNCE_MS);
   }
 
   /**
@@ -75,13 +107,17 @@ class UploadProgressStore {
    * Returns true if there are entries that should trigger showing the monitor.
    */
   enablePersistence(userId: string): boolean {
+    // Clear any existing uploads from previous session
+    this.uploads.clear();
+    this.knownGuildIds.clear();
     this.persistenceConfig = { userId, enabled: true };
 
     // Load persisted uploads for all guilds
     const allPersistedUploads = loadAllPersistedUploadsForUser(userId);
     let hasEntriesToShow = false;
 
-    for (const [, uploads] of allPersistedUploads) {
+    for (const [guildId, uploads] of allPersistedUploads) {
+      this.knownGuildIds.add(guildId);
       for (const upload of uploads) {
         // loadPersistedUploads already filters out seen entries
         if (!this.uploads.has(upload.id)) {
@@ -99,13 +135,21 @@ class UploadProgressStore {
   }
 
   /**
-   * Disables persistence.
+   * Disables persistence and clears in-memory uploads.
    */
   disablePersistence(): void {
     this.persistenceConfig = null;
+    this.uploads.clear();
+    this.knownGuildIds.clear();
+    if (this.persistDebounceTimer) {
+      clearTimeout(this.persistDebounceTimer);
+      this.persistDebounceTimer = null;
+    }
+    this.notifyListeners();
   }
 
   addUpload(id: string, fileName: string, galleryName: string, guildId: string): void {
+    this.knownGuildIds.add(guildId);
     this.uploads.set(id, {
       id,
       fileName,
@@ -125,7 +169,8 @@ class UploadProgressStore {
     if (upload) {
       upload.progress = Math.min(100, Math.max(0, progress));
       this.notifyListeners();
-      this.persistState();
+      // Use debounced persistence for frequent progress updates
+      this.persistStateDebounced();
     }
   }
 

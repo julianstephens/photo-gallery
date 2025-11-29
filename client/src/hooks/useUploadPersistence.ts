@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks";
 import { uploadProgressStore } from "@/lib/upload";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Hook that initializes upload persistence when the user is authenticated.
@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
  */
 export const useUploadPersistence = (): boolean => {
   const { currentUser, authReady } = useAuth();
-  const hasPersistedUploads = useRef(false);
+  const [hasPersistedUploads, setHasPersistedUploads] = useState(false);
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -16,13 +16,15 @@ export const useUploadPersistence = (): boolean => {
 
     if (currentUser?.id && !initialized.current) {
       initialized.current = true;
-      hasPersistedUploads.current = uploadProgressStore.enablePersistence(currentUser.id);
+      const hasPersisted = uploadProgressStore.enablePersistence(currentUser.id);
+      setHasPersistedUploads(hasPersisted);
     } else if (!currentUser && initialized.current) {
       // User logged out, disable persistence
       initialized.current = false;
       uploadProgressStore.disablePersistence();
+      setHasPersistedUploads(false);
     }
   }, [currentUser, authReady]);
 
-  return hasPersistedUploads.current;
+  return hasPersistedUploads;
 };
