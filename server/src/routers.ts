@@ -55,8 +55,8 @@ guildRouter.post("/guilds/default", handlers.setDefaultGuild);
  * UPLOAD ROUTES
  **********************/
 const uploadsRouter = Router();
-uploadsRouter.use(uploadRateLimiter);
 uploadsRouter.use(requiresAuth);
+uploadsRouter.use(uploadRateLimiter);
 uploadsRouter.use(requiresGuildMembership);
 uploadsRouter.use(requiresAdmin);
 uploadsRouter.post("/uploads/initiate", handlers.initiateUpload);
