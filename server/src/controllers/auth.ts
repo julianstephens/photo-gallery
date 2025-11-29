@@ -14,11 +14,12 @@ export class AuthController {
     });
   }
 
-  #isAdminUser = (userId: string, opts?: { checkSuperAdmin: boolean }): boolean => {
-    if (opts?.checkSuperAdmin) {
-      return env.SUPER_ADMIN_USER_IDS.includes(userId);
-    }
+  #isAdminUser = (userId: string): boolean => {
     return env.ADMIN_USER_IDS.includes(userId);
+  };
+
+  #isSuperAdminUser = (userId: string): boolean => {
+    return env.SUPER_ADMIN_USER_IDS.includes(userId);
   };
 
   login = async (code: string): Promise<AuthSessionData> => {
@@ -35,7 +36,7 @@ export class AuthController {
 
     const user = await this.getCurrentUser({ accessToken: data.access_token });
 
-    const isSuperAdmin = this.#isAdminUser(user.id, { checkSuperAdmin: true });
+    const isSuperAdmin = this.#isSuperAdminUser(user.id);
     const sess: AuthSessionData = {
       userId: user.id,
       username: user.username,

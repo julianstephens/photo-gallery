@@ -92,6 +92,7 @@ describe("AuthController", () => {
       const result = await controller.login("test-code");
 
       expect(result.isAdmin).toBe(true);
+      expect(result.isSuperAdmin).toBe(false);
       expect(result.guildIds).toEqual([]);
     });
 
