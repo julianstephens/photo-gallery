@@ -16,9 +16,7 @@
     "start": "pnpm --parallel --filter client --filter server start",
     "clean": "pnpm --recursive run clean",
     "test": "pnpm --recursive test",
-    "test:server": "pnpm --filter server test",
-    "test:server:watch": "pnpm --filter server test:watch",
-    "test:server:coverage": "pnpm --filter server test:coverage",
+    "test:integration": "pnpm --recursive test:integration",
     "prepare": "pnpm husky",
     "lint:fix": "eslint . --fix"
   },

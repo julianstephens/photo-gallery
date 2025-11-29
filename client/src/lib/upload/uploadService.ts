@@ -1,7 +1,6 @@
-import { httpClient } from "@/clients.ts";
+import { API_BASE_URL, httpClient } from "@/clients.ts";
 import type { UploadProgress } from "utils";
-
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+import { chunkedUpload } from "./chunkedUpload";
 
 export const initiateUpload = async (
   fileName: string,
@@ -20,10 +19,20 @@ export const initiateUpload = async (
   return data;
 };
 
-export const uploadChunk = async (uploadId: string, partNumber: number, chunk: Blob) => {
+export const uploadChunk = async (
+  uploadId: string,
+  partNumber: number,
+  chunk: Blob,
+  onProgress?: (bytesLoaded: number) => void,
+) => {
   const { data } = await httpClient.post(`/uploads/chunk`, chunk, {
     params: { uploadId, index: partNumber },
     headers: { "Content-Type": "application/octet-stream" },
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.loaded !== undefined) {
+        onProgress(progressEvent.loaded);
+      }
+    },
   });
   return data;
 };
@@ -43,29 +52,46 @@ export const getUploadProgress = async (uploadId: string): Promise<UploadProgres
   return data;
 };
 
+/**
+ * Upload a file in chunks with real-time progress tracking.
+ * Uses chunkedUpload internally for reliable chunk uploads.
+ *
+ * Progress: 0-100% based on chunk upload completion.
+ * Note: Server-side processing happens after finalization but is typically fast
+ * for individual image uploads. For large zip uploads, consider using chunkedUpload
+ * directly with onServerProgress for more granular server-side progress tracking.
+ */
 export const uploadFileInChunks = async (
   file: File,
   galleryName: string,
   guildId: string,
   onProgress: (progress: number) => void,
 ) => {
-  const { uploadId } = await initiateUpload(file.name, file.type, galleryName, file.size, guildId);
-  const totalParts = Math.ceil(file.size / CHUNK_SIZE);
-  const uploadPromises = [];
+  try {
+    const result = await chunkedUpload(file, {
+      galleryName,
+      guildId,
+      baseUrl: API_BASE_URL,
+      onProgress: (chunkProgress) => {
+        // Report chunk progress directly (0-100%)
+        onProgress(chunkProgress.percentage);
+      },
+      // Don't use onServerProgress for simple uploads - it can cause
+      // the progress to get stuck if the server doesn't track progress
+      // or if the upload completes before polling starts
+    });
 
-  for (let i = 0; i < totalParts; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
-    const chunk = file.slice(start, end);
-    uploadPromises.push(
-      uploadChunk(uploadId, i, chunk).then(() => {
-        const progress = ((i + 1) / totalParts) * 100;
-        onProgress(progress);
-      }),
-    );
+    // Always report 100% on completion
+    onProgress(100);
+
+    if (!result.success) {
+      throw new Error(result.error || "Upload failed");
+    }
+
+    return result;
+  } catch (error) {
+    // Set progress to 100% on error to show 'complete but errored' state
+    onProgress(100);
+    throw error;
   }
-
-  await Promise.all(uploadPromises);
-
-  return finalizeUpload(uploadId);
 };
