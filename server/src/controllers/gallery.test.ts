@@ -191,14 +191,6 @@ describe("GalleryAPI Unit Tests", () => {
       expect(uploadService.isImageMime("application/pdf")).toBe(false);
     });
 
-    it("should identify ZIP MIME types", () => {
-      const uploadService = new UploadService();
-
-      expect(uploadService.isZipMime("application/zip")).toBe(true);
-      expect(uploadService.isZipMime("application/x-zip-compressed")).toBe(true);
-      expect(uploadService.isZipMime("image/jpeg")).toBe(false);
-    });
-
     it("should have correct allowed image extensions", () => {
       const uploadService = new UploadService();
 

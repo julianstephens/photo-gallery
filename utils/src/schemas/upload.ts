@@ -80,7 +80,6 @@ export const uploadProgressStatusSchema = z.enum([
 export const uploadProgressPhaseSchema = z.enum([
   "client-upload",
   "server-assemble",
-  "server-zip-extract",
   "server-upload",
 ]);
 

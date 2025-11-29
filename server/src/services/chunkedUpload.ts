@@ -355,32 +355,6 @@ export class ChunkedUploadService {
         );
       }
 
-      // For zip files, validate the file signature
-      if (metadata.fileName.toLowerCase().endsWith(".zip")) {
-        const buffer = Buffer.alloc(4);
-        const fd = await fs.open(finalPath, "r");
-        try {
-          await fd.read(buffer, 0, 4, 0);
-          // ZIP files start with PK\x03\x04 or PK\x05\x06 or PK\x07\x08
-          if (
-            buffer[0] !== 0x50 ||
-            buffer[1] !== 0x4b ||
-            (buffer[2] !== 0x03 && buffer[2] !== 0x05 && buffer[2] !== 0x07) ||
-            (buffer[3] !== 0x04 && buffer[3] !== 0x06 && buffer[3] !== 0x08)
-          ) {
-            appLogger.error(
-              { uploadId, signature: buffer.toString("hex") },
-              "[chunkedUpload] finalizeUpload invalid zip signature",
-            );
-            throw new Error(
-              "File does not appear to be a valid ZIP archive. The file signature is invalid.",
-            );
-          }
-        } finally {
-          await fd.close();
-        }
-      }
-
       const checksums = await computeFileChecksums(finalPath);
       appLogger.debug({ uploadId, checksums }, "[chunkedUpload] finalizeUpload computed checksums");
 
