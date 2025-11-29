@@ -4,7 +4,7 @@ Photo Gallery 5000 is a full-stack gallery management tool optimized for Discord
 
 ## Repository Overview
 
-- **Client (`client/`)** – React 19 + Vite front end styled with Chakra UI. Key folders like `src/components/`, `src/pages/`, `src/hooks/`, and `src/workers/uploadJobWorker.ts` handle gallery UI, auth context, upload progress workers, and route wiring. React Query + upload workers stream chunk progress back to the UI.
+- **Client (`client/`)** – React 19 + Vite front end styled with Chakra UI. Key folders like `src/components/`, `src/pages/`, `src/hooks/`, and `src/lib/upload/uploadJobWorker.ts` handle gallery UI, auth context, upload progress workers, and route wiring. React Query + upload workers stream chunk progress back to the UI.
 - **Server (`server/`)** – Express 5 API plus background workers. `src/controllers/`, `src/handlers/`, `src/services/`, `src/middleware/`, and `src/workers/` cover HTTP flows, chunked uploads, Redis-backed queues, and gradient generation. Vitest (unit + `*.integration.test.ts`) and scripts under `server/scripts/` support operational tasks.
 - **Shared Utilities (`utils/`)** – Workspace package with Zod schemas, DTOs, and type helpers consumed by both client and server to keep validation/payloads consistent.
 - **Data + Tooling** – `data/Saved Pictures.zip` provides the 107 MB integration-test fixture, while repo-level configs (`pnpm-workspace.yaml`, `eslint.config.ts`, `.github/workflows/`) keep the monorepo wired together.
