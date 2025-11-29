@@ -47,6 +47,21 @@ describe("RequestService", () => {
       expect(request.status).toBe("open");
       expect(request.createdAt).toBeDefined();
       expect(request.updatedAt).toBeDefined();
+      expect(request.galleryId).toBeUndefined();
+      expect(redis.client.multi).toHaveBeenCalled();
+    });
+
+    it("should create a new request with optional galleryId", async () => {
+      const guildId = "guild123";
+      const userId = "user456";
+      const title = "Test Request";
+      const description = "This is a test request";
+      const galleryId = "gallery789";
+
+      const request = await service.createRequest(guildId, userId, title, description, galleryId);
+
+      expect(request).toBeTruthy();
+      expect(request.galleryId).toBe(galleryId);
       expect(redis.client.multi).toHaveBeenCalled();
     });
   });
@@ -134,6 +149,29 @@ describe("RequestService", () => {
       const requests = await service.getRequestsByGuild("guild123");
 
       expect(requests).toHaveLength(0);
+    });
+
+    it("should filter out expired request IDs gracefully", async () => {
+      const mockRequest = {
+        id: "req1",
+        guildId: "guild123",
+        userId: "user1",
+        title: "Request 1",
+        description: "Desc 1",
+        status: "open",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      // Index contains references to both valid and expired requests
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2-expired", "req3-expired"]);
+      // mGet returns null for expired keys
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest), null, null]);
+
+      const requests = await service.getRequestsByGuild("guild123");
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].id).toBe("req1");
     });
   });
 
@@ -276,6 +314,80 @@ describe("RequestService", () => {
       expect(updatedRequest.status).toBe("open");
       expect(updatedRequest.closedAt).toBeUndefined();
       expect(updatedRequest.closedBy).toBeUndefined();
+    });
+
+    it("should throw error for corrupted request data", async () => {
+      vi.mocked(redis.client.get).mockResolvedValue("invalid json {");
+
+      await expect(service.updateRequestStatus("req123", "approved")).rejects.toThrow(
+        /Corrupted request data for req123/,
+      );
+      expect(redis.client.unwatch).toHaveBeenCalled();
+    });
+
+    it("should retry on concurrent modification and eventually succeed", async () => {
+      const mockRequest = {
+        id: "req123",
+        guildId: "guild123",
+        userId: "user456",
+        title: "Test Request",
+        description: "Description",
+        status: "open",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockRequest));
+
+      // First attempt fails (null from exec), second succeeds
+      const mockMulti = {
+        set: vi.fn().mockReturnThis(),
+        expire: vi.fn().mockReturnThis(),
+        sAdd: vi.fn().mockReturnThis(),
+        sRem: vi.fn().mockReturnThis(),
+        exec: vi
+          .fn()
+          .mockResolvedValueOnce(null) // First attempt fails
+          .mockResolvedValueOnce([]), // Second attempt succeeds
+      };
+      vi.mocked(redis.client.multi).mockReturnValue(mockMulti as never);
+
+      const updatedRequest = await service.updateRequestStatus("req123", "approved");
+
+      expect(updatedRequest.status).toBe("approved");
+      expect(redis.client.watch).toHaveBeenCalledTimes(2);
+    });
+
+    it("should throw after max retries on continuous concurrent modifications", async () => {
+      const mockRequest = {
+        id: "req123",
+        guildId: "guild123",
+        userId: "user456",
+        title: "Test Request",
+        description: "Description",
+        status: "open",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify(mockRequest));
+
+      // All attempts fail
+      const mockMulti = {
+        set: vi.fn().mockReturnThis(),
+        expire: vi.fn().mockReturnThis(),
+        sAdd: vi.fn().mockReturnThis(),
+        sRem: vi.fn().mockReturnThis(),
+        exec: vi.fn().mockResolvedValue(null),
+      };
+      vi.mocked(redis.client.multi).mockReturnValue(mockMulti as never);
+
+      await expect(service.updateRequestStatus("req123", "approved")).rejects.toThrow(
+        /Failed to update request req123 status due to concurrent modifications/,
+      );
+
+      // Should have tried 5 times
+      expect(redis.client.watch).toHaveBeenCalledTimes(5);
     });
   });
 

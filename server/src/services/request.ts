@@ -68,6 +68,7 @@ export class RequestService {
     userId: string,
     title: string,
     description: string,
+    galleryId?: string,
   ): Promise<Request> => {
     const id = randomUUID();
     const now = Date.now();
@@ -76,6 +77,7 @@ export class RequestService {
       id,
       guildId,
       userId,
+      galleryId,
       title,
       description,
       status: "open",
@@ -95,9 +97,16 @@ export class RequestService {
     multi.sAdd(guildKey, id);
     multi.sAdd(userKey, id);
     multi.sAdd(statusKey, id);
+    // Set TTL on index keys to prevent orphaned references
+    multi.expire(guildKey, REQUEST_TTL_SECONDS);
+    multi.expire(userKey, REQUEST_TTL_SECONDS);
+    multi.expire(statusKey, REQUEST_TTL_SECONDS);
     await multi.exec();
 
-    appLogger.debug({ requestId: id, guildId, userId, title }, "[request] created request");
+    appLogger.debug(
+      { requestId: id, guildId, userId, title, galleryId },
+      "[request] created request",
+    );
 
     return request;
   };
@@ -196,6 +205,7 @@ export class RequestService {
 
   /**
    * Update request status with atomic index movement.
+   * Uses WATCH/MULTI/EXEC for optimistic locking to prevent race conditions.
    */
   updateRequestStatus = async (
     requestId: string,
@@ -203,51 +213,84 @@ export class RequestService {
     closedBy?: string,
   ): Promise<Request> => {
     const requestKey = this.#buildRequestKey(requestId);
-    const data = await redis.client.get(requestKey);
+    const MAX_RETRIES = 5;
+    let attempt = 0;
 
-    if (!data) {
-      throw new Error(`Request ${requestId} does not exist`);
-    }
+    while (attempt < MAX_RETRIES) {
+      attempt++;
 
-    const request = JSON.parse(data) as Request;
-    const previousStatus = request.status;
+      // Watch the key for changes
+      await redis.client.watch(requestKey);
 
-    if (!isValidStatusTransition(previousStatus, newStatus)) {
-      throw new Error(`Invalid status transition from ${previousStatus} to ${newStatus}`);
-    }
+      const data = await redis.client.get(requestKey);
 
-    const now = Date.now();
-    request.status = newStatus;
-    request.updatedAt = now;
-
-    if (newStatus === "closed") {
-      request.closedAt = now;
-      if (closedBy) {
-        request.closedBy = closedBy;
+      if (!data) {
+        await redis.client.unwatch();
+        throw new Error(`Request ${requestId} does not exist`);
       }
-    } else if (newStatus === "open" && previousStatus === "closed") {
-      // Re-opening a closed request
-      request.closedAt = undefined;
-      request.closedBy = undefined;
+
+      let request: Request;
+      try {
+        request = JSON.parse(data) as Request;
+      } catch (err) {
+        await redis.client.unwatch();
+        throw new Error(`Corrupted request data for ${requestId}: ${(err as Error).message}`);
+      }
+
+      const previousStatus = request.status;
+
+      if (!isValidStatusTransition(previousStatus, newStatus)) {
+        await redis.client.unwatch();
+        throw new Error(`Invalid status transition from ${previousStatus} to ${newStatus}`);
+      }
+
+      const now = Date.now();
+      request.status = newStatus;
+      request.updatedAt = now;
+
+      if (newStatus === "closed") {
+        request.closedAt = now;
+        if (closedBy) {
+          request.closedBy = closedBy;
+        }
+      } else if (newStatus === "open" && previousStatus === "closed") {
+        // Re-opening a closed request
+        request.closedAt = undefined;
+        request.closedBy = undefined;
+      }
+
+      const previousStatusKey = this.#buildStatusKey(previousStatus);
+      const newStatusKey = this.#buildStatusKey(newStatus);
+
+      // Use MULTI/EXEC for atomic operations
+      const multi = redis.client.multi();
+      multi.set(requestKey, JSON.stringify(request));
+      multi.expire(requestKey, REQUEST_TTL_SECONDS);
+      multi.sRem(previousStatusKey, requestId);
+      multi.sAdd(newStatusKey, requestId);
+      // Update TTL on status index keys
+      multi.expire(newStatusKey, REQUEST_TTL_SECONDS);
+
+      const results = await multi.exec();
+
+      // If transaction failed due to concurrent modification, retry
+      if (results === null) {
+        appLogger.debug(
+          { requestId, attempt, maxRetries: MAX_RETRIES },
+          "[request] status update failed due to concurrent modification, retrying",
+        );
+        continue;
+      }
+
+      appLogger.debug(
+        { requestId, previousStatus, newStatus, closedBy },
+        "[request] updated request status",
+      );
+
+      return request;
     }
 
-    const previousStatusKey = this.#buildStatusKey(previousStatus);
-    const newStatusKey = this.#buildStatusKey(newStatus);
-
-    // Use MULTI/EXEC for atomic operations
-    const multi = redis.client.multi();
-    multi.set(requestKey, JSON.stringify(request));
-    multi.expire(requestKey, REQUEST_TTL_SECONDS);
-    multi.sRem(previousStatusKey, requestId);
-    multi.sAdd(newStatusKey, requestId);
-    await multi.exec();
-
-    appLogger.debug(
-      { requestId, previousStatus, newStatus, closedBy },
-      "[request] updated request status",
-    );
-
-    return request;
+    throw new Error(`Failed to update request ${requestId} status due to concurrent modifications`);
   };
 
   /**
@@ -292,12 +335,12 @@ export class RequestService {
   };
 
   /**
-   * Get all comments for a request (sorted by timestamp).
-   * Uses zRange with REV option for chronological order and MGET for batch retrieval.
+   * Get all comments for a request (sorted by timestamp in ascending/chronological order).
+   * Uses zRange for efficient retrieval and MGET for batch fetching.
    */
   getComments = async (requestId: string): Promise<RequestComment[]> => {
     const commentsKey = this.#buildCommentsKey(requestId);
-    // Use zRange which is more efficient than zRangeByScore for getting all elements
+    // Use zRange which returns elements in ascending order by score (oldest first)
     const commentIds = await redis.client.zRange(commentsKey, 0, -1);
 
     if (commentIds.length === 0) return [];

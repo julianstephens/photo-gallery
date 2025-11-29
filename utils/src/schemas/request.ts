@@ -12,6 +12,7 @@ export const requestSchema = z.object({
   id: z.string().uuid(),
   guildId: z.string().min(1),
   userId: z.string().min(1),
+  galleryId: z.string().min(1).optional(),
   title: z.string().min(1).max(255),
   description: z.string().min(1).max(4000),
   status: requestStatusSchema,
@@ -39,6 +40,7 @@ export const createRequestSchema = z.object({
   title: z.string().min(1).max(255),
   description: z.string().min(1).max(4000),
   guildId: z.string().min(1),
+  galleryId: z.string().min(1).optional(),
 });
 
 /**
