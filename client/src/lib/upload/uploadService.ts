@@ -58,8 +58,7 @@ export const getUploadProgress = async (uploadId: string): Promise<UploadProgres
  *
  * Progress: 0-100% based on chunk upload completion.
  * Note: Server-side processing happens after finalization but is typically fast
- * for individual image uploads. For large zip uploads, consider using chunkedUpload
- * directly with onServerProgress for more granular server-side progress tracking.
+ * for individual image uploads.
  */
 export const uploadFileInChunks = async (
   file: File,

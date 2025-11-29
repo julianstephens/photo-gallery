@@ -23,20 +23,6 @@ describe("UploadService", () => {
     });
   });
 
-  describe("isZipMime", () => {
-    it("should return true for valid ZIP MIME types", () => {
-      expect(service.isZipMime("application/zip")).toBe(true);
-      expect(service.isZipMime("application/x-zip-compressed")).toBe(true);
-      expect(service.isZipMime("multipart/x-zip")).toBe(true);
-      expect(service.isZipMime("application/octet-stream")).toBe(true);
-    });
-
-    it("should return false for non-ZIP MIME types", () => {
-      expect(service.isZipMime("image/jpeg")).toBe(false);
-      expect(service.isZipMime("text/plain")).toBe(false);
-    });
-  });
-
   describe("sanitizeKeySegment", () => {
     it("should sanitize path traversal attempts", () => {
       expect(service.sanitizeKeySegment("../../../etc/passwd")).toBe("/etc/passwd");
@@ -108,7 +94,6 @@ describe("UploadService", () => {
     it("should not include non-image extensions", () => {
       expect(service.allowedImageExts.has(".pdf")).toBe(false);
       expect(service.allowedImageExts.has(".txt")).toBe(false);
-      expect(service.allowedImageExts.has(".zip")).toBe(false);
     });
   });
 });

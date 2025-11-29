@@ -200,7 +200,7 @@ export async function chunkedUpload(
       { uploadId },
     );
 
-    // Step 4: Poll for server-side progress using worker (for zip extraction and bucket uploads)
+    // Step 4: Poll for server-side progress using worker (for bucket uploads)
     if (onServerProgress) {
       await pollServerProgressWithWorker(uploadId, onServerProgress, options.baseUrl);
     }
@@ -306,7 +306,7 @@ export class ChunkedUploader {
         { uploadId: this.uploadId },
       );
 
-      // Step 4: Poll for server-side progress using worker (for zip extraction and bucket uploads)
+      // Step 4: Poll for server-side progress using worker (for bucket uploads)
       if (this.options.onServerProgress && this.uploadId) {
         await pollServerProgressWithWorker(
           this.uploadId,
