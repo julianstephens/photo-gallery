@@ -2,6 +2,7 @@ import { queryClient } from "@/clients";
 import { ConfirmDeleteModal } from "@/components/modals";
 import { toaster } from "@/components/ui/toaster";
 import { useGalleryContext } from "@/hooks";
+import { logger } from "@/lib/logger";
 import type { ButtonProps } from "@/lib/types";
 import { removeGallery } from "@/queries";
 import { Button, Icon, IconButton } from "@chakra-ui/react";
@@ -60,7 +61,7 @@ export const DeleteGalleryButton = ({
         description: `Gallery "${galleryName}" has been deleted.`,
       });
     } catch (err) {
-      console.error("Error deleting gallery:", err);
+      logger.error({ error: err }, "Error deleting gallery");
       toaster.error({
         title: "Deletion Error",
         description: `Failed to delete gallery "${galleryName}".`,

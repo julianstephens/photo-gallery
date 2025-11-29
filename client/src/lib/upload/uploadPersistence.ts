@@ -3,6 +3,7 @@
  * Uploads are keyed by user ID and guild ID to support multi-user/multi-guild scenarios.
  */
 
+import { logger } from "../logger";
 import type { ActiveUpload } from "./uploadProgressStore";
 
 export interface PersistedUpload extends ActiveUpload {
@@ -32,7 +33,7 @@ export const loadPersistedUploads = (userId: string, guildId: string): Persisted
     // Filter out seen entries - they should not be restored
     return uploads.filter((upload) => !upload.seen);
   } catch (error) {
-    console.warn("[uploadPersistence] Failed to load persisted uploads:", error);
+    logger.warn({ error }, "[uploadPersistence] Failed to load persisted uploads");
     return [];
   }
 };
@@ -53,7 +54,7 @@ export const savePersistedUploads = (
       localStorage.setItem(key, JSON.stringify(uploads));
     }
   } catch (error) {
-    console.warn("[uploadPersistence] Failed to save persisted uploads:", error);
+    logger.warn({ error }, "[uploadPersistence] Failed to save persisted uploads");
   }
 };
 
@@ -73,7 +74,7 @@ export const markUploadAsSeen = (userId: string, guildId: string, uploadId: stri
     );
     localStorage.setItem(key, JSON.stringify(updatedUploads));
   } catch (error) {
-    console.warn("[uploadPersistence] Failed to mark upload as seen:", error);
+    logger.warn({ error }, "[uploadPersistence] Failed to mark upload as seen");
   }
 };
 
@@ -90,7 +91,7 @@ export const markAllUploadsAsSeen = (userId: string, guildId: string): void => {
     const updatedUploads = uploads.map((upload) => ({ ...upload, seen: true }));
     localStorage.setItem(key, JSON.stringify(updatedUploads));
   } catch (error) {
-    console.warn("[uploadPersistence] Failed to mark all uploads as seen:", error);
+    logger.warn({ error }, "[uploadPersistence] Failed to mark all uploads as seen");
   }
 };
 
@@ -107,7 +108,7 @@ export const removePersistedUpload = (userId: string, guildId: string, uploadId:
     const filteredUploads = uploads.filter((upload) => upload.id !== uploadId);
     savePersistedUploads(userId, guildId, filteredUploads);
   } catch (error) {
-    console.warn("[uploadPersistence] Failed to remove persisted upload:", error);
+    logger.warn({ error }, "[uploadPersistence] Failed to remove persisted upload");
   }
 };
 
@@ -119,7 +120,7 @@ export const clearPersistedUploads = (userId: string, guildId: string): void => 
     const key = getStorageKey(userId, guildId);
     localStorage.removeItem(key);
   } catch (error) {
-    console.warn("[uploadPersistence] Failed to clear persisted uploads:", error);
+    logger.warn({ error }, "[uploadPersistence] Failed to clear persisted uploads");
   }
 };
 
@@ -150,7 +151,7 @@ export const loadAllPersistedUploadsForUser = (userId: string): Map<string, Pers
       }
     }
   } catch (error) {
-    console.warn("[uploadPersistence] Failed to load all persisted uploads:", error);
+    logger.warn({ error }, "[uploadPersistence] Failed to load all persisted uploads");
   }
   return result;
 };

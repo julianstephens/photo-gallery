@@ -34,8 +34,10 @@ const baseLoggerOptions: LoggerOptions = {
     remove: true,
   },
   base: {
-    service: "photo-gallery",
-    environment: env.NODE_ENV,
+    service: env.LOG_LABELS_APP || "photo-gallery-api",
+    environment: env.LOG_LABELS_ENVIRONMENT || env.NODE_ENV,
+    ...(env.LOG_LABELS_VERSION && { version: env.LOG_LABELS_VERSION }),
+    ...(env.LOG_LABELS_REGION && { region: env.LOG_LABELS_REGION }),
   },
   timestamp: pino.stdTimeFunctions.isoTime,
 };
@@ -73,7 +75,7 @@ function createRotatingFileStream(): DestinationStream {
 
   const stream = createStream(logFileName, {
     path: logDir,
-    size: env.LOG_FILE_MAX_SIZE, // e.g., "10M"
+    size: env.LOG_FILE_MAX_SIZE as `${number}${"B" | "K" | "M" | "G"}`, // e.g., "10M"
     interval: "1d", // rotate daily
     maxFiles: env.LOG_FILE_MAX_FILES, // keep N days of logs
     compress: "gzip", // compress rotated logs

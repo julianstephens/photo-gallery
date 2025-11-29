@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import { listGalleries } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "./useAuth";
@@ -19,7 +20,7 @@ export const useListGalleries = (guildId: string) => {
     };
   }
   if (query.error) {
-    console.error("Error fetching gallery data:", query.error);
+    logger.error({ error: query.error }, "Error fetching gallery data");
   }
 
   return {

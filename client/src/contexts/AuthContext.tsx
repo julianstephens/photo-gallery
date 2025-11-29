@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import type { AuthContextValue } from "@/lib/types";
 import { AuthContext } from "@/lib/utils";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -35,7 +36,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // after redirect from OAuth callback. Retry once after a short delay.
       const errorMsg = e instanceof Error ? e.message : String(e);
       if (errorMsg.includes("401")) {
-        console.debug("[AuthContext] Got 401, retrying in 500ms...");
+        logger.debug("[AuthContext] Got 401, retrying in 500ms...");
         await new Promise((resolve) => setTimeout(resolve, 500));
         try {
           const user = (await fetchCurrentUser()) as User | null;

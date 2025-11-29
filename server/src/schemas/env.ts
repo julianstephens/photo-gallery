@@ -93,6 +93,12 @@ export const envSchema = z.object({
     .string()
     .default("7")
     .transform((val) => parseInt(val, 10)), // days of retention
+  // Logging labels for stable Grafana dashboard identification
+  // Use these to inject stable identifiers that don't change with container restarts
+  LOG_LABELS_APP: z.string().optional(),
+  LOG_LABELS_ENVIRONMENT: z.string().optional(),
+  LOG_LABELS_VERSION: z.string().optional(),
+  LOG_LABELS_REGION: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

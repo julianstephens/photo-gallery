@@ -11,6 +11,7 @@ import {
   type User,
 } from "utils";
 import { API_BASE_URL, httpClient } from "./clients";
+import { logger } from "./lib/logger";
 
 /**********************
  * GALLERY QUERIES
@@ -95,34 +96,39 @@ export const login = async () => {
   const base = (httpClient.defaults.baseURL as string) ?? API_BASE_URL ?? "/api/";
   const primaryAuthUrl = new URL("auth", base).toString();
   const primaryOrigin = new URL(primaryAuthUrl).origin;
-  console.debug("[queries] Attempting auth redirect:", {
-    primaryAuthUrl,
-    base,
-    PRIMARY_ORIGIN: primaryOrigin,
-  });
+  logger.debug(
+    {
+      primaryAuthUrl,
+      base,
+      PRIMARY_ORIGIN: primaryOrigin,
+    },
+    "[queries] Attempting auth redirect",
+  );
 
   // If the API origin is reachable and responds with CORS/health, prefer primary
   const healthUrl = `${primaryOrigin}/api/healthz`;
   try {
     const res = await fetch(healthUrl, { method: "GET", mode: "cors", credentials: "include" });
     if (res.ok) {
-      console.debug("[queries] Primary API responsive. Redirecting to auth URL.", {
-        primaryAuthUrl,
-      });
+      logger.debug({ primaryAuthUrl }, "[queries] Primary API responsive. Redirecting to auth URL");
       window.location.assign(primaryAuthUrl);
       return;
     }
-    console.warn("[queries] Primary health check responded non-ok. Falling back.", {
-      status: res.status,
-    });
+    logger.warn(
+      { status: res.status },
+      "[queries] Primary health check responded non-ok. Falling back",
+    );
   } catch (err) {
-    console.warn("[queries] Primary health check failed. Falling back to direct API.", err);
+    logger.warn(
+      { error: err },
+      "[queries] Primary health check failed. Falling back to direct API",
+    );
   }
 
   // Fallback: attempt to use the direct API base configured (if available) or primary
   const fallbackBase = (API_BASE_URL as string) ?? base;
   const fallbackAuthUrl = new URL("auth", fallbackBase).toString();
-  console.debug("[queries] Redirecting to fallback auth URL:", { fallbackAuthUrl });
+  logger.debug({ fallbackAuthUrl }, "[queries] Redirecting to fallback auth URL");
   window.location.assign(fallbackAuthUrl);
 };
 

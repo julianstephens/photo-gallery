@@ -1,4 +1,5 @@
 import { toaster } from "@/components/ui/toaster";
+import { logger } from "@/lib/logger";
 import { setDefaultGuild } from "@/queries";
 import { Button, HStack, Icon } from "@chakra-ui/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -28,7 +29,7 @@ export const SetDefaultGuildButton = ({
       toaster.success({ title: "Success", description: "Default guild set successfully." });
     } catch (err: unknown) {
       toaster.error({ title: "Error", description: "Failed to set default guild." });
-      console.error("Error setting default guild:", err);
+      logger.error({ error: err }, "Error setting default guild");
     }
   };
 
