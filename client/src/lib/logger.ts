@@ -13,7 +13,10 @@ let logBatch: { ts: string; line: string; level: string }[] = [];
 let batchTimeoutId: number | null = null;
 
 async function sendBatchToLoki() {
-  if (logBatch.length === 0) return;
+  if (logBatch.length === 0) {
+    console.log("[Loki Transport] No logs to send (batch is empty)");
+    return;
+  }
 
   const batch = [...logBatch];
   logBatch = [];
@@ -22,6 +25,8 @@ async function sendBatchToLoki() {
     clearTimeout(batchTimeoutId);
     batchTimeoutId = null;
   }
+
+  console.log("[Loki Transport] Preparing batch with", batch.length, "logs");
 
   const streams = batch.reduce(
     (acc, log) => {
@@ -41,26 +46,44 @@ async function sendBatchToLoki() {
     {} as Record<string, { stream: Record<string, string>; values: [string, string][] }>,
   );
 
+  console.log("[Loki Transport] Stream groups:", Object.keys(streams).length);
+
   const lokiEndpoint = import.meta.env.VITE_LOKI_ENDPOINT;
   if (!lokiEndpoint) {
     console.warn("[Loki Transport] VITE_LOKI_ENDPOINT not configured, skipping log batch");
     return;
   }
 
+  const payload = JSON.stringify({ streams: Object.values(streams) });
+  console.log(
+    "[Loki Transport] Sending batch to",
+    lokiEndpoint,
+    "| Payload size:",
+    payload.length,
+    "bytes",
+  );
+
   try {
     const response = await fetch(lokiEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ streams: Object.values(streams) }),
+      body: payload,
       keepalive: true,
     });
 
+    console.log("[Loki Transport] Response status:", response.status, response.statusText);
+
     if (!response.ok) {
-      console.warn(
+      const responseText = await response.text();
+      console.error(
         "[Loki Transport] Failed to send log batch:",
         response.status,
         response.statusText,
+        "Response body:",
+        responseText,
       );
+    } else {
+      console.log("[Loki Transport] Batch sent successfully");
     }
   } catch (error) {
     console.error("[Loki Transport] Failed to send log batch:", error);
@@ -102,24 +125,31 @@ const browserConfig: {
 if (isProduction) {
   browserConfig.serialize = true;
   browserConfig.transmit = {
-    level: "info", // You might want this to also be driven by VITE_LOG_LEVEL
+    level: "debug", // Send debug and above to Loki
     send: (level, logEvent) => {
       const logLine = logEvent.messages
         .map((msg) => (typeof msg === "object" ? JSON.stringify(msg) : String(msg)))
         .join(" ");
 
+      // pino's logEvent.ts is in milliseconds, convert to nanoseconds for Loki
+      const nanoseconds = (logEvent.ts * 1_000_000).toString();
+
       logBatch.push({
-        ts: (logEvent.ts * 1_000_000).toString(),
+        ts: nanoseconds,
         line: logLine,
         level: level,
       });
 
+      console.log("[Client Logger] Batched log:", { level, logLine, batchSize: logBatch.length });
+
       if (logBatch.length >= BATCH_SIZE_LIMIT) {
+        console.log("[Client Logger] Batch size limit reached, sending to Loki");
         void sendBatchToLoki();
       }
 
       if (!batchTimeoutId) {
         batchTimeoutId = window.setTimeout(() => {
+          console.log("[Client Logger] Batch interval reached, sending to Loki");
           void sendBatchToLoki();
         }, BATCH_INTERVAL_MS);
       }
