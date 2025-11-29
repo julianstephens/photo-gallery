@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname } from "node:path";
+import process from "node:process";
 import type { DestinationStream, LoggerOptions, TransportTargetOptions } from "pino";
 import pino from "pino";
 import { pinoHttp, type Options as PinoHttpOptions } from "pino-http";
@@ -82,17 +83,43 @@ function createRotatingFileStream(): DestinationStream {
 }
 
 /**
+ * Creates a direct stdout stream that writes immediately without buffering.
+ * Used for production logging to ensure logs reach log aggregation systems.
+ */
+function createDirectStdoutStream(): DestinationStream {
+  return process.stdout as unknown as DestinationStream;
+}
+
+/**
  * Creates stdout transport configuration for pino.
- * In production, outputs JSON for Loki ingestion.
- * In development, uses pino-pretty for readable console output.
+ * - LOG_LEVEL=debug: uses pino-pretty for readable output (any environment)
+ * - Production otherwise: outputs JSON for Loki ingestion
+ * - Development: uses pino-pretty for readable console output.
  */
 function createStdoutTransport(): TransportTargetOptions {
+  // Use pretty-printing if debug mode is enabled, regardless of environment
+  const useDebugOutput = env.LOG_LEVEL === "debug";
+
+  if (useDebugOutput) {
+    return {
+      target: "pino-pretty",
+      options: {
+        colorize: true,
+        translateTime: "SYS:standard",
+        ignore: "pid,hostname",
+        singleLine: false,
+      },
+    };
+  }
+
   if (env.NODE_ENV === "production") {
-    // Production: always output raw JSON to stdout for Loki/Grafana ingestion
-    // Never use pretty-printing in production to ensure log pipeline compatibility
+    // Production: JSON logs to stdout for Loki/Grafana ingestion
+    // Write directly to process.stdout to avoid transport buffering issues
     return {
       target: "pino/file",
-      options: { destination: 1 }, // stdout
+      options: {
+        destination: process.stdout.fd || 1,
+      },
     };
   }
 
@@ -136,12 +163,20 @@ function createAppLogger(): pino.Logger {
 
   if (logOutput === "stdout") {
     // Production: JSON logs to stdout for container logging
-    const transportConfig = createStdoutTransport();
-    const transport = pino.transport({
-      target: transportConfig.target,
-      options: transportConfig.options,
-    });
-    return pino(baseLoggerOptions, transport);
+    // Use direct stream to avoid transport worker buffering issues
+    if (env.LOG_LEVEL === "debug") {
+      // Debug mode: use pretty-printing transport
+      const transportConfig = createStdoutTransport();
+      const transport = pino.transport({
+        target: transportConfig.target,
+        options: transportConfig.options,
+      });
+      return pino(baseLoggerOptions, transport);
+    }
+
+    // Production JSON: write directly to stdout
+    const stdoutStream = createDirectStdoutStream();
+    return pino(baseLoggerOptions, stdoutStream);
   }
 
   if (logOutput === "file") {
@@ -163,12 +198,20 @@ function createHttpLogger(): pino.Logger {
 
   if (logOutput === "stdout") {
     // Production: JSON logs to stdout for container logging
-    const transportConfig = createStdoutTransport();
-    const transport = pino.transport({
-      target: transportConfig.target,
-      options: transportConfig.options,
-    });
-    return pino(baseLoggerOptions, transport);
+    // Use direct stream to avoid transport worker buffering issues
+    if (env.LOG_LEVEL === "debug") {
+      // Debug mode: use pretty-printing transport
+      const transportConfig = createStdoutTransport();
+      const transport = pino.transport({
+        target: transportConfig.target,
+        options: transportConfig.options,
+      });
+      return pino(baseLoggerOptions, transport);
+    }
+
+    // Production JSON: write directly to stdout
+    const stdoutStream = createDirectStdoutStream();
+    return pino(baseLoggerOptions, stdoutStream);
   }
 
   if (logOutput === "file") {
