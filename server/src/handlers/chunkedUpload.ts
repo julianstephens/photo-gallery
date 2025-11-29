@@ -21,6 +21,7 @@ const galleryController = new GalleryController();
 // Maximum allowed chunk size (10MB) to prevent memory exhaustion
 const MAX_CHUNK_SIZE = 10 * 1024 * 1024;
 const CHUNK_SIZE_ERROR = `Chunk size exceeds maximum allowed (${MAX_CHUNK_SIZE / (1024 * 1024)}MB)`;
+const isAppleDoubleFileName = (fileName: string) => fileName.startsWith("._");
 
 export const initiateUpload = async (req: Request, res: Response) => {
   try {
@@ -125,6 +126,24 @@ export const finalizeUpload = async (req: Request, res: Response) => {
       metadata.galleryName,
     );
 
+    if (isAppleDoubleFileName(metadata.fileName)) {
+      await rm(finalizedPath, { force: true }).catch(() => {});
+      chunkedUploadService.updateProgress(uploadId, "completed", "server-upload", {
+        totalFiles: 1,
+        processedFiles: 1,
+      });
+      appLogger.info(
+        {
+          uploadId,
+          guildId: metadata.guildId,
+          galleryName: metadata.galleryName,
+          fileName: metadata.fileName,
+        },
+        "[finalizeUpload] Skipped AppleDouble metadata file",
+      );
+      return res.status(200).json({ success: true, skipped: true });
+    }
+
     try {
       // Validate that the file is an image based on MIME type
       const validImageTypes = [
@@ -195,7 +214,7 @@ export const finalizeUpload = async (req: Request, res: Response) => {
             );
             // Delete the corrupted S3 object
             try {
-              await bucketService.deleteObjectFromBucket(storageKey);
+              await bucketService.deleteObjectFromBucket(galleryFolderName, objectName);
               appLogger.info(
                 { uploadId, storageKey },
                 "[finalizeUpload] Corrupted object deleted from S3",

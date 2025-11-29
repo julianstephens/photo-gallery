@@ -1,13 +1,12 @@
 import type { UploadJobProgress } from "utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mockRedisModule } from "../utils/test-mocks.ts";
-import { UploadJobService } from "./uploadJob.ts";
+import { mockEnvModule, mockRedisModule } from "../utils/test-mocks.ts";
 
-// Mock redis
+vi.mock("../schemas/env.ts", () => mockEnvModule());
 vi.mock("../redis.ts", () => mockRedisModule());
 
-// Import redis after mock
-import redis from "../redis.ts";
+const redis = (await import("../redis.ts")).default;
+const { UploadJobService } = await import("./uploadJob.ts");
 
 describe("UploadJobService", () => {
   let service: UploadJobService;

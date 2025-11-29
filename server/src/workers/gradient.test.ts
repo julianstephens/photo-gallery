@@ -1,41 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mockBucketServiceModule, mockLoggerModule, mockRedisModule } from "../utils/test-mocks.ts";
+import {
+  mockBucketServiceModule,
+  mockEnvModule,
+  mockLoggerModule,
+  mockRedisModule,
+} from "../utils/test-mocks.ts";
 
-// Mock env with worker enabled
-const mockEnvEnabled = {
-  NODE_ENV: "test",
-  LOG_LEVEL: "info",
-  PORT: 4000,
-  S3_ENDPOINT: "http://s3.test",
-  S3_ACCESS_KEY: "test-access",
-  S3_SECRET_KEY: "test-secret",
-  MASTER_BUCKET_NAME: "master-bucket",
-  DISCORD_API_URL: "https://discord.com/api",
-  DISCORD_CLIENT_ID: "test-client-id",
-  DISCORD_CLIENT_SECRET: "test-client-secret",
-  DISCORD_REDIRECT_URI: "http://localhost/callback",
-  CLIENT_URL: "http://localhost:3000",
-  REDIS_HOST: "localhost",
-  REDIS_PORT: 6379,
-  REDIS_USER: "test-user",
-  REDIS_PASSWORD: "test-password",
-  REDIS_DB: 1,
-  SESSION_SECRET: "test-session-secret",
-  CORS_ORIGINS: "http://localhost:3000",
-  CORS_CREDENTIALS: true,
-  JSON_LIMIT: "1mb",
-  URLENCODED_LIMIT: "1mb",
-  ADMIN_USER_IDS: ["admin-user-1", "admin-user-2"],
-  GRADIENT_WORKER_ENABLED: true,
-  GRADIENT_WORKER_CONCURRENCY: 2,
-  GRADIENT_JOB_MAX_RETRIES: 3,
-  GRADIENT_WORKER_POLL_INTERVAL_MS: 1000,
-};
-
-const mockEnvDisabled = {
-  ...mockEnvEnabled,
-  GRADIENT_WORKER_ENABLED: false,
-};
+const envEnabledModule = () => mockEnvModule({ GRADIENT_WORKER_ENABLED: true });
+const envDisabledModule = () => mockEnvModule({ GRADIENT_WORKER_ENABLED: false });
 
 vi.mock("../middleware/logger.ts", () => mockLoggerModule());
 vi.mock("../redis.ts", () => mockRedisModule());
@@ -94,7 +66,7 @@ describe("GradientWorker", () => {
 
   describe("enqueueGradientJob", () => {
     it("should return null when worker is disabled", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvDisabled }));
+      vi.doMock("../schemas/env.ts", () => envDisabledModule());
 
       // Re-import to get fresh module with new env
       const { enqueueGradientJob } = await import("./gradient.ts");
@@ -110,7 +82,7 @@ describe("GradientWorker", () => {
     });
 
     it("should enqueue job and return job ID when worker is enabled", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
       vi.mocked(redis.client.get).mockResolvedValue(null); // No existing job
       vi.mocked(redis.client.rPush).mockResolvedValue(1);
 
@@ -131,7 +103,7 @@ describe("GradientWorker", () => {
     });
 
     it("should return existing job ID if job already exists", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
       vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify({ jobId: "existing-job" }));
 
       const { enqueueGradientJob } = await import("./gradient.ts");
@@ -149,7 +121,7 @@ describe("GradientWorker", () => {
     });
 
     it("should return null for invalid job data", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
 
       const { enqueueGradientJob } = await import("./gradient.ts");
 
@@ -166,7 +138,7 @@ describe("GradientWorker", () => {
 
   describe("getGradientWorkerMetrics", () => {
     it("should return worker metrics including activeJobs", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
 
       const { getGradientWorkerMetrics } = await import("./gradient.ts");
 
@@ -183,7 +155,7 @@ describe("GradientWorker", () => {
 
   describe("startGradientWorker", () => {
     it("should not start when worker is disabled", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvDisabled }));
+      vi.doMock("../schemas/env.ts", () => envDisabledModule());
 
       const { startGradientWorker, getGradientWorkerMetrics } = await import("./gradient.ts");
 
@@ -196,7 +168,7 @@ describe("GradientWorker", () => {
 
   describe("stopGradientWorker", () => {
     it("should stop the worker gracefully", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
       vi.mocked(redis.client.lMove).mockResolvedValue(null); // No jobs to move
 
       const { startGradientWorker, stopGradientWorker, getGradientWorkerMetrics } = await import(
@@ -213,7 +185,7 @@ describe("GradientWorker", () => {
 
   describe("getQueueLength", () => {
     it("should return the queue length", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
       vi.mocked(redis.client.lLen).mockResolvedValue(5);
 
       const { getQueueLength } = await import("./gradient.ts");
@@ -227,7 +199,7 @@ describe("GradientWorker", () => {
 
   describe("getProcessingCount", () => {
     it("should return the processing count", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
       vi.mocked(redis.client.lLen).mockResolvedValue(2);
 
       const { getProcessingCount } = await import("./gradient.ts");
@@ -241,7 +213,7 @@ describe("GradientWorker", () => {
 
   describe("getDelayedCount", () => {
     it("should return the delayed jobs count", async () => {
-      vi.doMock("../schemas/env.ts", () => ({ default: mockEnvEnabled }));
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
       vi.mocked(redis.client.zCard).mockResolvedValue(3);
 
       const { getDelayedCount } = await import("./gradient.ts");

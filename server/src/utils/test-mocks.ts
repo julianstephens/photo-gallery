@@ -44,13 +44,43 @@ export const mockEnv = {
   LOG_FILE_MAX_FILES: 7,
 };
 
+export type MockEnv = typeof mockEnv;
+
+const buildMockEnv = (overrides: Partial<MockEnv> = {}): MockEnv => ({
+  ...mockEnv,
+  ...overrides,
+});
+
+const buildParsedCorsOriginsMock = (env: MockEnv) => {
+  if (env.CORS_ORIGINS === "*") {
+    return vi.fn().mockReturnValue("*");
+  }
+
+  const parsedOrigins = env.CORS_ORIGINS.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return vi.fn().mockReturnValue(parsedOrigins);
+};
+
 /**
  * Mock for the env schema module.
- * Use with: vi.mock("../schemas/env.ts", () => mockEnvModule);
+ * Use with: vi.mock("../schemas/env.ts", () => mockEnvModule());
  */
-export const mockEnvModule = () => ({
-  default: mockEnv,
-});
+export const mockEnvModule = (overrides: Partial<MockEnv> = {}) => {
+  const env = buildMockEnv(overrides);
+
+  return {
+    default: env,
+    envSchema: {
+      safeParse: vi.fn().mockReturnValue({
+        success: true,
+        data: env,
+      }),
+    },
+    parsedCorsOrigins: buildParsedCorsOriginsMock(env),
+  };
+};
 
 /**
  * Mock for the logger middleware.

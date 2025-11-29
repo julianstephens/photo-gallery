@@ -322,12 +322,12 @@ export class BucketService {
     }
   };
 
-  deleteObjectFromBucket = async (bucketName: string, objectName: string) => {
+  deleteObjectFromBucket = async (galleryFolderName: string, objectName: string) => {
     await this.ensureBucket();
     await this.#s3.send(
       new DeleteObjectCommand({
         Bucket: this.#bucketName,
-        Key: this.#buildKey(bucketName, objectName),
+        Key: this.#buildKey(galleryFolderName, objectName),
       }),
     );
   };

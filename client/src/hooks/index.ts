@@ -5,3 +5,4 @@ export * from "./useListGalleries";
 export * from "./useListGalleryItems";
 export * from "./useSingleGalleryData";
 export * from "./useUploadContext";
+export * from "./useUploadPersistence";
