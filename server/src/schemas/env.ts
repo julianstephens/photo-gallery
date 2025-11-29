@@ -67,8 +67,7 @@ export const envSchema = z.object({
   // file: Rotating file logs (default for development)
   // both: stdout + file (useful for debugging)
   LOG_OUTPUT: z.enum(["stdout", "file", "both"]).optional(),
-  // Optional Loki direct push URL (e.g., http://loki:3100/loki/api/v1/push)
-  LOKI_URL: z.string().url().optional(),
+  // TODO: Add LOKI_URL and Loki logging support if/when direct Loki push is implemented.
   // Log file rotation settings (for file-based logging)
   LOG_FILE_PATH: z.string().default("logs/app.log"),
   LOG_FILE_MAX_SIZE: z
