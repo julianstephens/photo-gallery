@@ -71,7 +71,13 @@ export const envSchema = z.object({
   LOKI_URL: z.string().url().optional(),
   // Log file rotation settings (for file-based logging)
   LOG_FILE_PATH: z.string().default("logs/app.log"),
-  LOG_FILE_MAX_SIZE: z.string().default("10M"), // rotating-file-stream size format
+  LOG_FILE_MAX_SIZE: z
+    .string()
+    .default("10M")
+    .refine(
+      (val) => /^\d+[KMG]$/.test(val),
+      "Must be a valid size format (e.g., '10M', '100K', '1G')"
+    ), // rotating-file-stream size format
   LOG_FILE_MAX_FILES: z
     .string()
     .default("7")
