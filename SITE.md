@@ -48,3 +48,53 @@ Data flow summary:
 - Users interact with the React client, which calls Express APIs and streams uploads directly through the server.
 - The server reads/writes gallery metadata and session data in Redis while streaming binary objects into S3-compatible storage.
 - Background ZIP jobs update Redis progress so the client can poll for status, and the browser fetches finalized images straight from object storage using presigned URLs.
+
+## Logging Architecture
+
+The server uses [pino](https://github.com/pinojs/pino) for structured logging with environment-aware configuration:
+
+### Production Logging (Grafana/Loki Integration)
+
+In production, logs are written to stdout/stderr in JSON format for container log aggregation:
+
+```
+Container stdout → Docker/K8s → Loki → Grafana
+```
+
+- **JSON format** enables structured querying in Grafana
+- **Request IDs** (`x-request-id`) correlate logs across requests
+- **PII redaction** removes sensitive fields before logging
+- **No file logging** avoids disk consumption in containers
+
+### Development Logging
+
+In development, logs use rotating files to manage disk space:
+
+- **Rotating file sink** with configurable size/time limits
+- **Gzip compression** of rotated logs
+- **Automatic cleanup** of old log files
+- **Optional pretty console** output for debugging
+
+### Logger Configuration
+
+Configure via environment variables:
+
+| Variable             | Production Default | Development Default |
+| -------------------- | ------------------ | ------------------- |
+| `LOG_OUTPUT`         | `stdout`           | `file`              |
+| `LOG_LEVEL`          | `info`             | `info`              |
+| `LOG_FILE_MAX_SIZE`  | -                  | `10M`               |
+| `LOG_FILE_MAX_FILES` | -                  | `7`                 |
+
+### Child Loggers
+
+Use `createChildLogger` for request/job-scoped logging with context:
+
+```typescript
+const reqLogger = createChildLogger({
+  requestId: req.id,
+  guildId: guild.id,
+  jobId: job.id,
+});
+reqLogger.info("Processing upload");
+```
