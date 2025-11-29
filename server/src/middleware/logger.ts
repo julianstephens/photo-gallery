@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname } from "node:path";
-import process from "node:process";
 import type { DestinationStream, LoggerOptions, TransportTargetOptions } from "pino";
 import pino from "pino";
 import { pinoHttp, type Options as PinoHttpOptions } from "pino-http";
@@ -34,7 +33,10 @@ const baseLoggerOptions: LoggerOptions = {
     paths: redactPaths,
     remove: true,
   },
-  base: undefined,
+  base: {
+    service: "photo-gallery",
+    environment: env.NODE_ENV,
+  },
   timestamp: pino.stdTimeFunctions.isoTime,
 };
 
@@ -83,42 +85,18 @@ function createRotatingFileStream(): DestinationStream {
 }
 
 /**
- * Creates a direct stdout stream that writes immediately without buffering.
- * Used for production logging to ensure logs reach log aggregation systems.
- */
-function createDirectStdoutStream(): DestinationStream {
-  return process.stdout as unknown as DestinationStream;
-}
-
-/**
  * Creates stdout transport configuration for pino.
- * - LOG_LEVEL=debug: uses pino-pretty for readable output (any environment)
- * - Production otherwise: outputs JSON for Loki ingestion
- * - Development: uses pino-pretty for readable console output.
+ * - Production: always outputs JSON for Loki ingestion (even in debug mode)
+ * - Development: uses pino-pretty for readable output
  */
 function createStdoutTransport(): TransportTargetOptions {
-  // Use pretty-printing if debug mode is enabled, regardless of environment
-  const useDebugOutput = env.LOG_LEVEL === "debug";
-
-  if (useDebugOutput) {
-    return {
-      target: "pino-pretty",
-      options: {
-        colorize: true,
-        translateTime: "SYS:standard",
-        ignore: "pid,hostname",
-        singleLine: false,
-      },
-    };
-  }
-
   if (env.NODE_ENV === "production") {
-    // Production: JSON logs to stdout for Loki/Grafana ingestion
-    // Write directly to process.stdout to avoid transport buffering issues
+    // Production: ALWAYS JSON logs to stdout for Loki/Grafana ingestion via Fluent Bit
+    // Never use pretty-printing in production - it breaks log parsers and sends multiple lines per log
     return {
       target: "pino/file",
       options: {
-        destination: process.stdout.fd || 1,
+        destination: 1, // stdout
       },
     };
   }
@@ -130,6 +108,7 @@ function createStdoutTransport(): TransportTargetOptions {
       colorize: true,
       translateTime: "SYS:standard",
       ignore: "pid,hostname",
+      singleLine: true, // Ensure single line for development too
     },
   };
 }
@@ -163,20 +142,12 @@ function createAppLogger(): pino.Logger {
 
   if (logOutput === "stdout") {
     // Production: JSON logs to stdout for container logging
-    // Use direct stream to avoid transport worker buffering issues
-    if (env.LOG_LEVEL === "debug") {
-      // Debug mode: use pretty-printing transport
-      const transportConfig = createStdoutTransport();
-      const transport = pino.transport({
-        target: transportConfig.target,
-        options: transportConfig.options,
-      });
-      return pino(baseLoggerOptions, transport);
-    }
-
-    // Production JSON: write directly to stdout
-    const stdoutStream = createDirectStdoutStream();
-    return pino(baseLoggerOptions, stdoutStream);
+    const transportConfig = createStdoutTransport();
+    const transport = pino.transport({
+      target: transportConfig.target,
+      options: transportConfig.options,
+    });
+    return pino(baseLoggerOptions, transport);
   }
 
   if (logOutput === "file") {
@@ -198,20 +169,12 @@ function createHttpLogger(): pino.Logger {
 
   if (logOutput === "stdout") {
     // Production: JSON logs to stdout for container logging
-    // Use direct stream to avoid transport worker buffering issues
-    if (env.LOG_LEVEL === "debug") {
-      // Debug mode: use pretty-printing transport
-      const transportConfig = createStdoutTransport();
-      const transport = pino.transport({
-        target: transportConfig.target,
-        options: transportConfig.options,
-      });
-      return pino(baseLoggerOptions, transport);
-    }
-
-    // Production JSON: write directly to stdout
-    const stdoutStream = createDirectStdoutStream();
-    return pino(baseLoggerOptions, stdoutStream);
+    const transportConfig = createStdoutTransport();
+    const transport = pino.transport({
+      target: transportConfig.target,
+      options: transportConfig.options,
+    });
+    return pino(baseLoggerOptions, transport);
   }
 
   if (logOutput === "file") {
