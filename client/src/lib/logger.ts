@@ -117,6 +117,11 @@ if (isProduction) {
 export const logger = pino({
   level: getLogLevel(),
   browser: browserConfig,
+  formatters: {
+    level(label) {
+      return { level: label };
+    },
+  },
 });
 
 // --- Log the final configuration for debugging ---

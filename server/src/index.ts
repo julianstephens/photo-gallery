@@ -20,8 +20,10 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   // Start the gradient generation worker if enabled
   startGradientWorker();
 
-  appLogger.info("Registered Routes:");
-  printRegisteredRoutes(app.router.stack);
+  if (env.NODE_ENV !== "production") {
+    appLogger.info("Registered Routes:");
+    printRegisteredRoutes(app.router.stack);
+  }
   const server = app.listen(env.PORT, () => {
     appLogger.info(`Server listening on http://0.0.0.0:${env.PORT} (${env.NODE_ENV})`);
   });

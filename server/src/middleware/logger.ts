@@ -39,6 +39,11 @@ const baseLoggerOptions: LoggerOptions = {
     ...(env.LOG_LABELS_VERSION && { version: env.LOG_LABELS_VERSION }),
     ...(env.LOG_LABELS_REGION && { region: env.LOG_LABELS_REGION }),
   },
+  formatters: {
+    level(label, _number) {
+      return { level: label };
+    },
+  },
   timestamp: pino.stdTimeFunctions.isoTime,
 };
 
