@@ -259,6 +259,32 @@ export const mockChunkedUploadServiceModule = () => ({
 });
 
 /**
+ * Mock for RequestService.
+ * Provides RequestService methods with vi.fn() mocks.
+ */
+export const mockRequestService = {
+  createRequest: vi.fn(),
+  getRequest: vi.fn(),
+  getRequestsByGuild: vi.fn(),
+  getRequestsByUser: vi.fn(),
+  getRequestsByStatus: vi.fn(),
+  updateRequestStatus: vi.fn(),
+  addComment: vi.fn(),
+  getComments: vi.fn(),
+  deleteRequest: vi.fn(),
+};
+
+/**
+ * Mock for the RequestService module.
+ * Use with: vi.mock("../services/request.ts", () => mockRequestServiceModule);
+ */
+export const mockRequestServiceModule = () => ({
+  RequestService: vi.fn().mockImplementation(() => mockRequestService),
+  isValidStatusTransition: vi.fn(),
+  canUserModifyRequest: vi.fn(),
+});
+
+/**
  * Helper function to reset all mock functions in a mock object.
  * Useful for cleaning up mocks between tests.
  */
