@@ -18,6 +18,10 @@ export class AuthController {
     return env.ADMIN_USER_IDS.includes(userId);
   };
 
+  #isSuperAdminUser = (userId: string): boolean => {
+    return env.SUPER_ADMIN_USER_IDS.includes(userId);
+  };
+
   login = async (code: string): Promise<AuthSessionData> => {
     const params = this.#buildTokenParams(code);
     const { data } = await axios.post<DiscordTokenResponse>(
@@ -32,15 +36,18 @@ export class AuthController {
 
     const user = await this.getCurrentUser({ accessToken: data.access_token });
 
-    return {
+    const isSuperAdmin = this.#isSuperAdminUser(user.id);
+    const sess: AuthSessionData = {
       userId: user.id,
       username: user.username,
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       expiresAt: Date.now() + data.expires_in * 1000,
-      isAdmin: this.#isAdminUser(user.id),
+      isSuperAdmin,
+      isAdmin: isSuperAdmin || this.#isAdminUser(user.id),
       guildIds: user.guilds.map((g) => g.id),
     };
+    return sess;
   };
 
   logout() {

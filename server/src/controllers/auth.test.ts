@@ -92,7 +92,35 @@ describe("AuthController", () => {
       const result = await controller.login("test-code");
 
       expect(result.isAdmin).toBe(true);
+      expect(result.isSuperAdmin).toBe(false);
       expect(result.guildIds).toEqual([]);
+    });
+
+    it("should mark superadmin users correctly", async () => {
+      const mockTokenResponse = {
+        access_token: "test-access-token",
+        refresh_token: "test-refresh-token",
+        expires_in: 3600,
+      };
+
+      const mockUserData = {
+        id: "super-admin-user-1",
+        username: "superadminuser",
+        discriminator: "0001",
+        avatar: "superadmin-avatar",
+      };
+
+      const mockGuildsData = [];
+
+      mockAxios.post.mockResolvedValueOnce({ data: mockTokenResponse });
+      mockAxios.get
+        .mockResolvedValueOnce({ data: mockUserData })
+        .mockResolvedValueOnce({ data: mockGuildsData });
+
+      const result = await controller.login("test-code");
+
+      expect(result.isSuperAdmin).toBe(true);
+      expect(result.isAdmin).toBe(true);
     });
   });
 
