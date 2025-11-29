@@ -7,6 +7,16 @@ import { startGradientWorker, stopGradientWorker } from "./workers/index.ts";
 if (process.argv[1] === new URL(import.meta.url).pathname) {
   const app = createApp();
 
+  // Log startup configuration
+  appLogger.info(
+    {
+      NODE_ENV: env.NODE_ENV,
+      LOG_LEVEL: env.LOG_LEVEL,
+      LOG_OUTPUT: env.LOG_OUTPUT || "auto",
+    },
+    "Logger initialized",
+  );
+
   // Start the gradient generation worker if enabled
   startGradientWorker();
 

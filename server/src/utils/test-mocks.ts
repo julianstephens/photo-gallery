@@ -38,9 +38,7 @@ export const mockEnv = {
   GRADIENT_WORKER_CONCURRENCY: 2,
   GRADIENT_JOB_MAX_RETRIES: 3,
   GRADIENT_WORKER_POLL_INTERVAL_MS: 1000,
-  LOG_OUTPUT: undefined,
-  LOKI_URL: undefined,
-  LOG_FILE_PATH: "logs/app.log",
+  LOG_FILE_PATH: "logs/test.log",
   LOG_FILE_MAX_SIZE: "10M",
   LOG_FILE_MAX_FILES: 7,
 };
@@ -129,9 +127,9 @@ export const mockRedisClient = {
   zCard: vi.fn(),
   zRange: vi.fn(),
   zRangeByScore: vi.fn(),
-  multi: vi.fn(),
   watch: vi.fn(),
   unwatch: vi.fn(),
+  multi: vi.fn(),
 };
 
 /**
@@ -260,32 +258,6 @@ export const mockChunkedUploadService = {
  */
 export const mockChunkedUploadServiceModule = () => ({
   ChunkedUploadService: vi.fn().mockImplementation(() => mockChunkedUploadService),
-});
-
-/**
- * Mock for RequestService.
- * Provides RequestService methods with vi.fn() mocks.
- */
-export const mockRequestService = {
-  createRequest: vi.fn(),
-  getRequest: vi.fn(),
-  getRequestsByGuild: vi.fn(),
-  getRequestsByUser: vi.fn(),
-  getRequestsByStatus: vi.fn(),
-  updateRequestStatus: vi.fn(),
-  addComment: vi.fn(),
-  getComments: vi.fn(),
-  deleteRequest: vi.fn(),
-};
-
-/**
- * Mock for the RequestService module.
- * Use with: vi.mock("../services/request.ts", () => mockRequestServiceModule);
- */
-export const mockRequestServiceModule = () => ({
-  RequestService: vi.fn().mockImplementation(() => mockRequestService),
-  isValidStatusTransition: vi.fn(),
-  canUserModifyRequest: vi.fn(),
 });
 
 /**

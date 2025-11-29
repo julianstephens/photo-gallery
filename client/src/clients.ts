@@ -64,24 +64,16 @@ const computeApiBaseUrl = (value?: string) => {
 };
 
 const defaultBaseURL = computeApiBaseUrl(import.meta.env.VITE_API_URL as string | undefined);
-const uploadBaseURL = (import.meta.env.VITE_UPLOAD_BASE_URL as string | undefined)?.trim();
-const resolvedUploadBaseURL =
-  uploadBaseURL && uploadBaseURL.length > 0 ? computeApiBaseUrl(uploadBaseURL) : undefined;
 
 // Axios instance with credentials for API calls
 export const httpClient = createHttpClient(defaultBaseURL);
-export const uploadHttpClient = resolvedUploadBaseURL
-  ? createHttpClient(resolvedUploadBaseURL)
-  : httpClient;
 
 // Export base URLs as strings for use in other modules (login fallback behavior, etc.)
 export const API_BASE_URL = defaultBaseURL;
-export const UPLOAD_BASE_URL = resolvedUploadBaseURL;
 
 // Debug: log which base URLs are being used
 if (typeof window !== "undefined") {
   console.debug("[clients] API base URL:", defaultBaseURL);
-  console.debug("[clients] Upload base URL:", resolvedUploadBaseURL ?? "using default");
 }
 
 // Exponential backoff with jitter (±20%) capped

@@ -15,7 +15,7 @@ export const GalleryItem = ({ item, guildId, galleryName }: GalleryItemProps) =>
   const uploadsIndex = urlParts.indexOf("uploads");
   const normalizedGalleryName = uploadsIndex > 0 ? urlParts[uploadsIndex - 1] : galleryName;
   const imagePath = uploadsIndex !== -1 ? urlParts.slice(uploadsIndex + 1).join("/") : item.url;
-  const imageSrc = `/media/${normalizedGalleryName}/${imagePath}?guildId=${guildId}`;
+  const imageSrc = `/api/media/${normalizedGalleryName}/${imagePath}?guildId=${guildId}`;
 
   return (
     <Tooltip content={name}>

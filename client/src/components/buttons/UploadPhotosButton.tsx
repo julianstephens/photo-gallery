@@ -175,9 +175,9 @@ export const UploadPhotosButton = ({
           queryKey: ["galleries", { guildId }],
           type: "active",
         });
-        // Also refetch gallery items
+        // Also refetch gallery items for this specific gallery
         await queryClient.refetchQueries({
-          queryKey: ["galleryItems"],
+          queryKey: ["galleryItems", { guildId, galleryName }],
           type: "active",
         });
         // Refetch the specific gallery to update photo count in DetailedGallery

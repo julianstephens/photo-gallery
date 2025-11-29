@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname } from "node:path";
-import pino from "pino";
 import type { DestinationStream, LoggerOptions, TransportTargetOptions } from "pino";
+import pino from "pino";
 import { pinoHttp, type Options as PinoHttpOptions } from "pino-http";
 import { createStream } from "rotating-file-stream";
 import env from "../schemas/env.ts";
@@ -88,7 +88,8 @@ function createRotatingFileStream(): DestinationStream {
  */
 function createStdoutTransport(): TransportTargetOptions {
   if (env.NODE_ENV === "production") {
-    // Production: raw JSON to stdout for Loki
+    // Production: always output raw JSON to stdout for Loki/Grafana ingestion
+    // Never use pretty-printing in production to ensure log pipeline compatibility
     return {
       target: "pino/file",
       options: { destination: 1 }, // stdout

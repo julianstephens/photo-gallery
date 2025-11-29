@@ -30,8 +30,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUnauthed();
       }
     } catch (e) {
-      setError(e instanceof Error ? e : new Error("Failed to load user"));
-      setUnauthed();
+      // If we get a 401, it might be because the session wasn't ready yet
+      // In production, there can be timing issues where the session cookie isn't immediately available
+      // after redirect from OAuth callback. Retry once after a short delay.
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      if (errorMsg.includes("401")) {
+        console.debug("[AuthContext] Got 401, retrying in 500ms...");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        try {
+          const user = (await fetchCurrentUser()) as User | null;
+          if (user) {
+            setCurrentUser(user);
+            setError(null);
+          } else {
+            setUnauthed();
+          }
+        } catch (retryError) {
+          setError(retryError instanceof Error ? retryError : new Error("Failed to load user"));
+          setUnauthed();
+        }
+      } else {
+        setError(e instanceof Error ? e : new Error("Failed to load user"));
+        setUnauthed();
+      }
     } finally {
       setLoading(false);
       setAuthReady(true);

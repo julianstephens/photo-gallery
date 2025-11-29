@@ -82,8 +82,17 @@ const resolveGuildId = (req: Request) => {
 
 export const requiresAuth = (req: Request, res: Response, next: NextFunction) => {
   if (!req.session.userId) {
+    appLogger.debug(
+      {
+        sessionID: req.sessionID,
+        hasSession: !!req.session,
+        sessionKeys: Object.keys(req.session || {}),
+      },
+      "[requiresAuth] Missing userId in session",
+    );
     return res.status(401).json({ error: "Unauthorized" });
   }
+  appLogger.debug({ userId: req.session.userId }, "[requiresAuth] User authenticated");
   next();
 };
 
