@@ -238,7 +238,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
               {/* Progress bar */}
               <Progress.Root
                 w="full"
-                value={upload.status != "failed" ? upload.progress : 100}
+                value={upload.status !== "failed" ? upload.progress : 100}
                 max={100}
                 striped={upload.status === "uploading"}
                 animated={upload.status === "uploading"}
@@ -264,7 +264,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
               )}
 
               {/* Completion info */}
-              {upload.completedTime != null && (
+              {upload.completedTime !== null && upload.completedTime !== undefined && (
                 <Text fontSize="xs" color="gray.400">
                   {formatTime(upload.completedTime - upload.startTime)} total
                 </Text>

@@ -54,7 +54,7 @@ export const UploadPhotosButton = ({
       return true;
     }
     const segments = normalizedPath.split("/");
-    const lastSegment = segments[segments.length - 1] ?? normalizedPath;
+    const lastSegment = segments.length > 0 ? segments[segments.length - 1] : file.name;
     return lastSegment.startsWith("._");
   };
 

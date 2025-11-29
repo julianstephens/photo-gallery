@@ -138,13 +138,16 @@ class UploadProgressStore {
    * Disables persistence and clears in-memory uploads.
    */
   disablePersistence(): void {
-    this.persistenceConfig = null;
-    this.uploads.clear();
-    this.knownGuildIds.clear();
+    // Flush any pending debounced persistence before clearing state
     if (this.persistDebounceTimer) {
       clearTimeout(this.persistDebounceTimer);
       this.persistDebounceTimer = null;
+      // Only flush if there was a pending update
+      this.persistState();
     }
+    this.persistenceConfig = null;
+    this.uploads.clear();
+    this.knownGuildIds.clear();
     this.notifyListeners();
   }
 

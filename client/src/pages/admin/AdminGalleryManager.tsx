@@ -50,7 +50,7 @@ const AdminGalleryManagerPage = () => {
   }, [hasPersistedUploads, updateUploadMonitorVisibility]);
 
   const pageTitle = "Admin Gallery Manager";
-  const pageSlug = pageTitle.toLowerCase().replace(/\s+/g, "-").toLowerCase();
+  const pageSlug = pageTitle.toLowerCase().replace(/\s+/g, "-");
 
   const openCreateGalleryModal = () => {
     setShowCreateGalleryModal(true);
