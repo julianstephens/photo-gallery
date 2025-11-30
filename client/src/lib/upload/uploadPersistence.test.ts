@@ -13,6 +13,18 @@ import {
 } from "./uploadPersistence";
 import type { ActiveUpload } from "./uploadProgressStore";
 
+// Mock the logger
+vi.mock("../logger", () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+import { logger } from "../logger";
+
 describe("uploadPersistence", () => {
   const mockUserId = "user123";
   const mockGuildId = "guild456";
@@ -61,20 +73,16 @@ describe("uploadPersistence", () => {
     });
 
     it("should handle invalid JSON gracefully", () => {
-      const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
       const key = getStorageKey(mockUserId, mockGuildId);
       localStorage.setItem(key, "invalid json");
 
       const uploads = loadPersistedUploads(mockUserId, mockGuildId);
 
       expect(uploads).toEqual([]);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        "[uploadPersistence] Failed to load persisted uploads:",
-        expect.any(SyntaxError),
+      expect(logger.warn).toHaveBeenCalledWith(
+        { error: expect.any(SyntaxError) },
+        "[uploadPersistence] Failed to load persisted uploads",
       );
-
-      consoleWarnSpy.mockRestore();
     });
   });
 
