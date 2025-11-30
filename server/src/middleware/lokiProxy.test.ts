@@ -74,6 +74,11 @@ describe("createLokiProxyOptions", () => {
     expect(options.timeout).toBe(10000);
   });
 
+  it("has pathRewrite to strip /loki prefix", () => {
+    const options = createLokiProxyOptions();
+    expect(options.pathRewrite).toEqual({ "^/loki": "" });
+  });
+
   describe("error handler", () => {
     it("logs error and sends 502 response when error occurs", () => {
       const options = createLokiProxyOptions();

@@ -1,4 +1,3 @@
-import type { NextFunction, Request, Response } from "express";
 import { createProxyMiddleware, type Options } from "http-proxy-middleware";
 import env from "../schemas/env.ts";
 import { appLogger } from "./logger.ts";
@@ -21,6 +20,7 @@ export const createLokiProxyOptions = (): Options => ({
   target: LOKI_TARGET,
   changeOrigin: true,
   timeout: 10000, // 10 second timeout
+  pathRewrite: { "^/loki": "" },
   on: {
     error: (err, _req, res) => {
       appLogger.error({ err }, "Loki proxy error");
@@ -36,8 +36,4 @@ export const createLokiProxyOptions = (): Options => ({
  * Proxy middleware that forwards client-side logs to the internal Loki instance.
  * Only proxies requests to /loki/api/v1/push to ensure no other Loki endpoints are exposed.
  */
-export const lokiProxy = createProxyMiddleware(createLokiProxyOptions()) as (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => void;
+export const lokiProxy = createProxyMiddleware(createLokiProxyOptions());
