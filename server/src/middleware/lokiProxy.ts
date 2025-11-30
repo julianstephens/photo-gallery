@@ -28,18 +28,7 @@ export const createLokiProxyOptions = (): Options => ({
         res.writeHead(502, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Log forwarding failed" }));
       }
-    },
-    proxyReq: (_proxyReq, _req, res) => {
-      try {
-        // If you need to modify the outgoing request, do it here.
-      } catch (err) {
-        appLogger.error({ err }, "Error during proxyReq event in Loki proxy");
-        if (res && "writeHead" in res && typeof res.writeHead === "function" && !res.headersSent) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "Internal proxy request error" }));
-        }
-      }
-    },
+    }
   },
 });
 
