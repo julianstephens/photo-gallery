@@ -104,8 +104,8 @@ export const createApp = () => {
   // Media streaming proxy (under /api for consistent routing)
   app.use("/api/media", routers.mediaRouter);
 
-  // Loki log proxy (client-side logging - under /api for consistent routing)
-  app.use("/api/loki/api/v1/push", lokiRateLimiter, lokiProxy);
+  // Loki log proxy (client-side logging - mounted at /api/loki, proxies to /loki at Loki target)
+  app.use("/api/loki", lokiRateLimiter, lokiProxy);
 
   // 404 and centralized error handling
   app.use(notFoundHandler);
