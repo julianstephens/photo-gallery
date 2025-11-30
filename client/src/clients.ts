@@ -32,12 +32,12 @@ const createHttpClient = (baseURL: string) => {
 
   let csrfToken: string | null = null;
 
-  httpClient.interceptors.request.use(
+  instance.interceptors.request.use(
     async (config) => {
       const methodsRequiringCsrf = ["post", "put", "patch", "delete"];
       if (config.method && methodsRequiringCsrf.includes(config.method.toLowerCase())) {
         if (!csrfToken) {
-          csrfToken = await fetchCsrfToken(httpClient);
+          csrfToken = await fetchCsrfToken(instance);
         }
         if (csrfToken) {
           config.headers["X-CSRF-Token"] = csrfToken;
@@ -46,6 +46,20 @@ const createHttpClient = (baseURL: string) => {
       return config;
     },
     (error) => Promise.reject(error),
+  );
+
+  // Handle CSRF token invalidation on 403 responses
+  instance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      // If we get a 403, clear the token and retry once
+      if (error.response?.status === 403 && !error.config._csrfRetried) {
+        csrfToken = null;
+        const retryConfig = { ...error.config, _csrfRetried: true };
+        return instance.request(retryConfig);
+      }
+      return Promise.reject(error);
+    },
   );
 
   if (needsAbsolutePathNormalization(baseURL)) {
