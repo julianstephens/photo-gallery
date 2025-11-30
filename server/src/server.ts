@@ -103,6 +103,7 @@ export const createApp = () => {
   app.use("/api", apiRateLimiter, routers.galleryRouter);
   app.use("/api", apiRateLimiter, routers.guildRouter);
   app.use("/api", routers.uploadsRouter);
+  app.use("/api", apiRateLimiter, routers.requestRouter);
 
   // Media streaming proxy (under /api for consistent routing)
   app.use("/api/media", routers.mediaRouter);

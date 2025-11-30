@@ -74,6 +74,19 @@ mediaRouter.use(requiresAuth);
 mediaRouter.use(requiresGuildMembership);
 mediaRouter.get("/:galleryName/:year-:month-:day/*splat", streamMedia);
 
+/**********************
+ * REQUEST ROUTES
+ **********************/
+const requestRouter = Router();
+requestRouter.use(requiresAuth);
+requestRouter.use(requiresAdmin);
+// Create request and list my requests (guild-scoped)
+requestRouter.post("/guilds/:guildId/requests", requiresGuildMembership, handlers.createRequest);
+requestRouter.get("/guilds/:guildId/requests", requiresGuildMembership, handlers.listMyRequests);
+// Cancel request and add comment (request-scoped)
+requestRouter.post("/requests/:requestId/cancel", handlers.cancelRequest);
+requestRouter.post("/requests/:requestId/comments", handlers.addComment);
+
 export default {
   healthRouter,
   authRouter,
@@ -81,4 +94,5 @@ export default {
   guildRouter,
   uploadsRouter,
   mediaRouter,
+  requestRouter,
 };
