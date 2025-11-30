@@ -27,30 +27,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const user = (await fetchCurrentUser()) as User | null;
       if (user) {
         setCurrentUser(user);
+        setError(null);
       } else {
         setUnauthed();
       }
     } catch (e) {
-      // If we get a 401, it might be because the session wasn't ready yet
-      // In production, there can be timing issues where the session cookie isn't immediately available
-      // after redirect from OAuth callback. Retry once after a short delay.
+      // If we get a 401, the session might not be ready yet.
+      // This can happen after OAuth redirect when the session is being persisted to Redis.
+      // Implement exponential backoff retry strategy with up to 3 attempts (500ms, 1s, 2s).
       const errorMsg = e instanceof Error ? e.message : String(e);
       if (errorMsg.includes("401")) {
-        logger.debug("[AuthContext] Got 401, retrying in 500ms...");
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        try {
-          const user = (await fetchCurrentUser()) as User | null;
-          if (user) {
-            setCurrentUser(user);
-            setError(null);
-          } else {
-            setUnauthed();
+        let lastError: Error | null = null;
+
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const delayMs = 500 * 2 ** (attempt - 1); // 500ms, 1s, 2s
+          logger.debug(
+            `[AuthContext] Session not yet available (401), retry ${attempt}/3 in ${delayMs}ms`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+          try {
+            const user = (await fetchCurrentUser()) as User | null;
+            if (user) {
+              logger.debug("[AuthContext] Successfully loaded user after retry");
+              setCurrentUser(user);
+              setError(null);
+              return; // Success, exit the function
+            } else {
+              // Not authed, but we got a valid response - stop retrying
+              logger.debug("[AuthContext] Got valid response confirming user is not authenticated");
+              setUnauthed();
+              return;
+            }
+          } catch (retryError) {
+            lastError = retryError instanceof Error ? retryError : new Error("Failed to load user");
+            if (attempt < 3) {
+              logger.debug(`[AuthContext] Retry attempt ${attempt} failed, will try again`);
+            }
           }
-        } catch (retryError) {
-          setError(retryError instanceof Error ? retryError : new Error("Failed to load user"));
-          setUnauthed();
         }
+
+        // All retries exhausted
+        if (lastError) {
+          logger.warn(
+            `[AuthContext] All 3 retry attempts failed, setting error: ${lastError.message}`,
+          );
+          setError(lastError);
+        }
+        setUnauthed();
       } else {
+        logger.error({ err: e }, "[AuthContext] Non-401 error loading user");
         setError(e instanceof Error ? e : new Error("Failed to load user"));
         setUnauthed();
       }
@@ -65,6 +91,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       initRan.current = true;
       void refreshUser();
     }
+  }, [refreshUser]);
+
+  // Revalidate auth when page becomes visible (user returns to tab)
+  // This helps catch auth state changes and handles cases where the session is delayed
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        logger.debug("[AuthContext] Page became visible, revalidating auth");
+        void refreshUser();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [refreshUser]);
 
   const login = useCallback(() => {

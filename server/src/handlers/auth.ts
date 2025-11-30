@@ -30,14 +30,24 @@ export const discordCallback = async (req: Request, res: Response) => {
       "[discordCallback] Session data set, saving to store",
     );
 
+    // Explicitly wait for session to be saved to Redis before redirecting
+    // This ensures the session is available when the client makes subsequent requests
     req.session.save((err) => {
       if (err) {
-        appLogger.error({ err, userId: session.userId }, "[discordCallback] Session save error");
+        appLogger.error(
+          { err, userId: session.userId, sessionId: req.sessionID },
+          "[discordCallback] Session save error - session may not be persisted",
+        );
         return res.status(500).json({ error: "Failed to save session" });
       }
       appLogger.debug(
-        { userId: session.userId, sessionId: req.sessionID, cookie: req.session.cookie },
-        "[discordCallback] Session saved successfully, redirecting to client",
+        {
+          userId: session.userId,
+          sessionId: req.sessionID,
+          sessionExists: !!req.session,
+          hasAccessToken: !!req.session.accessToken,
+        },
+        "[discordCallback] Session saved to Redis successfully, redirecting to client",
       );
       return res.redirect(env.CLIENT_URL);
     });
@@ -45,7 +55,7 @@ export const discordCallback = async (req: Request, res: Response) => {
     const axErr = err as AxiosError<unknown>;
     const status = axErr.response?.status ?? 500;
     const data = axErr.response?.data ?? { error: "OAuth exchange failed" };
-    appLogger.error({ err, status }, "[discordCallback] OAuth exchange failed");
+    appLogger.error({ err, status, code }, "[discordCallback] OAuth exchange failed");
     return res.status(status).json(data);
   }
 };
@@ -62,17 +72,28 @@ export const logout = async (req: Request, res: Response) => {
 
 export const getCurrentUser = async (req: Request, res: Response) => {
   const accessToken = req.session.accessToken;
+  const sessionId = req.sessionID;
+
   if (!accessToken) {
+    appLogger.warn(
+      { sessionId, hasSession: !!req.session, sessionKeys: Object.keys(req.session || {}) },
+      "[getCurrentUser] No access token in session",
+    );
     return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {
     const user = await authController.getCurrentUser({ accessToken });
+    appLogger.debug({ userId: user.id, sessionId }, "[getCurrentUser] User retrieved successfully");
     return res.json(user);
   } catch (err: unknown) {
     const axErr = err as AxiosError<unknown>;
     const status = axErr.response?.status ?? 500;
     const data = axErr.response?.data ?? { error: "Failed to fetch user" };
+    appLogger.error(
+      { err, status, sessionId, sessionHasToken: !!req.session.accessToken },
+      "[getCurrentUser] Failed to fetch user from Discord",
+    );
     return res.status(status).json(data);
   }
 };

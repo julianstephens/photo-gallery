@@ -22,7 +22,7 @@ export const listGalleries = async (req: Request, res: Response) => {
     const galleries = await galleryController.listGalleries(guildId);
     res.json(galleries);
   } catch (err: unknown) {
-    console.error("[listGalleries] error:", err);
+    appLogger.error({ err }, "[listGalleries] error");
     res.status(500).json({ error: "Failed to list galleries" });
   }
 };
@@ -46,7 +46,7 @@ export const listGalleryItems = async (req: Request, res: Response) => {
     );
     res.json(items);
   } catch (err: unknown) {
-    console.error("[listGalleryItems] error:", err);
+    appLogger.error({ err }, "[listGalleryItems] error");
     res.status(500).json({ error: "Failed to list gallery items" });
   }
 };
@@ -70,7 +70,7 @@ export const getSingleGallery = async (req: Request, res: Response) => {
     if ((err as Error)?.name === "InvalidInputError") {
       return res.status(404).json({ error: (err as Error).message });
     }
-    console.error("[getSingleGallery] error:", err);
+    appLogger.error({ err }, "[getSingleGallery] error");
     res.status(500).json({ error: "Failed to retrieve gallery" });
   }
 };
@@ -90,7 +90,7 @@ export const createGallery = async (req: Request, res: Response) => {
     if ((err as Error)?.name === "Error" && /already exists/i.test((err as Error).message)) {
       return res.status(409).json({ error: (err as Error).message });
     }
-    console.error("[createGallery] error:", err);
+    appLogger.error({ err }, "[createGallery] error");
     res.status(500).json({ error: "Failed to create gallery" });
   }
 };
@@ -107,7 +107,7 @@ export const setDefaultGallery = async (req: Request, res: Response) => {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
     }
-    console.error("[setDefaultGallery] error:", err);
+    appLogger.error({ err }, "[setDefaultGallery] error");
     res.status(500).json({ error: "Failed to set default gallery" });
   }
 };
@@ -124,7 +124,7 @@ export const removeGallery = async (req: Request, res: Response) => {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
     }
-    console.error("[removeGallery] error:", err);
+    appLogger.error({ err }, "[removeGallery] error");
     res.status(500).json({ error: "Failed to remove gallery" });
   }
 };

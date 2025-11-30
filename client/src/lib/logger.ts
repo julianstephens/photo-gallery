@@ -14,7 +14,7 @@ let batchTimeoutId: number | null = null;
 
 async function sendBatchToLoki() {
   if (logBatch.length === 0) {
-    console.log("[Loki Transport] No logs to send (batch is empty)");
+    logger.trace("[Loki Transport] No logs to send (batch is empty)");
     return;
   }
 
@@ -26,7 +26,7 @@ async function sendBatchToLoki() {
     batchTimeoutId = null;
   }
 
-  console.log("[Loki Transport] Preparing batch with", batch.length, "logs");
+  logger.trace({ batchSize: batch.length }, "[Loki Transport] Preparing batch with logs");
 
   const streams = batch.reduce(
     (acc, log) => {
@@ -46,18 +46,11 @@ async function sendBatchToLoki() {
     {} as Record<string, { stream: Record<string, string>; values: [string, string][] }>,
   );
 
-  console.log("[Loki Transport] Stream groups:", Object.keys(streams).length);
+  logger.trace({ streamCount: Object.keys(streams).length }, "[Loki Transport] Stream groups");
 
   const lokiEndpoint = `${import.meta.env.VITE_API_URL}/api/loki/api/v1/push`;
 
   const payload = JSON.stringify({ streams: Object.values(streams) });
-  console.log(
-    "[Loki Transport] Sending batch to",
-    lokiEndpoint,
-    "| Payload size:",
-    payload.length,
-    "bytes",
-  );
 
   try {
     const response = await fetch(lokiEndpoint, {
@@ -67,30 +60,24 @@ async function sendBatchToLoki() {
       keepalive: true,
     });
 
-    console.log("[Loki Transport] Response status:", response.status, response.statusText);
-
     if (!response.ok) {
       const responseText = await response.text();
-      console.error(
-        "[Loki Transport] Failed to send log batch:",
-        response.status,
-        response.statusText,
-        "Response body:",
-        responseText,
+      logger.error(
+        {
+          status: response.status,
+          statusText: response.statusText,
+          responseBody: responseText,
+        },
+        "[Loki Transport] Failed to send log batch",
       );
-    } else {
-      console.log("[Loki Transport] Batch sent successfully");
     }
   } catch (error) {
-    console.error("[Loki Transport] Failed to send log batch:", error);
+    logger.error({ error }, "[Loki Transport] Failed to send log batch");
   }
 }
 
 // --- Dynamic Configuration ---
 const isProduction = import.meta.env.MODE === "production";
-
-// Log production mode to console immediately so we can debug
-console.log("[Logger Init] isProduction:", isProduction, "MODE:", import.meta.env.MODE);
 
 // Helper to determine the log level
 const getLogLevel = (): pino.LevelWithSilent => {
@@ -122,7 +109,6 @@ const browserConfig: {
 } = {};
 
 if (isProduction) {
-  console.log("[Logger Init] Setting up production Loki transmit");
   browserConfig.serialize = true;
   browserConfig.transmit = {
     level: "debug", // Send debug and above to Loki
@@ -140,24 +126,17 @@ if (isProduction) {
         level: level,
       });
 
-      console.log("[Client Logger] Batched log:", { level, logLine, batchSize: logBatch.length });
-
       if (logBatch.length >= BATCH_SIZE_LIMIT) {
-        console.log("[Client Logger] Batch size limit reached, sending to Loki");
         void sendBatchToLoki();
       }
 
       if (!batchTimeoutId) {
         batchTimeoutId = window.setTimeout(() => {
-          console.log("[Client Logger] Batch interval reached, sending to Loki");
           void sendBatchToLoki();
         }, BATCH_INTERVAL_MS);
       }
     },
   };
-  console.log("[Logger Init] Production Loki transmit configured");
-} else {
-  console.log("[Logger Init] Not production mode, Loki transmit disabled");
 }
 
 // --- Pino Logger Instance ---
@@ -177,7 +156,7 @@ logger.debug(
     mode: import.meta.env.MODE,
     logLevel: getLogLevel(),
     isProduction,
-    lokiEndpoint: `${import.meta.env.VITE_API_URL}/api/loki/api/v1/push`,
+    // lokiEndpoint: `${import.meta.env.VITE_API_URL}/api/loki/api/v1/push`,
   },
   "Logger initialized",
 );

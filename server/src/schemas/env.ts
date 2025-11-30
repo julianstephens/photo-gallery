@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { z } from "zod";
+import { appLogger } from "../middleware/logger.ts";
 dotenv.config();
 
 export const envSchema = z.object({
@@ -128,7 +129,7 @@ export type Env = z.infer<typeof envSchema>;
 const parsedEnv = envSchema.safeParse(process.env);
 
 if (!parsedEnv.success) {
-  console.error("Invalid environment variables:", parsedEnv.error.message);
+  appLogger.error({ err: parsedEnv.error }, "Invalid environment variables");
   process.exit(1);
 }
 
@@ -137,7 +138,7 @@ export function parsedCorsOrigins(): (string | RegExp)[] | "*" {
   const origins = env.CORS_ORIGINS.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  console.log("Parsed CORS origins:", origins);
+  appLogger.debug({ origins }, "Parsed CORS origins");
   return origins;
 }
 

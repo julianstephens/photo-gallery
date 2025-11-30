@@ -1,5 +1,6 @@
 import { toaster } from "@/components/ui/toaster";
 import { useUploadContext } from "@/hooks";
+import { logger } from "@/lib/logger";
 import { uploadFileInChunks, uploadProgressStore } from "@/lib/upload";
 import { Button, FileUpload, Icon, Menu, type FileUploadFileAcceptDetails } from "@chakra-ui/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -187,7 +188,7 @@ export const UploadPhotosButton = ({
         });
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      logger.error({ err: error }, "[UploadPhotosButton] Error uploading files");
     } finally {
       setIsLoading(false);
       setUploadProgress(null);
