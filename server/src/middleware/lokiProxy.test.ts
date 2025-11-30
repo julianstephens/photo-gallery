@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockAppLogger = {
   error: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
 };
 
 vi.mock("../schemas/env.ts", () => ({
@@ -78,9 +80,10 @@ describe("createLokiProxyOptions", () => {
     const options = createLokiProxyOptions();
     expect(typeof options.pathRewrite).toBe("function");
     if (typeof options.pathRewrite === "function") {
-      expect(options.pathRewrite("/api/v1/push")).toBe("/loki/api/v1/push");
-      expect(options.pathRewrite("/loki/api/v1/push")).toBe("/loki/api/v1/push");
-      expect(options.pathRewrite("/api/loki/api/v1/push")).toBe("/loki/api/v1/push");
+      const mockReq = createReq();
+      expect(options.pathRewrite("/api/v1/push", mockReq)).toBe("/loki/api/v1/push");
+      expect(options.pathRewrite("/loki/api/v1/push", mockReq)).toBe("/loki/api/v1/push");
+      expect(options.pathRewrite("/api/loki/api/v1/push", mockReq)).toBe("/loki/api/v1/push");
     }
   });
 
@@ -92,7 +95,13 @@ describe("createLokiProxyOptions", () => {
 
       options.on?.error?.(mockError, createReq(), res, "http://mock-loki:3100");
 
-      expect(mockAppLogger.error).toHaveBeenCalledWith({ err: mockError }, "Loki proxy error");
+      expect(mockAppLogger.error).toHaveBeenCalledWith(
+        {
+          err: { message: "Connection refused", code: undefined },
+          target: "http://mock-loki:3100",
+        },
+        "Loki proxy error",
+      );
       expect(res.writeHead).toHaveBeenCalledWith(502, { "Content-Type": "application/json" });
       expect(res.end).toHaveBeenCalledWith(JSON.stringify({ error: "Log forwarding failed" }));
     });
@@ -105,7 +114,13 @@ describe("createLokiProxyOptions", () => {
 
       options.on?.error?.(mockError, createReq(), res, "http://mock-loki:3100");
 
-      expect(mockAppLogger.error).toHaveBeenCalledWith({ err: mockError }, "Loki proxy error");
+      expect(mockAppLogger.error).toHaveBeenCalledWith(
+        {
+          err: { message: "Connection refused", code: undefined },
+          target: "http://mock-loki:3100",
+        },
+        "Loki proxy error",
+      );
       expect(res.writeHead).not.toHaveBeenCalled();
       expect(res.end).not.toHaveBeenCalled();
     });
@@ -124,7 +139,13 @@ describe("createLokiProxyOptions", () => {
         );
       }).not.toThrow();
 
-      expect(mockAppLogger.error).toHaveBeenCalledWith({ err: mockError }, "Loki proxy error");
+      expect(mockAppLogger.error).toHaveBeenCalledWith(
+        {
+          err: { message: "Connection refused", code: undefined },
+          target: "http://mock-loki:3100",
+        },
+        "Loki proxy error",
+      );
     });
   });
 });

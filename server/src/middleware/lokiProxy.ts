@@ -39,12 +39,27 @@ export const createLokiProxyOptions = (): Options => ({
   },
   on: {
     proxyReq: (proxyReq, req, _res) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const request = req as Request & { body?: any };
+
       appLogger.debug(
-        { target: LOKI_TARGET, path: (req as Request).path || (req as Request).url },
+        {
+          target: LOKI_TARGET,
+          path: request.path || request.url,
+          contentType: request.get("content-type"),
+          contentLength: request.get("content-length"),
+          hasBody: !!request.body,
+        },
         "Loki proxy request starting",
       );
 
-      // Handle socket errors
+      if (request.body) {
+        const bodyString = JSON.stringify(request.body);
+        proxyReq.setHeader("content-type", "application/json");
+        proxyReq.setHeader("content-length", Buffer.byteLength(bodyString));
+        proxyReq.write(bodyString);
+      }
+
       proxyReq.on("error", (err) => {
         appLogger.error({ err, target: LOKI_TARGET }, "Loki proxy request error");
       });
