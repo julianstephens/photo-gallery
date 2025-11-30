@@ -1,6 +1,5 @@
 import express from "express";
 import session from "express-session";
-import { requiresAuth } from "./middleware/auth.ts";
 import { errorHandler, notFoundHandler } from "./middleware/errors.ts";
 import { lokiProxy } from "./middleware/lokiProxy.ts";
 import { httpLogger } from "./middleware/logger.ts";
