@@ -217,6 +217,70 @@ describe("AuthContext", () => {
         "[AuthContext] Silent refresh failed, keeping current state",
       );
     });
+
+    it("should keep current state when fetchCurrentUser returns null during silent refresh", async () => {
+      const mockUser = { id: "user1", username: "testuser" };
+      mockGetCurrentUser.mockResolvedValue(mockUser);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      expect(result.current.isAuthed).toBe(true);
+      expect(result.current.currentUser).toEqual(mockUser);
+
+      // Mock null response (transient error case)
+      mockGetCurrentUser.mockResolvedValue(null);
+
+      await act(async () => {
+        Object.defineProperty(document, "visibilityState", {
+          value: "visible",
+          writable: true,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+        await vi.runAllTimersAsync();
+      });
+
+      // User should still be authenticated - null is treated as transient error
+      expect(result.current.isAuthed).toBe(true);
+      expect(result.current.currentUser).toEqual(mockUser);
+      expect(result.current.loading).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        "[AuthContext] Silent refresh: fetchCurrentUser returned null, keeping current state",
+      );
+    });
+
+    it("should clear error state on 401 during silent refresh", async () => {
+      const mockUser = { id: "user1", username: "testuser" };
+      mockGetCurrentUser.mockResolvedValue(mockUser);
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      expect(result.current.isAuthed).toBe(true);
+
+      // Mock 401 error on refresh
+      mockGetCurrentUser.mockRejectedValue(new Error("401 Unauthorized"));
+
+      await act(async () => {
+        Object.defineProperty(document, "visibilityState", {
+          value: "visible",
+          writable: true,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+        await vi.runAllTimersAsync();
+      });
+
+      // User should be cleared and error should be null (not an error condition)
+      expect(result.current.isAuthed).toBe(false);
+      expect(result.current.currentUser).toBeNull();
+      expect(result.current.error).toBeNull();
+    });
   });
 
   describe("refreshUser (explicit)", () => {

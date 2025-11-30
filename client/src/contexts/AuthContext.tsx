@@ -16,16 +16,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isRevalidating, setIsRevalidating] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const initRan = useRef(false);
+  // Track the latest auth request to prevent race conditions
+  const latestRequestId = useRef(0);
 
   const setUnauthed = () => {
     setCurrentUser(null);
   };
 
   const refreshUser = useCallback(async () => {
+    const requestId = ++latestRequestId.current;
     setLoading(true);
     setError(null);
     try {
       const user = (await fetchCurrentUser()) as User | null;
+      // Only update state if this is still the latest request
+      if (requestId !== latestRequestId.current) return;
       if (user) {
         setCurrentUser(user);
         setError(null);
@@ -33,6 +38,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUnauthed();
       }
     } catch (e) {
+      // Only update state if this is still the latest request
+      if (requestId !== latestRequestId.current) return;
       // If we get a 401, the session might not be ready yet.
       // This can happen after OAuth redirect when the session is being persisted to Redis.
       // Implement exponential backoff retry strategy with up to 3 attempts (500ms, 1s, 2s).
@@ -47,8 +54,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
 
+          // Check if a newer request has started
+          if (requestId !== latestRequestId.current) return;
+
           try {
             const user = (await fetchCurrentUser()) as User | null;
+            // Check again after async operation
+            if (requestId !== latestRequestId.current) return;
             if (user) {
               logger.debug("[AuthContext] Successfully loaded user after retry");
               setCurrentUser(user);
@@ -69,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
 
         // All retries exhausted
+        if (requestId !== latestRequestId.current) return;
         if (lastError) {
           logger.warn(
             `[AuthContext] All 3 retry attempts failed, setting error: ${lastError.message}`,
@@ -82,36 +95,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUnauthed();
       }
     } finally {
-      setLoading(false);
-      setAuthReady(true);
+      // Only update loading/authReady if this is still the latest request
+      if (requestId === latestRequestId.current) {
+        setLoading(false);
+        setAuthReady(true);
+      }
     }
   }, []);
 
   // Silent refresh: revalidates auth without showing loading spinner
   // Used for background revalidation (e.g., page visibility changes)
   const silentRefreshUser = useCallback(async () => {
+    const requestId = ++latestRequestId.current;
     setIsRevalidating(true);
     try {
       const user = (await fetchCurrentUser()) as User | null;
+      // Only update state if this is still the latest request
+      if (requestId !== latestRequestId.current) return;
       if (user) {
         setCurrentUser(user);
         setError(null);
       } else {
-        setUnauthed();
+        // If fetchCurrentUser returns null, treat as transient error and keep current state
+        logger.warn(
+          "[AuthContext] Silent refresh: fetchCurrentUser returned null, keeping current state",
+        );
       }
     } catch (e) {
+      // Only update state if this is still the latest request
+      if (requestId !== latestRequestId.current) return;
       // For silent refresh, we don't retry on 401 - just update state
       // If user is no longer authenticated, update state accordingly
       const errorMsg = e instanceof Error ? e.message : String(e);
       if (errorMsg.includes("401")) {
         logger.debug("[AuthContext] Silent refresh: session expired or invalid");
         setUnauthed();
+        setError(null);
       } else {
         // For non-401 errors during silent refresh, log but don't disrupt user
         logger.warn({ err: e }, "[AuthContext] Silent refresh failed, keeping current state");
       }
     } finally {
-      setIsRevalidating(false);
+      // Only update isRevalidating if this is still the latest request
+      if (requestId === latestRequestId.current) {
+        setIsRevalidating(false);
+      }
     }
   }, []);
 
