@@ -48,12 +48,29 @@ const createHttpClient = (baseURL: string) => {
     (error) => Promise.reject(error),
   );
 
-  // Handle CSRF token invalidation on 403 responses
+  // Helper to detect CSRF-specific 403 errors (csrf-sync sets error message or header)
+  function isCsrfError(error: AxiosError): boolean {
+    // Check for common csrf-sync error message in response data
+    const data = error.response?.data as { error?: string } | undefined;
+    if (typeof data?.error === "string" && data.error.toLowerCase().includes("csrf")) {
+      return true;
+    }
+    // Check for custom header (if your backend sets one, e.g., x-csrf-error)
+    const csrfHeader = error.response?.headers?.["x-csrf-error"];
+    if (csrfHeader) return true;
+    return false;
+  }
+
+  // Handle CSRF token invalidation on CSRF-specific 403 responses
   instance.interceptors.response.use(
     (response) => response,
     async (error) => {
-      // If we get a 403, clear the token and retry once
-      if (error.response?.status === 403 && !error.config._csrfRetried) {
+      // Only retry if 403 is due to CSRF token failure
+      if (
+        error.response?.status === 403 &&
+        !error.config._csrfRetried &&
+        isCsrfError(error)
+      ) {
         csrfToken = null;
         const retryConfig = { ...error.config, _csrfRetried: true };
         return instance.request(retryConfig);
