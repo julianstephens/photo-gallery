@@ -14,27 +14,29 @@ const DEFAULT_LOKI_TARGET = "http://loki-csss4s88ks00s80k8w4o440c:3100";
 const LOKI_TARGET = env.LOKI_PROXY_TARGET ?? DEFAULT_LOKI_TARGET;
 
 /**
- * Proxy configuration options for Loki log forwarding
+ * Creates proxy configuration options for Loki log forwarding.
+ * Exported for testing purposes.
  */
-const proxyOptions: Options = {
+export const createLokiProxyOptions = (): Options => ({
   target: LOKI_TARGET,
   changeOrigin: true,
   timeout: 10000, // 10 second timeout
   on: {
     error: (err, _req, res) => {
       appLogger.error({ err }, "Loki proxy error");
-      if (res && "writeHead" in res && typeof res.writeHead === "function") {
-        (res as Response).status(502).json({ error: "Log forwarding failed" });
+      if (res && "writeHead" in res && typeof res.writeHead === "function" && !res.headersSent) {
+        res.writeHead(502, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Log forwarding failed" }));
       }
     },
   },
-};
+});
 
 /**
  * Proxy middleware that forwards client-side logs to the internal Loki instance.
  * Only proxies requests to /loki/api/v1/push to ensure no other Loki endpoints are exposed.
  */
-export const lokiProxy = createProxyMiddleware(proxyOptions) as (
+export const lokiProxy = createProxyMiddleware(createLokiProxyOptions()) as (
   req: Request,
   res: Response,
   next: NextFunction,
