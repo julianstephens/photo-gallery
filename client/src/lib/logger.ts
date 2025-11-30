@@ -89,6 +89,9 @@ async function sendBatchToLoki() {
 // --- Dynamic Configuration ---
 const isProduction = import.meta.env.MODE === "production";
 
+// Log production mode to console immediately so we can debug
+console.log("[Logger Init] isProduction:", isProduction, "MODE:", import.meta.env.MODE);
+
 // Helper to determine the log level
 const getLogLevel = (): pino.LevelWithSilent => {
   const validLevels: pino.LevelWithSilent[] = [
@@ -119,6 +122,7 @@ const browserConfig: {
 } = {};
 
 if (isProduction) {
+  console.log("[Logger Init] Setting up production Loki transmit");
   browserConfig.serialize = true;
   browserConfig.transmit = {
     level: "debug", // Send debug and above to Loki
@@ -151,6 +155,9 @@ if (isProduction) {
       }
     },
   };
+  console.log("[Logger Init] Production Loki transmit configured");
+} else {
+  console.log("[Logger Init] Not production mode, Loki transmit disabled");
 }
 
 // --- Pino Logger Instance ---
@@ -165,12 +172,12 @@ export const logger = pino({
 });
 
 // --- Log the final configuration for debugging ---
-// logger.debug(
-//   {
-//     mode: import.meta.env.MODE,
-//     logLevel: getLogLevel(),
-//     isProduction,
-//     lokiEndpoint: "/api/loki/api/v1/push",
-//   },
-//   "Logger initialized",
-// );
+logger.debug(
+  {
+    mode: import.meta.env.MODE,
+    logLevel: getLogLevel(),
+    isProduction,
+    lokiEndpoint: "/api/loki/api/v1/push",
+  },
+  "Logger initialized",
+);
