@@ -50,6 +50,200 @@ export const canUserModifyRequest = (
 };
 
 /**
+ * Authorization context for request operations.
+ * Contains user identity and permission flags needed for authorization checks.
+ */
+export interface RequestAuthContext {
+  /** The ID of the user making the request */
+  userId: string;
+  /** Whether the user has admin privileges */
+  isAdmin: boolean;
+  /** Whether the user has super admin privileges */
+  isSuperAdmin: boolean;
+  /** Array of guild IDs the user is a member of */
+  guildIds: string[];
+}
+
+/**
+ * Error thrown when a user is not authorized to perform an action.
+ * Provides consistent error structure for API consumption.
+ */
+export class AuthorizationError extends Error {
+  public readonly code = "AUTHORIZATION_ERROR";
+  public readonly status = 403;
+
+  constructor(
+    message: string,
+    public readonly action: string,
+    public readonly resourceId?: string,
+  ) {
+    super(message);
+    this.name = "AuthorizationError";
+  }
+}
+
+/**
+ * Check if a user can view a specific request.
+ * Rules:
+ * - Super admins can view any request in guilds they have access to
+ * - Admins can only view their own requests within their guild
+ */
+export const canViewRequest = (ctx: RequestAuthContext, request: Request): boolean => {
+  // User must be a member of the request's guild
+  if (!ctx.guildIds.includes(request.guildId)) {
+    return false;
+  }
+
+  // Super admins can view any request in their guilds
+  if (ctx.isSuperAdmin) {
+    return true;
+  }
+
+  // Admins can only view their own requests
+  if (ctx.isAdmin) {
+    return request.userId === ctx.userId;
+  }
+
+  return false;
+};
+
+/**
+ * Check if a user can list requests.
+ * Rules:
+ * - Super admins can list all requests (filtered to their guilds)
+ * - Admins can list their own requests only
+ */
+export const canListRequests = (ctx: RequestAuthContext): boolean => {
+  // Must be at least an admin to list requests
+  return ctx.isAdmin || ctx.isSuperAdmin;
+};
+
+/**
+ * Check if a user can create a request.
+ * Rules:
+ * - Only admins and super admins can create requests
+ * - Must be a member of the guild where the request is being created
+ */
+export const canCreateRequest = (ctx: RequestAuthContext, guildId: string): boolean => {
+  // Must be at least an admin
+  if (!ctx.isAdmin && !ctx.isSuperAdmin) {
+    return false;
+  }
+
+  // Must be a member of the target guild
+  return ctx.guildIds.includes(guildId);
+};
+
+/**
+ * Check if a user can cancel a request.
+ * Rules:
+ * - Super admins can cancel any open request in their guilds
+ * - Admins can only cancel their own open requests
+ */
+export const canCancelRequest = (ctx: RequestAuthContext, request: Request): boolean => {
+  // User must be a member of the request's guild
+  if (!ctx.guildIds.includes(request.guildId)) {
+    return false;
+  }
+
+  // Request must be open to be cancelled
+  if (request.status !== "open") {
+    return false;
+  }
+
+  // Super admins can cancel any open request
+  if (ctx.isSuperAdmin) {
+    return true;
+  }
+
+  // Admins can only cancel their own open requests
+  if (ctx.isAdmin) {
+    return request.userId === ctx.userId;
+  }
+
+  return false;
+};
+
+/**
+ * Check if a user can change a request's status.
+ * Rules:
+ * - Only super admins can approve, deny requests
+ * - Only super admins can re-open closed requests
+ * - Admins can only cancel their own open requests
+ * - Super admins can cancel any open request
+ */
+export const canChangeRequestStatus = (
+  ctx: RequestAuthContext,
+  request: Request,
+  newStatus: RequestStatus,
+): boolean => {
+  // User must be a member of the request's guild
+  if (!ctx.guildIds.includes(request.guildId)) {
+    return false;
+  }
+
+  // Check if the status transition is valid
+  if (!isValidStatusTransition(request.status, newStatus)) {
+    return false;
+  }
+
+  // Super admins can make any valid status change
+  if (ctx.isSuperAdmin) {
+    return true;
+  }
+
+  // Admins can only cancel their own open requests
+  if (ctx.isAdmin) {
+    // Admins (non-super-admins) can only cancel their own open requests
+    if (newStatus === "cancelled" && request.status === "open" && request.userId === ctx.userId) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Check if a user can comment on a request.
+ * Rules:
+ * - Super admins can comment on any request regardless of status
+ * - Admins can only comment on their own open requests
+ */
+export const canCommentOnRequest = (ctx: RequestAuthContext, request: Request): boolean => {
+  // User must be a member of the request's guild
+  if (!ctx.guildIds.includes(request.guildId)) {
+    return false;
+  }
+
+  // Super admins can comment on any request regardless of status
+  if (ctx.isSuperAdmin) {
+    return true;
+  }
+
+  // Admins can only comment on their own open requests
+  if (ctx.isAdmin) {
+    return request.userId === ctx.userId && request.status === "open";
+  }
+
+  return false;
+};
+
+/**
+ * Check if a user can delete a request.
+ * Rules:
+ * - Only super admins can delete requests
+ */
+export const canDeleteRequest = (ctx: RequestAuthContext, request: Request): boolean => {
+  // User must be a member of the request's guild
+  if (!ctx.guildIds.includes(request.guildId)) {
+    return false;
+  }
+
+  // Only super admins can delete requests
+  return ctx.isSuperAdmin;
+};
+
+/**
  * Service for managing requests in Redis.
  */
 export class RequestService {
