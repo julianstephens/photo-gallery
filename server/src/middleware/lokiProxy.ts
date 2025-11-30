@@ -20,7 +20,7 @@ export const createLokiProxyOptions = (): Options => ({
   target: LOKI_TARGET,
   changeOrigin: true,
   timeout: 10000, // 10 second timeout
-  pathRewrite: { "^/loki": "" },
+  pathRewrite: { "^/loki": "/loki" },
   on: {
     error: (err, _req, res) => {
       appLogger.error({ err }, "Loki proxy error");
