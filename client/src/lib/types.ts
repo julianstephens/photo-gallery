@@ -4,6 +4,7 @@ export interface AuthStateShape {
   isAuthed: boolean;
   authReady: boolean;
   loading: boolean;
+  isRevalidating: boolean;
   error: Error | null;
 }
 
