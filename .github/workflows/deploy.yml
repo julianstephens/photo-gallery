@@ -72,7 +72,6 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VITE_API_URL=${{ secrets.VITE_API_URL }}
-            VITE_LOKI_ENDPOINT=${{ secrets.VITE_LOKI_ENDPOINT }}
             VITE_LOG_LEVEL=${{ secrets.VITE_LOG_LEVEL }}
 
       - name: Deploy Server to Coolify

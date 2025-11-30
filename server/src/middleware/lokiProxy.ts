@@ -5,7 +5,7 @@ import { appLogger } from "./logger.ts";
 /**
  * Default internal Loki endpoint for log ingestion
  */
-const DEFAULT_LOKI_TARGET = "http://loki-csss4s88ks00s80k8w4o440c:3100";
+const DEFAULT_LOKI_TARGET = env.LOKI_PROXY_TARGET ?? "http://loki:3100";
 
 /**
  * Resolved Loki target URL
@@ -20,7 +20,7 @@ export const createLokiProxyOptions = (): Options => ({
   target: LOKI_TARGET,
   changeOrigin: true,
   timeout: 10000, // 10 second timeout
-  pathRewrite: { "^/loki": "/loki" },
+  pathRewrite: { "^/api": "" },
   on: {
     error: (err, _req, res) => {
       appLogger.error({ err }, "Loki proxy error");

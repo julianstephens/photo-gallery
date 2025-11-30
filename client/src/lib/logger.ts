@@ -48,11 +48,7 @@ async function sendBatchToLoki() {
 
   console.log("[Loki Transport] Stream groups:", Object.keys(streams).length);
 
-  const lokiEndpoint = import.meta.env.VITE_LOKI_ENDPOINT;
-  if (!lokiEndpoint) {
-    console.warn("[Loki Transport] VITE_LOKI_ENDPOINT not configured, skipping log batch");
-    return;
-  }
+  const lokiEndpoint = "/api/loki/api/v1/push";
 
   const payload = JSON.stringify({ streams: Object.values(streams) });
   console.log(
@@ -169,12 +165,12 @@ export const logger = pino({
 });
 
 // --- Log the final configuration for debugging ---
-logger.debug(
-  {
-    mode: import.meta.env.MODE,
-    logLevel: getLogLevel(),
-    isProduction,
-    lokiEndpointConfigured: !!import.meta.env.VITE_LOKI_ENDPOINT,
-  },
-  "Logger initialized",
-);
+// logger.debug(
+//   {
+//     mode: import.meta.env.MODE,
+//     logLevel: getLogLevel(),
+//     isProduction,
+//     lokiEndpoint: "/api/loki/api/v1/push",
+//   },
+//   "Logger initialized",
+// );

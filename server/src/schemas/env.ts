@@ -79,15 +79,12 @@ export const envSchema = z.object({
   // file: Rotating file logs (default for development)
   // both: stdout + file (useful for debugging)
   LOG_OUTPUT: z.enum(["stdout", "file", "both"]).optional(),
-  // TODO: Add LOKI_URL and Loki logging support if/when direct Loki push is implemented.
-  // For client-side logging: set VITE_LOKI_ENDPOINT to the Loki push endpoint (e.g., "/loki/api/v1/push")
-  // Example: VITE_LOKI_ENDPOINT=/loki/api/v1/push
   // Loki proxy endpoint for client-side log forwarding
+  // Client logs are sent to /api/loki/api/v1/push which is proxied here
   // SECURITY: This URL is validated to only allow internal Docker network hosts (loki-*) or localhost
   // to prevent redirection of logs to malicious endpoints. Modify the validation pattern if your
   // Loki instance uses a different naming convention.
   LOKI_PROXY_TARGET: z
-    .string()
     .url()
     .refine((url) => {
       try {

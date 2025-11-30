@@ -1,8 +1,8 @@
 import express from "express";
 import session from "express-session";
 import { errorHandler, notFoundHandler } from "./middleware/errors.ts";
-import { lokiProxy } from "./middleware/lokiProxy.ts";
 import { httpLogger } from "./middleware/logger.ts";
+import { lokiProxy } from "./middleware/lokiProxy.ts";
 import { setupMetrics } from "./middleware/metrics.ts";
 import { apiRateLimiter, authRateLimiter, lokiRateLimiter } from "./middleware/rateLimit.ts";
 import { applySecurity } from "./middleware/security.ts";
@@ -104,8 +104,8 @@ export const createApp = () => {
   // Media streaming proxy (under /api for consistent routing)
   app.use("/api/media", routers.mediaRouter);
 
-  // Loki log proxy (only expose /loki/api/v1/push for security)
-  app.use("/loki/api/v1/push", lokiRateLimiter, lokiProxy);
+  // Loki log proxy (client-side logging - under /api for consistent routing)
+  app.use("/api/loki/api/v1/push", lokiRateLimiter, lokiProxy);
 
   // 404 and centralized error handling
   app.use(notFoundHandler);
