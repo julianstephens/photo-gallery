@@ -66,11 +66,7 @@ const createHttpClient = (baseURL: string) => {
     (response) => response,
     async (error) => {
       // Only retry if 403 is due to CSRF token failure
-      if (
-        error.response?.status === 403 &&
-        !error.config._csrfRetried &&
-        isCsrfError(error)
-      ) {
+      if (error.response?.status === 403 && !error.config._csrfRetried && isCsrfError(error)) {
         csrfToken = null;
         csrfToken = await fetchCsrfToken(instance);
         const retryConfig = { ...error.config, _csrfRetried: true };
