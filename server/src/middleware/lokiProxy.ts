@@ -24,6 +24,9 @@ export const createLokiProxyOptions = (): Options => ({
     if (path === "/api/v1/push") {
       return "/loki/api/v1/push";
     }
+    if (path.startsWith("/api/loki")) {
+      return path.replace("/api/loki", "/loki");
+    }
     if (!path.startsWith("/loki")) {
       return `/loki${path}`;
     }

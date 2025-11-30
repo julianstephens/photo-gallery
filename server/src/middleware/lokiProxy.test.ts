@@ -80,6 +80,7 @@ describe("createLokiProxyOptions", () => {
     if (typeof options.pathRewrite === "function") {
       expect(options.pathRewrite("/api/v1/push")).toBe("/loki/api/v1/push");
       expect(options.pathRewrite("/loki/api/v1/push")).toBe("/loki/api/v1/push");
+      expect(options.pathRewrite("/api/loki/api/v1/push")).toBe("/loki/api/v1/push");
     }
   });
 
