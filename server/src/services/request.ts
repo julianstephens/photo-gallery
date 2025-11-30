@@ -378,6 +378,27 @@ export class RequestService {
   };
 
   /**
+   * Get all requests by a user in a specific guild.
+   * Uses Redis SINTER to efficiently find the intersection of user and guild request sets.
+   */
+  getRequestsByUserAndGuild = async (userId: string, guildId: string): Promise<Request[]> => {
+    const userKey = this.#buildUserKey(userId);
+    const guildKey = this.#buildGuildKey(guildId);
+
+    // Use SINTER to get intersection of user and guild request sets
+    const requestIds = await redis.client.sInter([userKey, guildKey]);
+
+    const requests = await this.#getRequestsBatch(requestIds);
+
+    appLogger.debug(
+      { userId, guildId, requestCount: requests.length },
+      "[request] fetched user requests by guild",
+    );
+
+    return requests;
+  };
+
+  /**
    * Get all requests by status.
    */
   getRequestsByStatus = async (status: RequestStatus): Promise<Request[]> => {

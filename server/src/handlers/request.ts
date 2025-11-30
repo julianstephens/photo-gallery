@@ -16,13 +16,17 @@ const requestService = new RequestService();
 
 /**
  * Build authorization context from Express session data.
+ * Returns a context with safe defaults if session properties are missing.
  */
-const buildAuthContext = (req: Request): RequestAuthContext => ({
-  userId: req.session.userId || "",
-  isAdmin: req.session.isAdmin || false,
-  isSuperAdmin: req.session.isSuperAdmin || false,
-  guildIds: req.session.guildIds || [],
-});
+const buildAuthContext = (req: Request): RequestAuthContext => {
+  const session = req.session;
+  return {
+    userId: typeof session?.userId === "string" ? session.userId : "",
+    isAdmin: session?.isAdmin === true,
+    isSuperAdmin: session?.isSuperAdmin === true,
+    guildIds: Array.isArray(session?.guildIds) ? session.guildIds : [],
+  };
+};
 
 /**
  * POST /api/guilds/:guildId/requests
@@ -88,8 +92,8 @@ export const listMyRequests = async (req: Request, res: Response) => {
     const authCtx = buildAuthContext(req);
 
     // Check if requestor=me query param is present
-    const requestor = String(req.query.requestor || "");
-    if (requestor !== "me") {
+    const requestor = req.query.requestor;
+    if (typeof requestor !== "string" || requestor !== "me") {
       return res.status(400).json({ error: "Only requestor=me is supported for admin users" });
     }
 
@@ -98,12 +102,15 @@ export const listMyRequests = async (req: Request, res: Response) => {
       throw new AuthorizationError("You are not a member of this guild", "list", guildId);
     }
 
-    // Fetch all requests for the user
-    const allUserRequests = await requestService.getRequestsByUser(authCtx.userId);
+    // Fetch requests for the user in this guild using optimized SINTER query
+    const userGuildRequests = await requestService.getRequestsByUserAndGuild(
+      authCtx.userId,
+      guildId,
+    );
 
-    // Filter to only requests in this guild that the user owns
-    const filteredRequests = allUserRequests.filter(
-      (request) => request.guildId === guildId && canViewRequest(authCtx, request),
+    // Filter to only requests that the user can view (handles edge cases)
+    const filteredRequests = userGuildRequests.filter((request) =>
+      canViewRequest(authCtx, request),
     );
 
     appLogger.debug(

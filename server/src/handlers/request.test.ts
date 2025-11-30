@@ -7,6 +7,7 @@ const requestServiceMocks = vi.hoisted(() => ({
   createRequest: vi.fn(),
   getRequest: vi.fn(),
   getRequestsByUser: vi.fn(),
+  getRequestsByUserAndGuild: vi.fn(),
   updateRequestStatus: vi.fn(),
   addComment: vi.fn(),
 }));
@@ -350,16 +351,19 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByUser.mockResolvedValue(mockRequests);
+      requestServiceMocks.getRequestsByUserAndGuild.mockResolvedValue(mockRequests);
       authorizationMocks.canViewRequest.mockReturnValue(true);
 
       await listMyRequests(req, res);
 
-      expect(requestServiceMocks.getRequestsByUser).toHaveBeenCalledWith("user123");
+      expect(requestServiceMocks.getRequestsByUserAndGuild).toHaveBeenCalledWith(
+        "user123",
+        "guild123",
+      );
       expect(res.json).toHaveBeenCalledWith(mockRequests);
     });
 
-    it("filters out requests from other guilds", async () => {
+    it("filters requests based on canViewRequest authorization", async () => {
       const mockRequests = [
         {
           id: "req1",
@@ -373,7 +377,7 @@ describe("request handlers", () => {
         },
         {
           id: "req2",
-          guildId: "other-guild",
+          guildId: "guild123",
           userId: "user123",
           title: "Request 2",
           description: "Desc 2",
@@ -390,15 +394,14 @@ describe("request handlers", () => {
           userId: "user123",
           isAdmin: true,
           isSuperAdmin: false,
-          guildIds: ["guild123", "other-guild"],
+          guildIds: ["guild123"],
         } as Request["session"],
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByUser.mockResolvedValue(mockRequests);
-      authorizationMocks.canViewRequest.mockImplementation(
-        (ctx, request) => request.guildId === "guild123",
-      );
+      requestServiceMocks.getRequestsByUserAndGuild.mockResolvedValue(mockRequests);
+      // Only allow viewing the first request
+      authorizationMocks.canViewRequest.mockImplementation((ctx, request) => request.id === "req1");
 
       await listMyRequests(req, res);
 
@@ -418,7 +421,7 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByUser.mockResolvedValue([]);
+      requestServiceMocks.getRequestsByUserAndGuild.mockResolvedValue([]);
 
       await listMyRequests(req, res);
 
@@ -438,7 +441,9 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByUser.mockRejectedValue(new Error("Redis connection failed"));
+      requestServiceMocks.getRequestsByUserAndGuild.mockRejectedValue(
+        new Error("Redis connection failed"),
+      );
 
       await listMyRequests(req, res);
 
