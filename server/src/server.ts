@@ -96,7 +96,7 @@ export const createApp = () => {
   // CSRF protection (csrf-sync):
   // - Protects against Cross-Site Request Forgery attacks
   // - Only applies to unsafe methods (POST, PUT, PATCH, DELETE) by default
-  // - Expects valid CSRF token in 'x-csrf-token' header or '_csrf' body/query param
+  // - Expects valid CSRF token in 'x-csrf-token' header or '_csrf' body param
   // - Token is generated via GET /api/csrf-token endpoint
   // - Clients must fetch token and include it in headers for state-changing requests
   const { csrfSynchronisedProtection, generateToken } = csrfSync({

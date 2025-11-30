@@ -40,7 +40,7 @@ const createHttpClient = (baseURL: string) => {
           csrfToken = await fetchCsrfToken(instance);
         }
         if (csrfToken) {
-          config.headers["X-CSRF-Token"] = csrfToken;
+          config.headers["x-csrf-token"] = csrfToken;
         }
       }
       return config;
@@ -71,7 +71,7 @@ const createHttpClient = (baseURL: string) => {
         csrfToken = await fetchCsrfToken(instance);
         const retryConfig = { ...error.config, _csrfRetried: true };
         if (csrfToken) {
-          retryConfig.headers = { ...retryConfig.headers, "X-CSRF-Token": csrfToken };
+          retryConfig.headers = { ...retryConfig.headers, "x-csrf-token": csrfToken };
         }
         return instance.request(retryConfig);
       }

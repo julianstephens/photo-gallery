@@ -220,4 +220,51 @@ describe("CSRF Protection", () => {
       expect(response.status).toBe(403);
     });
   });
+
+  describe("session expiry/regeneration", () => {
+    it("should reject old tokens after session is regenerated", async () => {
+      // Add a route that regenerates the session
+      app.post("/api/regenerate-session", (req, res) => {
+        const oldSessionId = req.session.id;
+        req.session.regenerate((err) => {
+          if (err) {
+            return res.status(500).json({ error: "Session regeneration failed" });
+          }
+          res.json({ oldSessionId, newSessionId: req.session.id });
+        });
+      });
+
+      const agent = request.agent(app);
+
+      // Get initial CSRF token
+      const tokenResponse = await agent.get("/api/csrf-token");
+      expect(tokenResponse.status).toBe(200);
+      const oldToken = tokenResponse.body.token;
+
+      // Verify the old token works before regeneration
+      const validResponse = await agent
+        .post("/api/test")
+        .set("x-csrf-token", oldToken)
+        .send({ data: "test" });
+      expect(validResponse.status).toBe(200);
+
+      // Get a new token (to have CSRF protection on the regenerate endpoint)
+      const newTokenResponse = await agent.get("/api/csrf-token");
+      const newToken = newTokenResponse.body.token;
+
+      // Regenerate the session
+      const regenResponse = await agent
+        .post("/api/regenerate-session")
+        .set("x-csrf-token", newToken)
+        .send({});
+      expect(regenResponse.status).toBe(200);
+
+      // Try to use the old token with the new session - should be rejected
+      const invalidResponse = await agent
+        .post("/api/test")
+        .set("x-csrf-token", oldToken)
+        .send({ data: "test" });
+      expect(invalidResponse.status).toBe(403);
+    });
+  });
 });
