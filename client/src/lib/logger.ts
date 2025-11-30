@@ -48,7 +48,7 @@ async function sendBatchToLoki() {
 
   console.log("[Loki Transport] Stream groups:", Object.keys(streams).length);
 
-  const lokiEndpoint = "/api/loki/api/v1/push";
+  const lokiEndpoint = `${import.meta.env.VITE_API_URL}/loki/api/v1/push`;
 
   const payload = JSON.stringify({ streams: Object.values(streams) });
   console.log(
@@ -177,7 +177,7 @@ logger.debug(
     mode: import.meta.env.MODE,
     logLevel: getLogLevel(),
     isProduction,
-    lokiEndpoint: "/api/loki/api/v1/push",
+    lokiEndpoint: `${import.meta.env.VITE_API_URL}/loki/api/v1/push`,
   },
   "Logger initialized",
 );
