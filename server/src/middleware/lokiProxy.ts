@@ -33,7 +33,7 @@ export const createLokiProxyOptions = (): Options => ({
 });
 
 /**
- * Proxy middleware that forwards client-side logs to the internal Loki instance.
- * Only proxies requests to /loki/api/v1/push to ensure no other Loki endpoints are exposed.
+ * Proxies client-side log requests to the internal Loki instance.
+ * Path restriction to /loki/api/v1/push is enforced by Express routing.
  */
 export const lokiProxy = createProxyMiddleware(createLokiProxyOptions());
