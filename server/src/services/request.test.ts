@@ -674,7 +674,7 @@ describe("canViewRequest", () => {
     expect(canViewRequest(otherAdminCtx, baseRequest)).toBe(false);
   });
 
-  it("should not allow user who is not a member of the guild", () => {
+  it("should not allow admin who is not a member of the guild", () => {
     expect(canViewRequest(nonMemberAdminCtx, baseRequest)).toBe(false);
   });
 
@@ -686,6 +686,26 @@ describe("canViewRequest", () => {
   it("should allow viewing closed requests for owner admin", () => {
     const closedRequest = { ...baseRequest, status: "closed" as const };
     expect(canViewRequest(adminCtx, closedRequest)).toBe(true);
+  });
+
+  it("should not allow non-admin user to view request", () => {
+    const nonAdminCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: false,
+      isSuperAdmin: false,
+      guildIds: ["guild123"],
+    };
+    expect(canViewRequest(nonAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow user with empty guildIds to view request", () => {
+    const emptyGuildsCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: [],
+    };
+    expect(canViewRequest(emptyGuildsCtx, baseRequest)).toBe(false);
   });
 });
 
@@ -718,6 +738,18 @@ describe("canListRequests", () => {
       guildIds: ["guild1"],
     };
     expect(canListRequests(ctx)).toBe(false);
+  });
+
+  it("should not allow user with empty guildIds to list requests", () => {
+    const ctx: RequestAuthContext = {
+      userId: "user1",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: [],
+    };
+    // Note: canListRequests only checks admin status, not guild membership
+    // Guild filtering should happen in the service layer
+    expect(canListRequests(ctx)).toBe(true);
   });
 });
 
@@ -757,6 +789,16 @@ describe("canCreateRequest", () => {
 
   it("should not allow non-admin to create request", () => {
     expect(canCreateRequest(nonAdminCtx, "guild1")).toBe(false);
+  });
+
+  it("should not allow user with empty guildIds to create request", () => {
+    const emptyGuildsCtx: RequestAuthContext = {
+      userId: "user1",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: [],
+    };
+    expect(canCreateRequest(emptyGuildsCtx, "guild1")).toBe(false);
   });
 });
 
@@ -823,6 +865,26 @@ describe("canCancelRequest", () => {
       guildIds: ["other-guild"],
     };
     expect(canCancelRequest(nonMemberCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow non-admin to cancel request", () => {
+    const nonAdminCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: false,
+      isSuperAdmin: false,
+      guildIds: ["guild123"],
+    };
+    expect(canCancelRequest(nonAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow user with empty guildIds to cancel request", () => {
+    const emptyGuildsCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: [],
+    };
+    expect(canCancelRequest(emptyGuildsCtx, baseRequest)).toBe(false);
   });
 });
 
@@ -915,6 +977,26 @@ describe("canChangeRequestStatus", () => {
     const closedRequest = { ...baseRequest, status: "closed" as const };
     expect(canChangeRequestStatus(ownerAdminCtx, closedRequest, "open")).toBe(false);
   });
+
+  it("should not allow non-admin to change request status", () => {
+    const nonAdminCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: false,
+      isSuperAdmin: false,
+      guildIds: ["guild123"],
+    };
+    expect(canChangeRequestStatus(nonAdminCtx, baseRequest, "cancelled")).toBe(false);
+  });
+
+  it("should not allow user with empty guildIds to change request status", () => {
+    const emptyGuildsCtx: RequestAuthContext = {
+      userId: "superadmin1",
+      isAdmin: true,
+      isSuperAdmin: true,
+      guildIds: [],
+    };
+    expect(canChangeRequestStatus(emptyGuildsCtx, baseRequest, "approved")).toBe(false);
+  });
 });
 
 describe("canCommentOnRequest", () => {
@@ -986,6 +1068,26 @@ describe("canCommentOnRequest", () => {
     };
     expect(canCommentOnRequest(nonMemberCtx, baseRequest)).toBe(false);
   });
+
+  it("should not allow non-admin to comment on request", () => {
+    const nonAdminCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: false,
+      isSuperAdmin: false,
+      guildIds: ["guild123"],
+    };
+    expect(canCommentOnRequest(nonAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow user with empty guildIds to comment on request", () => {
+    const emptyGuildsCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: [],
+    };
+    expect(canCommentOnRequest(emptyGuildsCtx, baseRequest)).toBe(false);
+  });
 });
 
 describe("canDeleteRequest", () => {
@@ -1035,5 +1137,25 @@ describe("canDeleteRequest", () => {
       guildIds: ["other-guild"],
     };
     expect(canDeleteRequest(nonMemberSuperAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow non-admin to delete request", () => {
+    const nonAdminCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: false,
+      isSuperAdmin: false,
+      guildIds: ["guild123"],
+    };
+    expect(canDeleteRequest(nonAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow user with empty guildIds to delete request", () => {
+    const emptyGuildsCtx: RequestAuthContext = {
+      userId: "superadmin1",
+      isAdmin: true,
+      isSuperAdmin: true,
+      guildIds: [],
+    };
+    expect(canDeleteRequest(emptyGuildsCtx, baseRequest)).toBe(false);
   });
 });

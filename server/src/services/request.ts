@@ -194,7 +194,7 @@ export const canChangeRequestStatus = (
 
   // Admins can only cancel their own open requests
   if (ctx.isAdmin) {
-    // Only allowing cancellation for non-super-admins
+    // Admins (non-super-admins) can only cancel their own open requests
     if (newStatus === "cancelled" && request.status === "open" && request.userId === ctx.userId) {
       return true;
     }
