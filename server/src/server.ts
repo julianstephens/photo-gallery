@@ -106,7 +106,7 @@ export const createApp = () => {
   app.use("/api/media", routers.mediaRouter);
 
   // Loki log proxy (only expose /loki/api/v1/push for security)
-  app.use("/loki/api/v1/push", lokiRateLimiter, requiresAuth, lokiProxy);
+  app.use("/loki/api/v1/push", lokiRateLimiter, lokiProxy);
 
   // 404 and centralized error handling
   app.use(notFoundHandler);
