@@ -2,7 +2,7 @@ import pino from "pino";
 
 // --- Loki Configuration (only used in production) ---
 const LOKI_LABELS = {
-  app: "photo-gallery-client",
+  service: "photo-gallery-client",
   env: import.meta.env.MODE || "development",
 };
 const BATCH_INTERVAL_MS = 5000;
