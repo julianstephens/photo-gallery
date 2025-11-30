@@ -110,7 +110,7 @@ export const createApp = () => {
   // Any routes registered before `app.use(csrfSynchronisedProtection)` are NOT protected by CSRF middleware.
   // Only add endpoints here if they must be exempt from CSRF protection.
   app.get("/api/csrf-token", (req, res) => {
-    res.json({ token: generateToken(req, true) });
+    res.json({ token: generateToken(req) });
   });
 
   // All routes registered after this middleware are protected by CSRF.
