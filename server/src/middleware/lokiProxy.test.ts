@@ -74,9 +74,13 @@ describe("createLokiProxyOptions", () => {
     expect(options.timeout).toBe(10000);
   });
 
-  it("has pathRewrite to map /api/v1/push to /loki/api/v1/push", () => {
+  it("has pathRewrite function to map /api/v1/push to /loki/api/v1/push", () => {
     const options = createLokiProxyOptions();
-    expect(options.pathRewrite).toEqual({ "^/api/v1/push": "/loki/api/v1/push" });
+    expect(typeof options.pathRewrite).toBe("function");
+    if (typeof options.pathRewrite === "function") {
+      expect(options.pathRewrite("/api/v1/push")).toBe("/loki/api/v1/push");
+      expect(options.pathRewrite("/loki/api/v1/push")).toBe("/loki/api/v1/push");
+    }
   });
 
   describe("error handler", () => {

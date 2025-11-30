@@ -20,8 +20,14 @@ export const createLokiProxyOptions = (): Options => ({
   target: LOKI_TARGET,
   changeOrigin: true,
   timeout: 10000, // 10 second timeout
-  pathRewrite: {
-    "^/api/v1/push": "/loki/api/v1/push",
+  pathRewrite: (path) => {
+    if (path === "/api/v1/push") {
+      return "/loki/api/v1/push";
+    }
+    if (!path.startsWith("/loki")) {
+      return `/loki${path}`;
+    }
+    return path;
   },
   on: {
     error: (err, _req, res) => {
