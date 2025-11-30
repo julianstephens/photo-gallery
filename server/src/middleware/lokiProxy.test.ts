@@ -1,28 +1,22 @@
 import type { NextFunction, Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-let lokiProxy: any;
-let createLokiProxyOptions: any;
-
 const mockAppLogger = {
   error: vi.fn(),
 };
 
-// Use vi.doMock to ensure mocks are applied before import
-beforeEach(async () => {
-  vi.doMock("../schemas/env.ts", () => ({
-    default: {
-      LOKI_PROXY_TARGET: "http://mock-loki:3100",
-    },
-  }));
-  vi.doMock("./logger.ts", () => ({
-    appLogger: mockAppLogger,
-  }));
-  // Dynamically import after mocks are set up
-  const mod = await import("./lokiProxy.ts");
-  lokiProxy = mod.lokiProxy;
-  createLokiProxyOptions = mod.createLokiProxyOptions;
-});
+vi.mock("../schemas/env.ts", () => ({
+  default: {
+    LOKI_PROXY_TARGET: "http://mock-loki:3100",
+  },
+}));
+
+vi.mock("./logger.ts", () => ({
+  appLogger: mockAppLogger,
+}));
+
+const { lokiProxy, createLokiProxyOptions } = await import("./lokiProxy.ts");
+
 const createRes = () => {
   const res: Partial<Response> & { headersSent: boolean } = {
     headersSent: false,

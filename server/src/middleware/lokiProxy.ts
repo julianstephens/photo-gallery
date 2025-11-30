@@ -29,7 +29,7 @@ export const createLokiProxyOptions = (): Options => ({
         res.end(JSON.stringify({ error: "Log forwarding failed" }));
       }
     },
-    proxyReq: (proxyReq, req, res) => {
+    proxyReq: (_proxyReq, _req, res) => {
       try {
         // If you need to modify the outgoing request, do it here.
       } catch (err) {
@@ -40,6 +40,7 @@ export const createLokiProxyOptions = (): Options => ({
         }
       }
     },
+  },
 });
 
 /**
