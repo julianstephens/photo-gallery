@@ -47,7 +47,9 @@
     "redis": "^5.9.0",
     "rotating-file-stream": "^3.2.7",
     "utils": "workspace:*",
-    "zod": "^4.1.12"
+    "zod": "^4.1.12",
+    "lusca": "^1.7.0",
+    "@types/lusca": "^1.7.5"
   },
   "devDependencies": {
     "@tsconfig/node-ts": "^23.6.1",
