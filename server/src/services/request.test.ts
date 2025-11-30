@@ -7,7 +7,20 @@ vi.mock("../redis.ts", () => mockRedisModule());
 
 // Import after mocks
 import redis from "../redis.ts";
-import { canUserModifyRequest, isValidStatusTransition, RequestService } from "./request.ts";
+import {
+  AuthorizationError,
+  canCancelRequest,
+  canChangeRequestStatus,
+  canCommentOnRequest,
+  canCreateRequest,
+  canDeleteRequest,
+  canListRequests,
+  canUserModifyRequest,
+  canViewRequest,
+  isValidStatusTransition,
+  RequestService,
+  type RequestAuthContext,
+} from "./request.ts";
 
 describe("RequestService", () => {
   let service: RequestService;
@@ -589,5 +602,438 @@ describe("canUserModifyRequest", () => {
   it("should allow super admin to modify closed request", () => {
     const closedRequest = { ...baseRequest, status: "closed" as const };
     expect(canUserModifyRequest("any-admin", closedRequest, true)).toBe(true);
+  });
+});
+
+describe("AuthorizationError", () => {
+  it("should create error with correct properties", () => {
+    const error = new AuthorizationError("Not allowed", "view", "req123");
+    expect(error.message).toBe("Not allowed");
+    expect(error.action).toBe("view");
+    expect(error.resourceId).toBe("req123");
+    expect(error.code).toBe("AUTHORIZATION_ERROR");
+    expect(error.status).toBe(403);
+    expect(error.name).toBe("AuthorizationError");
+  });
+
+  it("should create error without resourceId", () => {
+    const error = new AuthorizationError("Not allowed", "list");
+    expect(error.resourceId).toBeUndefined();
+  });
+});
+
+describe("canViewRequest", () => {
+  const baseRequest = {
+    id: "req123",
+    guildId: "guild123",
+    userId: "user456",
+    title: "Test",
+    description: "Desc",
+    status: "open" as const,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const superAdminCtx: RequestAuthContext = {
+    userId: "superadmin1",
+    isAdmin: true,
+    isSuperAdmin: true,
+    guildIds: ["guild123", "guild456"],
+  };
+
+  const adminCtx: RequestAuthContext = {
+    userId: "user456",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  const otherAdminCtx: RequestAuthContext = {
+    userId: "other-admin",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  const nonMemberAdminCtx: RequestAuthContext = {
+    userId: "user456",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild999"],
+  };
+
+  it("should allow super admin to view any request in their guilds", () => {
+    expect(canViewRequest(superAdminCtx, baseRequest)).toBe(true);
+  });
+
+  it("should allow admin to view their own request", () => {
+    expect(canViewRequest(adminCtx, baseRequest)).toBe(true);
+  });
+
+  it("should not allow admin to view another user's request", () => {
+    expect(canViewRequest(otherAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow user who is not a member of the guild", () => {
+    expect(canViewRequest(nonMemberAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow super admin to view request outside their guilds", () => {
+    const otherGuildRequest = { ...baseRequest, guildId: "guild999" };
+    expect(canViewRequest(superAdminCtx, otherGuildRequest)).toBe(false);
+  });
+
+  it("should allow viewing closed requests for owner admin", () => {
+    const closedRequest = { ...baseRequest, status: "closed" as const };
+    expect(canViewRequest(adminCtx, closedRequest)).toBe(true);
+  });
+});
+
+describe("canListRequests", () => {
+  it("should allow super admin to list requests", () => {
+    const ctx: RequestAuthContext = {
+      userId: "user1",
+      isAdmin: true,
+      isSuperAdmin: true,
+      guildIds: ["guild1"],
+    };
+    expect(canListRequests(ctx)).toBe(true);
+  });
+
+  it("should allow admin to list requests", () => {
+    const ctx: RequestAuthContext = {
+      userId: "user1",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: ["guild1"],
+    };
+    expect(canListRequests(ctx)).toBe(true);
+  });
+
+  it("should not allow non-admin to list requests", () => {
+    const ctx: RequestAuthContext = {
+      userId: "user1",
+      isAdmin: false,
+      isSuperAdmin: false,
+      guildIds: ["guild1"],
+    };
+    expect(canListRequests(ctx)).toBe(false);
+  });
+});
+
+describe("canCreateRequest", () => {
+  const adminCtx: RequestAuthContext = {
+    userId: "user1",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild1", "guild2"],
+  };
+
+  const superAdminCtx: RequestAuthContext = {
+    userId: "user1",
+    isAdmin: true,
+    isSuperAdmin: true,
+    guildIds: ["guild1"],
+  };
+
+  const nonAdminCtx: RequestAuthContext = {
+    userId: "user1",
+    isAdmin: false,
+    isSuperAdmin: false,
+    guildIds: ["guild1"],
+  };
+
+  it("should allow admin to create request in their guild", () => {
+    expect(canCreateRequest(adminCtx, "guild1")).toBe(true);
+  });
+
+  it("should allow super admin to create request in their guild", () => {
+    expect(canCreateRequest(superAdminCtx, "guild1")).toBe(true);
+  });
+
+  it("should not allow admin to create request in non-member guild", () => {
+    expect(canCreateRequest(adminCtx, "guild999")).toBe(false);
+  });
+
+  it("should not allow non-admin to create request", () => {
+    expect(canCreateRequest(nonAdminCtx, "guild1")).toBe(false);
+  });
+});
+
+describe("canCancelRequest", () => {
+  const baseRequest = {
+    id: "req123",
+    guildId: "guild123",
+    userId: "user456",
+    title: "Test",
+    description: "Desc",
+    status: "open" as const,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const superAdminCtx: RequestAuthContext = {
+    userId: "superadmin1",
+    isAdmin: true,
+    isSuperAdmin: true,
+    guildIds: ["guild123"],
+  };
+
+  const ownerAdminCtx: RequestAuthContext = {
+    userId: "user456",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  const otherAdminCtx: RequestAuthContext = {
+    userId: "other-admin",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  it("should allow super admin to cancel any open request", () => {
+    expect(canCancelRequest(superAdminCtx, baseRequest)).toBe(true);
+  });
+
+  it("should allow owner admin to cancel their own open request", () => {
+    expect(canCancelRequest(ownerAdminCtx, baseRequest)).toBe(true);
+  });
+
+  it("should not allow admin to cancel another user's request", () => {
+    expect(canCancelRequest(otherAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow cancelling non-open request", () => {
+    const approvedRequest = { ...baseRequest, status: "approved" as const };
+    expect(canCancelRequest(ownerAdminCtx, approvedRequest)).toBe(false);
+  });
+
+  it("should not allow super admin to cancel non-open request", () => {
+    const closedRequest = { ...baseRequest, status: "closed" as const };
+    expect(canCancelRequest(superAdminCtx, closedRequest)).toBe(false);
+  });
+
+  it("should not allow cancellation if not guild member", () => {
+    const nonMemberCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: ["other-guild"],
+    };
+    expect(canCancelRequest(nonMemberCtx, baseRequest)).toBe(false);
+  });
+});
+
+describe("canChangeRequestStatus", () => {
+  const baseRequest = {
+    id: "req123",
+    guildId: "guild123",
+    userId: "user456",
+    title: "Test",
+    description: "Desc",
+    status: "open" as const,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const superAdminCtx: RequestAuthContext = {
+    userId: "superadmin1",
+    isAdmin: true,
+    isSuperAdmin: true,
+    guildIds: ["guild123"],
+  };
+
+  const ownerAdminCtx: RequestAuthContext = {
+    userId: "user456",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  const otherAdminCtx: RequestAuthContext = {
+    userId: "other-admin",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  it("should allow super admin to approve open request", () => {
+    expect(canChangeRequestStatus(superAdminCtx, baseRequest, "approved")).toBe(true);
+  });
+
+  it("should allow super admin to deny open request", () => {
+    expect(canChangeRequestStatus(superAdminCtx, baseRequest, "denied")).toBe(true);
+  });
+
+  it("should allow super admin to cancel open request", () => {
+    expect(canChangeRequestStatus(superAdminCtx, baseRequest, "cancelled")).toBe(true);
+  });
+
+  it("should allow super admin to re-open closed request", () => {
+    const closedRequest = { ...baseRequest, status: "closed" as const };
+    expect(canChangeRequestStatus(superAdminCtx, closedRequest, "open")).toBe(true);
+  });
+
+  it("should allow super admin to close approved request", () => {
+    const approvedRequest = { ...baseRequest, status: "approved" as const };
+    expect(canChangeRequestStatus(superAdminCtx, approvedRequest, "closed")).toBe(true);
+  });
+
+  it("should allow owner admin to cancel their own open request", () => {
+    expect(canChangeRequestStatus(ownerAdminCtx, baseRequest, "cancelled")).toBe(true);
+  });
+
+  it("should not allow admin to approve request", () => {
+    expect(canChangeRequestStatus(ownerAdminCtx, baseRequest, "approved")).toBe(false);
+  });
+
+  it("should not allow admin to deny request", () => {
+    expect(canChangeRequestStatus(ownerAdminCtx, baseRequest, "denied")).toBe(false);
+  });
+
+  it("should not allow admin to cancel another user's request", () => {
+    expect(canChangeRequestStatus(otherAdminCtx, baseRequest, "cancelled")).toBe(false);
+  });
+
+  it("should not allow invalid status transitions", () => {
+    expect(canChangeRequestStatus(superAdminCtx, baseRequest, "closed")).toBe(false);
+  });
+
+  it("should not allow status change if not guild member", () => {
+    const nonMemberCtx: RequestAuthContext = {
+      userId: "superadmin1",
+      isAdmin: true,
+      isSuperAdmin: true,
+      guildIds: ["other-guild"],
+    };
+    expect(canChangeRequestStatus(nonMemberCtx, baseRequest, "approved")).toBe(false);
+  });
+
+  it("should not allow admin to re-open closed request", () => {
+    const closedRequest = { ...baseRequest, status: "closed" as const };
+    expect(canChangeRequestStatus(ownerAdminCtx, closedRequest, "open")).toBe(false);
+  });
+});
+
+describe("canCommentOnRequest", () => {
+  const baseRequest = {
+    id: "req123",
+    guildId: "guild123",
+    userId: "user456",
+    title: "Test",
+    description: "Desc",
+    status: "open" as const,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const superAdminCtx: RequestAuthContext = {
+    userId: "superadmin1",
+    isAdmin: true,
+    isSuperAdmin: true,
+    guildIds: ["guild123"],
+  };
+
+  const ownerAdminCtx: RequestAuthContext = {
+    userId: "user456",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  const otherAdminCtx: RequestAuthContext = {
+    userId: "other-admin",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  it("should allow super admin to comment on any open request", () => {
+    expect(canCommentOnRequest(superAdminCtx, baseRequest)).toBe(true);
+  });
+
+  it("should allow super admin to comment on closed request", () => {
+    const closedRequest = { ...baseRequest, status: "closed" as const };
+    expect(canCommentOnRequest(superAdminCtx, closedRequest)).toBe(true);
+  });
+
+  it("should allow super admin to comment on approved request", () => {
+    const approvedRequest = { ...baseRequest, status: "approved" as const };
+    expect(canCommentOnRequest(superAdminCtx, approvedRequest)).toBe(true);
+  });
+
+  it("should allow owner admin to comment on their own open request", () => {
+    expect(canCommentOnRequest(ownerAdminCtx, baseRequest)).toBe(true);
+  });
+
+  it("should not allow owner admin to comment on their own closed request", () => {
+    const closedRequest = { ...baseRequest, status: "closed" as const };
+    expect(canCommentOnRequest(ownerAdminCtx, closedRequest)).toBe(false);
+  });
+
+  it("should not allow admin to comment on another user's request", () => {
+    expect(canCommentOnRequest(otherAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow comment if not guild member", () => {
+    const nonMemberCtx: RequestAuthContext = {
+      userId: "user456",
+      isAdmin: true,
+      isSuperAdmin: false,
+      guildIds: ["other-guild"],
+    };
+    expect(canCommentOnRequest(nonMemberCtx, baseRequest)).toBe(false);
+  });
+});
+
+describe("canDeleteRequest", () => {
+  const baseRequest = {
+    id: "req123",
+    guildId: "guild123",
+    userId: "user456",
+    title: "Test",
+    description: "Desc",
+    status: "open" as const,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const superAdminCtx: RequestAuthContext = {
+    userId: "superadmin1",
+    isAdmin: true,
+    isSuperAdmin: true,
+    guildIds: ["guild123"],
+  };
+
+  const ownerAdminCtx: RequestAuthContext = {
+    userId: "user456",
+    isAdmin: true,
+    isSuperAdmin: false,
+    guildIds: ["guild123"],
+  };
+
+  it("should allow super admin to delete any request", () => {
+    expect(canDeleteRequest(superAdminCtx, baseRequest)).toBe(true);
+  });
+
+  it("should allow super admin to delete closed request", () => {
+    const closedRequest = { ...baseRequest, status: "closed" as const };
+    expect(canDeleteRequest(superAdminCtx, closedRequest)).toBe(true);
+  });
+
+  it("should not allow admin to delete their own request", () => {
+    expect(canDeleteRequest(ownerAdminCtx, baseRequest)).toBe(false);
+  });
+
+  it("should not allow super admin to delete request outside their guild", () => {
+    const nonMemberSuperAdminCtx: RequestAuthContext = {
+      userId: "superadmin1",
+      isAdmin: true,
+      isSuperAdmin: true,
+      guildIds: ["other-guild"],
+    };
+    expect(canDeleteRequest(nonMemberSuperAdminCtx, baseRequest)).toBe(false);
   });
 });
