@@ -94,6 +94,9 @@ export const createApp = () => {
 
   app.use("/api", routers.healthRouter);
 
+  // Loki log proxy (client-side logging - mounted FIRST before other /api routes to take precedence)
+  app.use("/api/loki", lokiRateLimiter, lokiProxy);
+
   // API routes with scoped rate limits
   app.use("/api/auth", authRateLimiter);
   app.use("/api", routers.authRouter);
@@ -103,9 +106,6 @@ export const createApp = () => {
 
   // Media streaming proxy (under /api for consistent routing)
   app.use("/api/media", routers.mediaRouter);
-
-  // Loki log proxy (client-side logging - mounted at /api/loki, proxies to /loki at Loki target)
-  app.use("/api/loki", lokiRateLimiter, lokiProxy);
 
   // 404 and centralized error handling
   app.use(notFoundHandler);
