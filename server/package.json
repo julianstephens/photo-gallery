@@ -20,7 +20,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.18.3",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.922.0",
+    "@aws-sdk/client-s3": "^3.940.0",
     "@aws-sdk/lib-storage": "^3.940.0",
     "@aws-sdk/s3-request-presigner": "^3.931.0",
     "axios": "^1.13.2",
@@ -29,6 +29,7 @@
     "connect-redis": "^9.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csrf-sync": "^4.2.1",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-rate-limit": "^8.2.1",
@@ -47,9 +48,7 @@
     "redis": "^5.9.0",
     "rotating-file-stream": "^3.2.7",
     "utils": "workspace:*",
-    "zod": "^4.1.12",
-    "lusca": "^1.7.0",
-    "@types/lusca": "^1.7.5"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@tsconfig/node-ts": "^23.6.1",

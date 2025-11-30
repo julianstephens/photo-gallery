@@ -1,4 +1,5 @@
 import express from "express";
+import { csrfSync } from "csrf-sync";
 import session from "express-session";
 import { errorHandler, notFoundHandler } from "./middleware/errors.ts";
 import { httpLogger } from "./middleware/logger.ts";
@@ -91,6 +92,13 @@ export const createApp = () => {
   }
 
   app.use(session(sess));
+
+  // CSRF protection
+  const { csrfSynchronisedProtection, generateToken } = csrfSync();
+  app.get("/api/csrf-token", (req, res) => {
+    res.json({ token: generateToken(req, true) });
+  });
+  app.use(csrfSynchronisedProtection);
 
   app.use("/api", routers.healthRouter);
 

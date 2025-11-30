@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import axios, { AxiosError, type AxiosInstance } from "axios";
+import { fetchCsrfToken } from "./queries";
 
 type RetriableAxiosError = AxiosError & { retryAfterMs?: number };
 
@@ -28,6 +29,25 @@ const createHttpClient = (baseURL: string) => {
     withCredentials: true,
   });
   attachRetryAfterInterceptor(instance);
+
+  let csrfToken: string | null = null;
+
+  httpClient.interceptors.request.use(
+    async (config) => {
+      const methodsRequiringCsrf = ["post", "put", "patch", "delete"];
+      if (config.method && methodsRequiringCsrf.includes(config.method.toLowerCase())) {
+        if (!csrfToken) {
+          csrfToken = await fetchCsrfToken(httpClient);
+        }
+        if (csrfToken) {
+          config.headers["X-CSRF-Token"] = csrfToken;
+        }
+      }
+      return config;
+    },
+    (error) => Promise.reject(error),
+  );
+
   if (needsAbsolutePathNormalization(baseURL)) {
     instance.interceptors.request.use((config) => {
       if (typeof config.url === "string" && config.url.startsWith("/")) {

@@ -1,6 +1,5 @@
 import compression from "compression";
 import cookieParser from "cookie-parser";
-import lusca from "lusca";
 import cors from "cors";
 import type { Express } from "express";
 import helmet from "helmet";
@@ -63,9 +62,6 @@ export function applySecurity(app: Express) {
   } else {
     app.use(cookieParser());
   }
-
-  // CSRF protection
-  app.use(lusca.csrf());
 
   // Response compression
   app.use(
