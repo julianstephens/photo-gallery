@@ -26,6 +26,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refreshUser = useCallback(async () => {
     const requestId = ++latestRequestId.current;
     setLoading(true);
+    setIsRevalidating(false); // Clear any pending silent refresh
     setError(null);
     try {
       const user = (await fetchCurrentUser()) as User | null;
@@ -108,6 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const silentRefreshUser = useCallback(async () => {
     const requestId = ++latestRequestId.current;
     setIsRevalidating(true);
+    setLoading(false); // Clear any pending loading state from superseded refreshUser
     try {
       const user = (await fetchCurrentUser()) as User | null;
       // Only update state if this is still the latest request
@@ -136,10 +138,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         logger.warn({ err: e }, "[AuthContext] Silent refresh failed, keeping current state");
       }
     } finally {
-      // Only update isRevalidating if this is still the latest request
-      if (requestId === latestRequestId.current) {
-        setIsRevalidating(false);
-      }
+      // Always clear isRevalidating to prevent it getting stuck
+      setIsRevalidating(false);
     }
   }, []);
 

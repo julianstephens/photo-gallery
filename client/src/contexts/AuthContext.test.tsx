@@ -338,4 +338,111 @@ describe("AuthContext", () => {
       expect(result.current.currentUser).toBeNull();
     });
   });
+
+  describe("race condition handling", () => {
+    it("should handle concurrent refreshUser and silentRefreshUser calls correctly", async () => {
+      // Setup: initial auth complete
+      const mockUser = { id: "user1", username: "testuser" };
+      mockGetCurrentUser.mockResolvedValue(mockUser);
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      expect(result.current.isAuthed).toBe(true);
+
+      // Start refreshUser (sets loading=true)
+      let resolveRefresh: (value: unknown) => void;
+      mockGetCurrentUser.mockImplementation(
+        () => new Promise((resolve) => (resolveRefresh = resolve)),
+      );
+
+      await act(async () => {
+        result.current.refreshUser();
+      });
+      expect(result.current.loading).toBe(true);
+
+      // Start silentRefreshUser while refreshUser is pending
+      let resolveSilent: (value: unknown) => void;
+      mockGetCurrentUser.mockImplementation(
+        () => new Promise((resolve) => (resolveSilent = resolve)),
+      );
+
+      await act(async () => {
+        Object.defineProperty(document, "visibilityState", {
+          value: "visible",
+          writable: true,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      // Resolve the old refreshUser call - should be ignored
+      await act(async () => {
+        resolveRefresh({ id: "user1", username: "olduser" });
+        await vi.runAllTimersAsync();
+      });
+
+      // Resolve the newer silentRefreshUser call - should win
+      await act(async () => {
+        resolveSilent({ id: "user1", username: "newuser" });
+        await vi.runAllTimersAsync();
+      });
+
+      // Verify only the latest request's result was applied
+      expect(result.current.currentUser?.username).toBe("newuser");
+      expect(result.current.loading).toBe(false);
+      expect(result.current.isRevalidating).toBe(false);
+    });
+
+    it("should clear isRevalidating when refreshUser supersedes silentRefreshUser", async () => {
+      const mockUser = { id: "user1", username: "testuser" };
+      mockGetCurrentUser.mockResolvedValue(mockUser);
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+
+      // Start silentRefreshUser
+      let resolveSilent: (value: unknown) => void;
+      mockGetCurrentUser.mockImplementation(
+        () => new Promise((resolve) => (resolveSilent = resolve)),
+      );
+
+      await act(async () => {
+        Object.defineProperty(document, "visibilityState", {
+          value: "visible",
+          writable: true,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      expect(result.current.isRevalidating).toBe(true);
+
+      // Start refreshUser which should clear isRevalidating
+      let resolveRefresh: (value: unknown) => void;
+      mockGetCurrentUser.mockImplementation(
+        () => new Promise((resolve) => (resolveRefresh = resolve)),
+      );
+
+      await act(async () => {
+        result.current.refreshUser();
+      });
+
+      // isRevalidating should be cleared by refreshUser
+      expect(result.current.isRevalidating).toBe(false);
+      expect(result.current.loading).toBe(true);
+
+      // Resolve both - should not cause issues
+      await act(async () => {
+        resolveSilent({ id: "user1", username: "silent" });
+        resolveRefresh({ id: "user1", username: "refresh" });
+        await vi.runAllTimersAsync();
+      });
+
+      // Only the refresh result should be applied
+      expect(result.current.currentUser?.username).toBe("refresh");
+      expect(result.current.loading).toBe(false);
+      expect(result.current.isRevalidating).toBe(false);
+    });
+  });
 });
