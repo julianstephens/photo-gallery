@@ -80,6 +80,8 @@ export const envSchema = z.object({
   // both: stdout + file (useful for debugging)
   LOG_OUTPUT: z.enum(["stdout", "file", "both"]).optional(),
   // TODO: Add LOKI_URL and Loki logging support if/when direct Loki push is implemented.
+  // For client-side logging: set VITE_LOKI_ENDPOINT to the Loki push endpoint (e.g., "/loki/api/v1/push")
+  // Example: VITE_LOKI_ENDPOINT=/loki/api/v1/push
   // Loki proxy endpoint for client-side log forwarding
   LOKI_PROXY_TARGET: z.string().url().optional(),
   // Log file rotation settings (for file-based logging)
