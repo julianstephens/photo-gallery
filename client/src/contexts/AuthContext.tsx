@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isRevalidating, setIsRevalidating] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const initRan = useRef(false);
 
@@ -86,6 +87,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  // Silent refresh: revalidates auth without showing loading spinner
+  // Used for background revalidation (e.g., page visibility changes)
+  const silentRefreshUser = useCallback(async () => {
+    setIsRevalidating(true);
+    try {
+      const user = (await fetchCurrentUser()) as User | null;
+      if (user) {
+        setCurrentUser(user);
+        setError(null);
+      } else {
+        setUnauthed();
+      }
+    } catch (e) {
+      // For silent refresh, we don't retry on 401 - just update state
+      // If user is no longer authenticated, update state accordingly
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      if (errorMsg.includes("401")) {
+        logger.debug("[AuthContext] Silent refresh: session expired or invalid");
+        setUnauthed();
+      } else {
+        // For non-401 errors during silent refresh, log but don't disrupt user
+        logger.warn({ err: e }, "[AuthContext] Silent refresh failed, keeping current state");
+      }
+    } finally {
+      setIsRevalidating(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!initRan.current) {
       initRan.current = true;
@@ -94,18 +123,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [refreshUser]);
 
   // Revalidate auth when page becomes visible (user returns to tab)
-  // This helps catch auth state changes and handles cases where the session is delayed
+  // Uses silent refresh to avoid disrupting user experience with loading spinners
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        logger.debug("[AuthContext] Page became visible, revalidating auth");
-        void refreshUser();
+        logger.debug("[AuthContext] Page became visible, silently revalidating auth");
+        void silentRefreshUser();
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [refreshUser]);
+  }, [silentRefreshUser]);
 
   const login = useCallback(() => {
     doLogin();
@@ -130,6 +159,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     authReady,
     currentUser,
     loading,
+    isRevalidating,
     error,
     login,
     logout,
