@@ -72,7 +72,11 @@ const createHttpClient = (baseURL: string) => {
         isCsrfError(error)
       ) {
         csrfToken = null;
+        csrfToken = await fetchCsrfToken(instance);
         const retryConfig = { ...error.config, _csrfRetried: true };
+        if (csrfToken) {
+          retryConfig.headers = { ...retryConfig.headers, "X-CSRF-Token": csrfToken };
+        }
         return instance.request(retryConfig);
       }
       return Promise.reject(error);
