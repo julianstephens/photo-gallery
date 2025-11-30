@@ -53,7 +53,7 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
   handler: createRateLimitHandler(),
 });
 
-// Lenient limiter for log proxy (1 min window, 60 reqs per IP)
+// Lenient limiter for log proxy (1 min window, 180 reqs per IP)
 export const lokiRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 180,
