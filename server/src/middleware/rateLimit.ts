@@ -53,6 +53,18 @@ export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
   handler: createRateLimitHandler(),
 });
 
+// Lenient limiter for log proxy (1 min window, 180 reqs per IP)
+export const lokiRateLimiter: RateLimitRequestHandler = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 180,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  validate: { trustProxy: true },
+  message: { error: "Too many log requests, please try again later." },
+  skip: skipLocalhost,
+  handler: createRateLimitHandler(),
+});
+
 // Stricter limiter for auth endpoints
 export const authRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 10 * 60 * 1000,
