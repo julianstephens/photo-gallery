@@ -7,7 +7,6 @@ import {
   canCancelRequest,
   canCommentOnRequest,
   canCreateRequest,
-  canViewRequest,
   RequestService,
   type RequestAuthContext,
 } from "../services/request.ts";
@@ -108,16 +107,13 @@ export const listMyRequests = async (req: Request, res: Response) => {
       guildId,
     );
 
-    // Filter to only requests that the user can view (handles edge cases)
-    const filteredRequests = userGuildRequests.filter((request) =>
-      canViewRequest(authCtx, request),
-    );
+    // Requests are already filtered by user and guild; no further filtering needed.
 
     appLogger.debug(
-      { guildId, userId: authCtx.userId, count: filteredRequests.length },
+      { guildId, userId: authCtx.userId, count: userGuildRequests.length },
       "[listMyRequests] Listed user requests",
     );
-    res.json(filteredRequests);
+    res.json(userGuildRequests);
   } catch (err: unknown) {
     if (err instanceof AuthorizationError) {
       return res.status(err.status).json({ error: err.message, code: err.code });

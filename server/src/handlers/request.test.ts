@@ -14,7 +14,6 @@ const requestServiceMocks = vi.hoisted(() => ({
 
 const authorizationMocks = vi.hoisted(() => ({
   canCreateRequest: vi.fn(),
-  canViewRequest: vi.fn(),
   canCancelRequest: vi.fn(),
   canCommentOnRequest: vi.fn(),
   AuthorizationError: class AuthorizationError extends Error {
@@ -44,7 +43,6 @@ vi.mock("../services/request.ts", () => ({
     return requestServiceMocks;
   },
   canCreateRequest: authorizationMocks.canCreateRequest,
-  canViewRequest: authorizationMocks.canViewRequest,
   canCancelRequest: authorizationMocks.canCancelRequest,
   canCommentOnRequest: authorizationMocks.canCommentOnRequest,
   AuthorizationError: authorizationMocks.AuthorizationError,
@@ -99,7 +97,6 @@ const resetMocks = () => {
   Object.values(requestServiceMocks).forEach((mockFn) => mockFn.mockReset());
   // Only reset the mock functions, not the AuthorizationError class
   authorizationMocks.canCreateRequest.mockReset();
-  authorizationMocks.canViewRequest.mockReset();
   authorizationMocks.canCancelRequest.mockReset();
   authorizationMocks.canCommentOnRequest.mockReset();
   schemaMocks.createRequestSchema.parse.mockReset().mockImplementation((body) => body);
@@ -315,7 +312,7 @@ describe("request handlers", () => {
       });
     });
 
-    it("returns filtered requests for the user in the guild", async () => {
+    it("returns requests for the user in the guild", async () => {
       const mockRequests = [
         {
           id: "req1",
@@ -352,7 +349,6 @@ describe("request handlers", () => {
       const res = createRes();
 
       requestServiceMocks.getRequestsByUserAndGuild.mockResolvedValue(mockRequests);
-      authorizationMocks.canViewRequest.mockReturnValue(true);
 
       await listMyRequests(req, res);
 
@@ -361,51 +357,6 @@ describe("request handlers", () => {
         "guild123",
       );
       expect(res.json).toHaveBeenCalledWith(mockRequests);
-    });
-
-    it("filters requests based on canViewRequest authorization", async () => {
-      const mockRequests = [
-        {
-          id: "req1",
-          guildId: "guild123",
-          userId: "user123",
-          title: "Request 1",
-          description: "Desc 1",
-          status: "open",
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        {
-          id: "req2",
-          guildId: "guild123",
-          userId: "user123",
-          title: "Request 2",
-          description: "Desc 2",
-          status: "approved",
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-      ];
-
-      const req = createReq({
-        params: { guildId: "guild123" },
-        query: { requestor: "me" },
-        session: {
-          userId: "user123",
-          isAdmin: true,
-          isSuperAdmin: false,
-          guildIds: ["guild123"],
-        } as Request["session"],
-      });
-      const res = createRes();
-
-      requestServiceMocks.getRequestsByUserAndGuild.mockResolvedValue(mockRequests);
-      // Only allow viewing the first request
-      authorizationMocks.canViewRequest.mockImplementation((ctx, request) => request.id === "req1");
-
-      await listMyRequests(req, res);
-
-      expect(res.json).toHaveBeenCalledWith([mockRequests[0]]);
     });
 
     it("returns empty array when no requests exist", async () => {
