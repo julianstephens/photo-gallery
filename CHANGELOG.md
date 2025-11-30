@@ -1,3 +1,25 @@
+## v0.1.2
+
+### Fixed
+
+- Login cycles on session timing issues - implemented exponential backoff retry strategy (500ms → 1s → 2s) for OAuth session persistence race conditions
+- Session availability race condition - added 3-attempt retry logic with detailed logging for auth state validation
+- Page visibility handling - added auth revalidation when user returns to browser tab to ensure session state consistency
+
+### Improved
+
+- Authentication error handling - enhanced diagnostics with session key information and token presence tracking
+- Upload progress polling - consolidated logging to use central logger instead of console methods for better observability
+- Loki batch transport - added structured logging for batch preparation, stream grouping, and transmission failures
+- Overall logging consistency - unified all client-side logging through central Pino logger for production log aggregation
+
+### Technical Improvements
+
+- Added page visibility listener in AuthContext to revalidate auth when document becomes visible
+- Improved retry logic with exponential backoff for handling session persistence delays
+- Enhanced server-side auth logging with session ID and access token availability checks
+- Better error context in Loki transport for debugging log delivery failures
+
 ## v0.1.1
 
 ### Added
