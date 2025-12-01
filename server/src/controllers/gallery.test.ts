@@ -42,6 +42,18 @@ vi.mock("../services/uploadJob.ts", () => ({
   }),
 }));
 
+// Mock gradient meta service
+vi.mock("../services/gradientMeta.ts", () => ({
+  GradientMetaService: vi.fn().mockImplementation(function MockGradientMetaService() {
+    return {
+      deleteGradient: vi.fn().mockResolvedValue(undefined),
+      getGradient: vi.fn(),
+      setGradient: vi.fn(),
+      getGradients: vi.fn(),
+    };
+  }),
+}));
+
 import { UploadService } from "../services/upload.ts";
 import { GalleryController } from "./gallery.ts";
 
@@ -302,6 +314,36 @@ describe("GalleryAPI Unit Tests", () => {
       expect(normalizeGalleryFolderName("Annual Photo Review (2025)")).toBe(
         "annual-photo-review-2025",
       );
+    });
+  });
+
+  describe("removeGalleryItems", () => {
+    it("throws error for empty guild ID", async () => {
+      const controller = new GalleryController();
+      await expect(controller.removeGalleryItems("", "My Gallery", ["image1.jpg"])).rejects.toThrow(
+        "Guild ID is required",
+      );
+    });
+
+    it("throws error for empty gallery name", async () => {
+      const controller = new GalleryController();
+      await expect(controller.removeGalleryItems("guild-123", "", ["image1.jpg"])).rejects.toThrow(
+        "Gallery name cannot be empty",
+      );
+    });
+
+    it("throws error for whitespace-only gallery name", async () => {
+      const controller = new GalleryController();
+      await expect(
+        controller.removeGalleryItems("guild-123", "   ", ["image1.jpg"]),
+      ).rejects.toThrow("Gallery name cannot be empty");
+    });
+
+    it("throws error for whitespace-only guild ID", async () => {
+      const controller = new GalleryController();
+      await expect(
+        controller.removeGalleryItems("   ", "My Gallery", ["image1.jpg"]),
+      ).rejects.toThrow("Guild ID is required");
     });
   });
 });

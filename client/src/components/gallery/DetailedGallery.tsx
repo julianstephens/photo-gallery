@@ -83,7 +83,7 @@ export const DetailedGallery = ({
     setSelectMode(true);
   }, []);
 
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = useCallback(async () => {
     if (selectedItems.size === 0) return;
 
     try {
@@ -125,7 +125,7 @@ export const DetailedGallery = ({
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [guildId, galleryName, selectedItems, deleteItemsMutation]);
 
   if (isLoading) {
     return (
