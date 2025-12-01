@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import axios, { AxiosError, type AxiosInstance } from "axios";
-import { fetchCsrfToken } from "./queries";
+import { fetchCsrfToken } from "./lib/csrf";
 
 type RetriableAxiosError = AxiosError & { retryAfterMs?: number };
 
