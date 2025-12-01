@@ -165,6 +165,74 @@ describe("BucketService", () => {
     });
   });
 
+  describe("deleteMultipleObjectsFromBucket", () => {
+    it("should delete multiple objects in a single call", async () => {
+      s3Mock.on(HeadBucketCommand).resolves({});
+      s3Mock.on(DeleteObjectsCommand).resolves({
+        Deleted: [{ Key: "test-bucket/file1.jpg" }, { Key: "test-bucket/file2.jpg" }],
+      });
+
+      service = await BucketService.create();
+      const result = await service.deleteMultipleObjectsFromBucket("test-bucket", [
+        "file1.jpg",
+        "file2.jpg",
+      ]);
+
+      expect(result.deleted).toHaveLength(2);
+      expect(result.errors).toHaveLength(0);
+      expect(result.deleted).toContain("test-bucket/file1.jpg");
+      expect(result.deleted).toContain("test-bucket/file2.jpg");
+
+      const deleteCalls = s3Mock.commandCalls(DeleteObjectsCommand);
+      expect(deleteCalls).toHaveLength(1);
+      expect(deleteCalls[0].args[0].input.Delete.Objects).toHaveLength(2);
+    });
+
+    it("should return empty arrays for empty input", async () => {
+      s3Mock.on(HeadBucketCommand).resolves({});
+
+      service = await BucketService.create();
+      const result = await service.deleteMultipleObjectsFromBucket("test-bucket", []);
+
+      expect(result.deleted).toHaveLength(0);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("should handle partial failures", async () => {
+      s3Mock.on(HeadBucketCommand).resolves({});
+      s3Mock.on(DeleteObjectsCommand).resolves({
+        Deleted: [{ Key: "test-bucket/file1.jpg" }],
+        Errors: [{ Key: "test-bucket/file2.jpg", Message: "Access Denied" }],
+      });
+
+      service = await BucketService.create();
+      const result = await service.deleteMultipleObjectsFromBucket("test-bucket", [
+        "file1.jpg",
+        "file2.jpg",
+      ]);
+
+      expect(result.deleted).toHaveLength(1);
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].key).toBe("test-bucket/file2.jpg");
+      expect(result.errors[0].error).toBe("Access Denied");
+    });
+
+    it("should handle complete batch failure", async () => {
+      s3Mock.on(HeadBucketCommand).resolves({});
+      s3Mock.on(DeleteObjectsCommand).rejects(new Error("Network error"));
+
+      service = await BucketService.create();
+      const result = await service.deleteMultipleObjectsFromBucket("test-bucket", [
+        "file1.jpg",
+        "file2.jpg",
+      ]);
+
+      expect(result.deleted).toHaveLength(0);
+      expect(result.errors).toHaveLength(2);
+      expect(result.errors[0].error).toBe("Network error");
+    });
+  });
+
   describe("deleteBucketFolder", () => {
     it("should delete bucket folder marker", async () => {
       s3Mock.on(HeadBucketCommand).resolves({});
