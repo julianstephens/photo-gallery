@@ -2,7 +2,7 @@ import { csrfSync } from "csrf-sync";
 import express from "express";
 import session from "express-session";
 import { errorHandler, notFoundHandler } from "./middleware/errors.ts";
-import { appLogger, httpLogger } from "./middleware/logger.ts";
+import { httpLogger } from "./middleware/logger.ts";
 import { lokiProxy } from "./middleware/lokiProxy.ts";
 import { setupMetrics } from "./middleware/metrics.ts";
 import { apiRateLimiter, authRateLimiter, lokiRateLimiter } from "./middleware/rateLimit.ts";
@@ -111,7 +111,6 @@ export const createApp = () => {
   // Only add endpoints here if they must be exempt from CSRF protection.
   app.get("/api/csrf-token", (req, res) => {
     const token = generateToken(req);
-    appLogger.debug({ sessionId: req.sessionID }, "[csrf-token] Generated CSRF token");
     res.json({ token });
   });
 
@@ -122,22 +121,8 @@ export const createApp = () => {
   // Mounted BEFORE CSRF middleware to bypass protection, and BEFORE other /api routes for precedence.
   app.use("/api/loki", lokiRateLimiter, lokiProxy);
 
-  // CSRF protection with logging middleware wrapper
+  // CSRF protection
   app.use((req, res, next) => {
-    const methodsRequiringCsrf = ["post", "put", "patch", "delete"];
-    if (methodsRequiringCsrf.includes(req.method.toLowerCase())) {
-      const csrfTokenHeader = req.headers["x-csrf-token"];
-      const csrfTokenBody = req.body?._csrf;
-      appLogger.debug(
-        {
-          method: req.method,
-          path: req.path,
-          hasHeader: !!csrfTokenHeader,
-          hasBody: !!csrfTokenBody,
-        },
-        "[csrf] Validating token for request",
-      );
-    }
     csrfSynchronisedProtection(req, res, next);
   });
 

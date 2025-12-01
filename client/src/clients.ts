@@ -49,21 +49,13 @@ const createHttpClient = (baseURL: string) => {
     async (config) => {
       const methodsRequiringCsrf = ["post", "put", "patch", "delete"];
       if (config.method && methodsRequiringCsrf.includes(config.method.toLowerCase())) {
-        logger.debug(
-          { url: config.url, method: config.method },
-          "[csrf-interceptor] Fetching CSRF token for request",
-        );
         const token = await getCsrfToken();
         if (token) {
           config.headers["x-csrf-token"] = token;
-          logger.debug(
-            { url: config.url, tokenPrefix: token.substring(0, 10) },
-            "[csrf-interceptor] Set x-csrf-token header",
-          );
         } else {
           logger.warn(
             { url: config.url, method: config.method },
-            "[csrf-interceptor] Failed to obtain CSRF token, request may fail",
+            "[csrf] Failed to obtain CSRF token, request may fail",
           );
         }
       }
@@ -95,10 +87,6 @@ const createHttpClient = (baseURL: string) => {
       const config = error.config as typeof error.config & { _csrfRetried?: boolean };
       // Only retry if 403 is due to CSRF token failure
       if (error.response?.status === 403 && !config._csrfRetried && isCsrfError(error)) {
-        logger.warn(
-          { url: config.url, method: config.method },
-          "[csrf-interceptor] Detected CSRF error, retrying with fresh token",
-        );
         csrfToken = null;
         tokenFetchPromise = null; // Clear any pending fetch
         const freshToken = await getCsrfToken();
@@ -106,14 +94,10 @@ const createHttpClient = (baseURL: string) => {
           // Token fetch failed, don't retry
           logger.error(
             { url: config.url },
-            "[csrf-interceptor] Failed to fetch fresh token, rejecting request",
+            "[csrf] Failed to fetch fresh token, rejecting request",
           );
           return Promise.reject(error);
         }
-        logger.debug(
-          { url: config.url, tokenPrefix: freshToken.substring(0, 10) },
-          "[csrf-interceptor] Retrying request with fresh token",
-        );
         const retryConfig = {
           ...error.config,
           _csrfRetried: true,

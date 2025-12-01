@@ -1,4 +1,5 @@
 import { httpClient } from "@/clients";
+import { logger } from "@/lib/logger";
 import type {
   ChunkedUploadProgress,
   FinalizeUploadResponse,
@@ -132,11 +133,19 @@ async function uploadChunkWithRetry(
       onError?.(lastError, index);
 
       if (attempt < maxRetries - 1) {
+        logger.debug(
+          { uploadId, chunkIndex: index, attempt: attempt + 1, maxRetries },
+          "[upload] Retrying chunk upload",
+        );
         await delay(RETRY_DELAY_MS * Math.pow(2, attempt));
       }
     }
   }
 
+  logger.error(
+    { uploadId, chunkIndex: index, maxRetries },
+    "[upload] Failed to upload chunk after retries",
+  );
   throw lastError || new Error(`Failed to upload chunk ${index} after ${maxRetries} retries`);
 }
 
@@ -168,16 +177,28 @@ export async function chunkedUpload(
       guildId: options.guildId || "unknown",
     };
 
+    logger.info(
+      {
+        fileName: file.name,
+        fileSize: file.size,
+        galleryName: options.galleryName,
+        guildId: options.guildId,
+      },
+      "[upload] Starting chunked upload",
+    );
+
     const { data: initiateResponse } = await httpClient.post<InitiateUploadResponse>(
       "uploads/initiate",
       initiateRequest,
     );
 
     uploadId = initiateResponse.uploadId;
+    logger.info({ uploadId, fileName: file.name }, "[upload] Upload initiated");
 
     // Slice file into chunks
     const chunks = sliceFile(file, chunkSize);
     const totalChunks = chunks.length;
+    logger.debug({ uploadId, totalChunks, chunkSize }, "[upload] File sliced into chunks");
 
     // Step 2: Upload each chunk
     for (let i = 0; i < chunks.length; i++) {
@@ -194,11 +215,15 @@ export async function chunkedUpload(
       onProgress?.(progress);
     }
 
+    logger.info({ uploadId, fileName: file.name, totalChunks }, "[upload] All chunks uploaded");
+
     // Step 3: Finalize upload
     const { data: finalizeResponse } = await httpClient.post<FinalizeUploadResponse>(
       "uploads/finalize",
       { uploadId },
     );
+
+    logger.info({ uploadId, filePath: finalizeResponse.filePath }, "[upload] Upload finalized");
 
     // Step 4: Poll for server-side progress using worker (for bucket uploads)
     if (onServerProgress) {
@@ -210,15 +235,18 @@ export async function chunkedUpload(
       filePath: finalizeResponse.filePath,
     };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error({ uploadId, fileName: file.name, error: errorMessage }, "[upload] Upload failed");
+
     // Cleanup server session on error to prevent orphaned temporary files
     if (uploadId) {
       try {
         await httpClient.delete(`uploads/${uploadId}`);
+        logger.debug({ uploadId }, "[upload] Cleaned up failed upload session");
       } catch {
         // Ignore cleanup errors - the session will be cleaned up by TTL
       }
     }
-    const errorMessage = error instanceof Error ? error.message : String(error);
     return {
       success: false,
       error: errorMessage,

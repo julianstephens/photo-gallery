@@ -129,21 +129,32 @@ export const UploadPhotosButton = ({
     try {
       setHasActiveUploads(true);
       updateUploadMonitorVisibility(true);
+      logger.info(
+        { fileCount: validFiles.length, galleryName, guildId },
+        "[UploadPhotosButton] Starting file uploads",
+      );
+
       const uploadPromises = validFiles.map(async (file) => {
         const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
 
         try {
+          logger.debug({ uploadId, fileName: file.name }, "[UploadPhotosButton] Processing upload");
           await uploadFileInChunks(file, galleryName, guildId, (progress) => {
             uploadProgressStore.updateProgress(uploadId, progress);
           });
           uploadProgressStore.completeUpload(uploadId);
+          logger.debug({ uploadId, fileName: file.name }, "[UploadPhotosButton] Upload completed");
         } catch (error) {
           let errMsg = "An error occurred during the upload.";
           if (error instanceof AxiosError) {
             errMsg = error.response?.data?.error || errMsg;
           }
           uploadProgressStore.failUpload(uploadId, errMsg);
+          logger.error(
+            { uploadId, fileName: file.name, error: errMsg },
+            "[UploadPhotosButton] Upload failed",
+          );
           throw error;
         }
       });
@@ -151,6 +162,11 @@ export const UploadPhotosButton = ({
       const results = await Promise.allSettled(uploadPromises);
       const failedCount = results.filter((r) => r.status === "rejected").length;
       const successCount = results.filter((r) => r.status === "fulfilled").length;
+
+      logger.info(
+        { successCount, failedCount, galleryName, guildId },
+        "[UploadPhotosButton] Upload batch completed",
+      );
 
       if (failedCount === 0) {
         toaster.success({
@@ -171,6 +187,7 @@ export const UploadPhotosButton = ({
 
       // Refetch gallery list to update totalItems count
       if (guildId) {
+        logger.debug({ guildId, galleryName }, "[UploadPhotosButton] Refreshing gallery data");
         // Refetch the galleries list to get updated metadata
         await queryClient.refetchQueries({
           queryKey: ["galleries", { guildId }],
