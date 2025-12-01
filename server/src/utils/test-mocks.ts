@@ -120,6 +120,7 @@ export const mockRedisClient = {
   lLen: vi.fn(),
   lMove: vi.fn(),
   sMembers: vi.fn(),
+  sInter: vi.fn(),
   sAdd: vi.fn(),
   sRem: vi.fn(),
   zAdd: vi.fn(),

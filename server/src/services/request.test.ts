@@ -212,6 +212,65 @@ describe("RequestService", () => {
     });
   });
 
+  describe("getRequestsByUserAndGuild", () => {
+    it("should return requests for a user in a specific guild using SINTER", async () => {
+      const mockRequest = {
+        id: "req1",
+        guildId: "guild123",
+        userId: "user456",
+        title: "Request 1",
+        description: "Desc 1",
+        status: "open",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      vi.mocked(redis.client.sInter).mockResolvedValue(["req1"]);
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest)]);
+
+      const requests = await service.getRequestsByUserAndGuild("user456", "guild123");
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].userId).toBe("user456");
+      expect(requests[0].guildId).toBe("guild123");
+      expect(redis.client.sInter).toHaveBeenCalledWith([
+        "request:user:user456",
+        "request:guild:guild123",
+      ]);
+    });
+
+    it("should return empty array when no intersection exists", async () => {
+      vi.mocked(redis.client.sInter).mockResolvedValue([]);
+
+      const requests = await service.getRequestsByUserAndGuild("user456", "guild123");
+
+      expect(requests).toHaveLength(0);
+    });
+
+    it("should filter out expired request IDs gracefully", async () => {
+      const mockRequest = {
+        id: "req1",
+        guildId: "guild123",
+        userId: "user456",
+        title: "Request 1",
+        description: "Desc 1",
+        status: "open",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      // Intersection contains both valid and expired request IDs
+      vi.mocked(redis.client.sInter).mockResolvedValue(["req1", "req2-expired"]);
+      // mGet returns null for expired keys
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest), null]);
+
+      const requests = await service.getRequestsByUserAndGuild("user456", "guild123");
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0].id).toBe("req1");
+    });
+  });
+
   describe("getRequestsByStatus", () => {
     it("should return all requests with a specific status", async () => {
       const mockRequest = {
