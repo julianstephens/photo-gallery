@@ -174,6 +174,7 @@ export const mockBucketService = {
   uploadToBucket: vi.fn(),
   uploadStreamToBucket: vi.fn(),
   deleteObjectFromBucket: vi.fn(),
+  deleteMultipleObjectsFromBucket: vi.fn(),
   deleteBucketFolder: vi.fn(),
   emptyBucketFolder: vi.fn(),
   renameBucketFolder: vi.fn(),

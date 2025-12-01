@@ -21,6 +21,7 @@ vi.mock("../services/bucket.ts", () => ({
       renameBucketFolder: vi.fn(),
       emptyBucketFolder: vi.fn(),
       deleteBucketFolder: vi.fn(),
+      deleteMultipleObjectsFromBucket: vi.fn(),
       getBucketFolderContents: vi.fn(),
       getObject: vi.fn(),
       createPresignedUrl: vi.fn(),

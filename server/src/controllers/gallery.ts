@@ -829,14 +829,26 @@ export class GalleryController {
     const deletedItems: string[] = [];
     const failedItems: string[] = [];
 
-    for (const itemName of itemNames) {
-      try {
-        // Items are stored in the uploads subfolder
-        const objectPath = `uploads/${itemName}`;
-        await this.#bucketService.deleteObjectFromBucket(folderName, objectPath);
+    // Prepare object paths for batch deletion
+    const objectPaths = itemNames.map((itemName) => `uploads/${itemName}`);
 
-        // Also delete gradient metadata for this item, but don't fail the whole operation if this fails
-        const storageKey = `${folderName}/uploads/${itemName}`;
+    // Batch delete objects from bucket (up to 1000 per call)
+    const batchDeleteResult = await this.#bucketService.deleteMultipleObjectsFromBucket(
+      folderName,
+      objectPaths,
+    );
+
+    // Process results and handle gradient metadata deletion
+    for (const itemName of itemNames) {
+      const objectPath = `uploads/${itemName}`;
+      const fullKey = `${folderName}/${objectPath}`;
+      const storageKey = `${folderName}/uploads/${itemName}`;
+
+      // Check if this item was deleted in the batch
+      const wasDeleted = batchDeleteResult.deleted.includes(fullKey);
+
+      if (wasDeleted) {
+        // Delete gradient metadata, but don't fail the whole operation if this fails
         try {
           await this.#gradientMetaService.deleteGradient(storageKey);
         } catch (gradientError) {
@@ -856,11 +868,17 @@ export class GalleryController {
           { guildId: validatedGuildId, galleryName: validatedName, itemName },
           "[removeGalleryItems] Successfully deleted item",
         );
-      } catch (error) {
+      } else {
         failedItems.push(itemName);
+        const errorObj = batchDeleteResult.errors.find((e) => e.key === fullKey);
         appLogger.error(
-          { error, guildId: validatedGuildId, galleryName: validatedName, itemName },
-          "[removeGalleryItems] Failed to delete item",
+          {
+            error: errorObj?.error,
+            guildId: validatedGuildId,
+            galleryName: validatedName,
+            itemName,
+          },
+          "[removeGalleryItems] Failed to delete item in batch S3 deletion",
         );
       }
     }
