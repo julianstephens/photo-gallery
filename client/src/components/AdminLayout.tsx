@@ -4,10 +4,10 @@ import { HiOutlineHome } from "react-icons/hi2";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Tooltip } from "./ui/tooltip";
 
-type Tab = "Photo Galleries" | "Requests";
+type Tab = "Photo Galleries" | "Requests" | "Settings";
 
 export const AdminLayout = () => {
-  const [tabs] = useState<Tab[]>(["Photo Galleries", "Requests"]);
+  const [tabs] = useState<Tab[]>(["Photo Galleries", "Requests", "Settings"]);
   const [activeTab, setActiveTab] = useState<Tab>(tabs[0]);
   const goto = useNavigate();
   const loc = useLocation();
@@ -21,7 +21,9 @@ export const AdminLayout = () => {
   };
 
   useEffect(() => {
-    if (loc.pathname.includes("requests")) {
+    if (loc.pathname.includes("settings")) {
+      setActiveTab("Settings");
+    } else if (loc.pathname.includes("requests")) {
       setActiveTab("Requests");
     } else {
       setActiveTab("Photo Galleries");

@@ -52,6 +52,8 @@ const guildRouter = Router();
 guildRouter.use(requiresAuth);
 guildRouter.get("/guilds/default", defaultGuildCache, handlers.getDefaultGuild);
 guildRouter.post("/guilds/default", handlers.setDefaultGuild);
+guildRouter.get("/guilds/:guildId/settings", handlers.getGuildSettings);
+guildRouter.put("/guilds/:guildId/settings", requiresAdmin, handlers.updateGuildSettings);
 
 /**********************
  * UPLOAD ROUTES

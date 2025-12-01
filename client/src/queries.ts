@@ -7,6 +7,7 @@ import {
   type Gallery,
   type GalleryItemResponse,
   type GalleryMeta,
+  type GuildSettings,
   type RemoveGalleryItemsRequest,
   type RemoveGalleryRequest,
   type UpdateGalleryNameRequest,
@@ -153,5 +154,22 @@ export const logout = async () => {
 
 export const getCurrentUser = async () => {
   const { data } = await httpClient.get<User>("auth/me");
+  return data;
+};
+
+/**********************
+ * GUILD SETTINGS QUERIES
+ **********************/
+
+export const getGuildSettings = async (guildId: string): Promise<GuildSettings> => {
+  const { data } = await httpClient.get<GuildSettings>(`guilds/${guildId}/settings`);
+  return data;
+};
+
+export const updateGuildSettings = async (
+  guildId: string,
+  settings: GuildSettings,
+): Promise<GuildSettings> => {
+  const { data } = await httpClient.put<GuildSettings>(`guilds/${guildId}/settings`, settings);
   return data;
 };
