@@ -190,6 +190,17 @@ export const UploadPhotosButton = ({
             }
 
             activeCount--;
+
+            // After each upload completes, invalidate the gallery queries to show updated counts
+            if (guildId && results[currentIndex].status === "fulfilled") {
+              queryClient.invalidateQueries({
+                queryKey: ["galleries", { guildId }],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["gallery", { guildId, galleryName }],
+              });
+            }
+
             if (queueIndex < uploadQueue.length) {
               setTimeout(executeNext, 0);
             } else if (activeCount === 0) {
@@ -232,21 +243,18 @@ export const UploadPhotosButton = ({
         });
       }
 
-      // Refetch gallery list to update totalItems count
+      // Refetch gallery list to update totalItems count (final refresh after all uploads)
       if (guildId) {
-        logger.debug({ guildId, galleryName }, "[UploadPhotosButton] Refreshing gallery data");
-        // Refetch the galleries list to get updated metadata
+        logger.debug({ guildId, galleryName }, "[UploadPhotosButton] Final gallery data refresh");
+        // Do a final refetch to ensure gallery list is up to date
         await queryClient.refetchQueries({
           queryKey: ["galleries", { guildId }],
           type: "active",
         });
-        // Also refetch gallery items for this specific gallery
-        await queryClient.invalidateQueries({
+        // Final refresh for gallery items
+        await queryClient.refetchQueries({
           queryKey: ["galleryItems", { guildId, galleryName }],
-        });
-        // Refetch the specific gallery to update photo count in DetailedGallery
-        await queryClient.invalidateQueries({
-          queryKey: ["gallery", { guildId, galleryName }],
+          type: "active",
         });
       }
     } catch (error) {
