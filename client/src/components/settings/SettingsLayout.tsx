@@ -1,8 +1,5 @@
-import { Box, Heading, HStack, IconButton, Text, VStack } from "@chakra-ui/react";
+import { Box, Heading, HStack, Text, VStack } from "@chakra-ui/react";
 import type { ReactNode } from "react";
-import { HiOutlineArrowLeft } from "react-icons/hi2";
-import { useNavigate } from "react-router";
-import { Tooltip } from "../ui/tooltip";
 
 export interface SettingsTab {
   id: string;
@@ -29,9 +26,7 @@ export const SettingsLayout = ({
   tabs,
   activeTabId,
   onTabChange,
-  backPath = "/admin",
 }: SettingsLayoutProps) => {
-  const navigate = useNavigate();
   const componentIdentifier = "settings-layout";
 
   return (
@@ -45,16 +40,6 @@ export const SettingsLayout = ({
             </Text>
           )}
         </VStack>
-        <Tooltip content="Back to Admin">
-          <IconButton
-            variant="ghost"
-            size="lg"
-            aria-label="Back to Admin"
-            onClick={() => navigate(backPath)}
-          >
-            <HiOutlineArrowLeft />
-          </IconButton>
-        </Tooltip>
       </HStack>
 
       <HStack id={`${componentIdentifier}-main`} w="full" h="full" align="stretch" gap="6">

@@ -1,11 +1,11 @@
-import { GuildSelect } from "@/components/forms";
+import { GuildSelect, NotificationSettings } from "@/components/forms";
 import { Loader } from "@/components/Loader";
-import { NotificationSettings, SettingsLayout, type SettingsTab } from "@/components/settings";
+import { SettingsLayout, type SettingsTab } from "@/components/settings";
 import { toaster } from "@/components/ui/toaster";
 import { useAuth, useGalleryContext, useGuildSettings, useUpdateGuildSettings } from "@/hooks";
-import { Button, Flex, HStack, Text, VStack } from "@chakra-ui/react";
+import { Flex, HStack, Text, VStack } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
-import { DEFAULT_GUILD_SETTINGS, type GuildSettings } from "utils";
+import type { GuildSettings } from "utils";
 
 /**
  * Admin settings page with tabbed layout for guild-level settings.
@@ -16,8 +16,6 @@ const AdminSettingsPage = () => {
   const { defaultGuildId } = useGalleryContext();
   const [guildId, setGuildId] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState("notifications");
-  const [localSettings, setLocalSettings] = useState<GuildSettings>(DEFAULT_GUILD_SETTINGS);
-  const [hasChanges, setHasChanges] = useState(false);
 
   const userGuilds = currentUser?.guilds ?? [];
   const hasGuilds = userGuilds.length > 0;
@@ -34,50 +32,36 @@ const AdminSettingsPage = () => {
 
   // Sync local settings with server settings
   useEffect(() => {
-    if (serverSettings) {
-      setLocalSettings(serverSettings);
-      setHasChanges(false);
-    }
-  }, [serverSettings]);
+    // Settings will be passed directly to the form component
+  }, []);
 
   const onGuildChange = (selectedGuild: string) => {
     if (!hasGuilds) return;
     setGuildId(selectedGuild);
-    // Reset local settings when guild changes to avoid showing stale data
-    setLocalSettings(DEFAULT_GUILD_SETTINGS);
-    setHasChanges(false);
   };
 
-  const handleSettingsChange = useCallback((newSettings: GuildSettings) => {
-    setLocalSettings(newSettings);
-    setHasChanges(true);
-  }, []);
+  const handleSettingsChange = useCallback(
+    (newSettings: GuildSettings) => {
+      if (!guildId) return;
 
-  const handleSave = async () => {
-    if (!guildId) return;
-
-    try {
-      await updateSettings(localSettings);
-      setHasChanges(false);
-      toaster.success({
-        title: "Settings saved",
-        description: "Your settings have been updated successfully.",
-      });
-    } catch (err) {
-      toaster.error({
-        title: "Error saving settings",
-        description:
-          err instanceof Error ? err.message : "Failed to save settings. Please try again.",
-      });
-    }
-  };
-
-  const handleReset = () => {
-    if (serverSettings) {
-      setLocalSettings(serverSettings);
-      setHasChanges(false);
-    }
-  };
+      // Save immediately when form is submitted
+      updateSettings(newSettings)
+        .then(() => {
+          toaster.success({
+            title: "Settings saved",
+            description: "Your settings have been updated successfully.",
+          });
+        })
+        .catch((err) => {
+          toaster.error({
+            title: "Error saving settings",
+            description:
+              err instanceof Error ? err.message : "Failed to save settings. Please try again.",
+          });
+        });
+    },
+    [guildId, updateSettings],
+  );
 
   const tabs: SettingsTab[] = [
     {
@@ -85,7 +69,13 @@ const AdminSettingsPage = () => {
       label: "Notifications",
       content: (
         <NotificationSettings
-          settings={localSettings}
+          settings={
+            serverSettings ?? {
+              notifications: {
+                galleryExpiration: { enabled: false, channelId: null, daysBefore: 3 },
+              },
+            }
+          }
           onSettingsChange={handleSettingsChange}
           isSaving={isUpdating}
         />
@@ -116,23 +106,6 @@ const AdminSettingsPage = () => {
         justify="space-between"
       >
         <GuildSelect w="50%" value={guildId ?? ""} onChange={onGuildChange} invalid={false} />
-
-        <HStack gap="3">
-          {hasChanges && (
-            <Button variant="ghost" onClick={handleReset} disabled={isUpdating}>
-              Reset
-            </Button>
-          )}
-          <Button
-            colorPalette="blue"
-            onClick={handleSave}
-            disabled={!hasChanges || isUpdating || !guildId}
-            loading={isUpdating}
-            loadingText="Saving..."
-          >
-            Save Changes
-          </Button>
-        </HStack>
       </HStack>
 
       {/* Loading state */}
@@ -146,7 +119,7 @@ const AdminSettingsPage = () => {
       )}
 
       {/* Settings layout */}
-      {!isLoading && !error && guildId && (
+      {!isLoading && !error && guildId && serverSettings && (
         <SettingsLayout
           title="Guild Settings"
           description="Configure settings for your guild."
