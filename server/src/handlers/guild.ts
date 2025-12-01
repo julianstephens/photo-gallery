@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { invalidateDefaultGuildCache } from "../middleware/responseCache.ts";
 
 const guildController = await import("../controllers/index.ts").then(
   (m) => new m.GuildController(),
@@ -29,6 +30,8 @@ export const setDefaultGuild = async (req: Request, res: Response) => {
 
   try {
     await guildController.setDefaultGuild(guildId, req.session.userId || "");
+    // Invalidate the cache after successfully setting the default guild
+    await invalidateDefaultGuildCache(req.session.userId || "");
     res.status(200).json({ message: "Default guild set successfully" });
   } catch (err: unknown) {
     if ((err as Error)?.name === "InvalidInputError") {

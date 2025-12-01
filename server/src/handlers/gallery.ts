@@ -7,6 +7,7 @@ import {
 } from "utils";
 import z from "zod";
 import { appLogger } from "../middleware/logger.ts";
+import { invalidateGalleriesCache } from "../middleware/responseCache.ts";
 
 const galleryController = await import("../controllers/index.ts").then(
   (m) => new m.GalleryController(),
@@ -79,6 +80,8 @@ export const createGallery = async (req: Request, res: Response) => {
   try {
     const body = createGallerySchema.parse(req.body);
     const meta = await galleryController.createGallery(body, req.session.userId || "");
+    // Invalidate galleries cache after successful creation
+    await invalidateGalleriesCache(body.guildId, req.session.userId);
     res.status(201).json(meta);
   } catch (err: unknown) {
     if ((err as Error)?.name === "InvalidInputError") {
@@ -116,6 +119,8 @@ export const removeGallery = async (req: Request, res: Response) => {
   try {
     const body = removeGallerySchema.parse(req.body);
     await galleryController.removeGallery(body.guildId, body.galleryName);
+    // Invalidate galleries cache after successful removal
+    await invalidateGalleriesCache(body.guildId, req.session.userId);
     res.status(204).send();
   } catch (err: unknown) {
     if ((err as Error)?.name === "InvalidInputError") {
@@ -138,6 +143,8 @@ export const updateGalleryName = async (req: Request, res: Response) => {
     }
 
     await galleryController.renameGallery(body.guildId, body.galleryName, body.newGalleryName);
+    // Invalidate galleries cache after successful rename
+    await invalidateGalleriesCache(body.guildId, req.session.userId);
 
     res.json({ oldName: body.galleryName, newName: body.newGalleryName });
   } catch (err: unknown) {

@@ -107,6 +107,7 @@ export const mockLoggerModule = () => mockLogger;
 export const mockRedisClient = {
   get: vi.fn(),
   set: vi.fn(),
+  setEx: vi.fn(),
   mGet: vi.fn(),
   hGet: vi.fn(),
   hSet: vi.fn(),
@@ -115,6 +116,7 @@ export const mockRedisClient = {
   del: vi.fn(),
   exists: vi.fn(),
   expire: vi.fn(),
+  keys: vi.fn(),
   rPush: vi.fn(),
   lRem: vi.fn(),
   lLen: vi.fn(),

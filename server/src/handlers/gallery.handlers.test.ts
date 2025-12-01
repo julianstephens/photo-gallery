@@ -31,6 +31,14 @@ vi.mock("../middleware/logger.ts", () => ({
   },
 }));
 
+vi.mock("../middleware/responseCache.ts", () => ({
+  invalidateDefaultGuildCache: vi.fn().mockResolvedValue(undefined),
+  invalidateGalleriesCache: vi.fn().mockResolvedValue(undefined),
+  defaultGuildCache: vi.fn(),
+  galleriesCache: vi.fn(),
+  createResponseCache: vi.fn(),
+}));
+
 vi.mock("utils", () => schemaMocks);
 
 const handlers = await import("./gallery.ts");

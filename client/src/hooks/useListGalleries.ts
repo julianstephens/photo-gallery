@@ -3,6 +3,9 @@ import { listGalleries } from "@/queries";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "./useAuth";
 
+// 15 minutes in milliseconds - reduces API calls for infrequently changing data
+const STALE_TIME = 15 * 60 * 1000;
+
 export const useListGalleries = (guildId: string) => {
   const { isAuthed } = useAuth();
   const resolvedGuildId = guildId;
@@ -11,6 +14,7 @@ export const useListGalleries = (guildId: string) => {
     queryKey: ["galleries", { guildId: resolvedGuildId }],
     enabled,
     queryFn: () => listGalleries(resolvedGuildId),
+    staleTime: STALE_TIME,
   });
   if (!enabled) {
     return {

@@ -3,6 +3,7 @@ import * as handlers from "./handlers/index.ts";
 import { streamMedia } from "./handlers/media.ts";
 import { requiresAdmin, requiresAuth, requiresGuildMembership } from "./middleware/auth.ts";
 import { uploadRateLimiter } from "./middleware/rateLimit.ts";
+import { defaultGuildCache, galleriesCache } from "./middleware/responseCache.ts";
 import env from "./schemas/env.ts";
 
 /**********************
@@ -35,7 +36,7 @@ authRouter.get("/auth/me", requiresAuth, handlers.getCurrentUser);
 const galleryRouter = Router();
 galleryRouter.use("/galleries", requiresAuth);
 galleryRouter.use("/galleries", requiresGuildMembership);
-galleryRouter.get("/galleries", handlers.listGalleries);
+galleryRouter.get("/galleries", galleriesCache, handlers.listGalleries);
 galleryRouter.get("/galleries/single", handlers.getSingleGallery);
 galleryRouter.get("/galleries/items", handlers.listGalleryItems);
 galleryRouter.post("/galleries", requiresAdmin, handlers.createGallery);
@@ -48,7 +49,7 @@ galleryRouter.delete("/galleries", requiresAdmin, handlers.removeGallery);
  **********************/
 const guildRouter = Router();
 guildRouter.use(requiresAuth);
-guildRouter.get("/guilds/default", handlers.getDefaultGuild);
+guildRouter.get("/guilds/default", defaultGuildCache, handlers.getDefaultGuild);
 guildRouter.post("/guilds/default", handlers.setDefaultGuild);
 
 /**********************
