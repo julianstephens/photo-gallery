@@ -213,7 +213,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
                 <HStack gap={1}>
                   {upload.status === "queued" && (
                     <Badge colorPalette="gray" variant="subtle">
-                      Queue
+                      Queued
                     </Badge>
                   )}
                   {upload.status === "uploading" && (

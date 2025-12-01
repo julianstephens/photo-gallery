@@ -24,8 +24,12 @@ const AdminGalleryManagerPage = () => {
   const effectiveGuildId = hasGuilds ? guildId || "" : "";
   const { data, error, isLoading } = useListGalleries(effectiveGuildId);
   const [showCreateGalleryModal, setShowCreateGalleryModal] = useState(false);
-  const { uploadMonitorEverShown, hasActiveUploads, updateUploadMonitorVisibility } =
-    useUploadContext();
+  const {
+    uploadMonitorEverShown,
+    hasActiveUploads,
+    updateUploadMonitorVisibility,
+    showUploadMonitor,
+  } = useUploadContext();
   const {
     activeGalleryName,
     isDefaultGuild,
@@ -34,7 +38,6 @@ const AdminGalleryManagerPage = () => {
     setActiveGuild,
     defaultGuildId,
   } = useGalleryContext();
-  const [isUploadMonitorVisible, setIsUploadMonitorVisible] = useState(true);
   const [guild, setGuild] = useState<string>("");
   const [galleryOpened, setGalleryOpened] = useState(false);
 
@@ -44,7 +47,6 @@ const AdminGalleryManagerPage = () => {
   // Auto-show monitor if there are persisted uploads on initial load
   useEffect(() => {
     if (hasPersistedUploads) {
-      setIsUploadMonitorVisible(true);
       updateUploadMonitorVisibility(true);
     }
   }, [hasPersistedUploads, updateUploadMonitorVisibility]);
@@ -174,10 +176,10 @@ const AdminGalleryManagerPage = () => {
             closeModal={closeCreateGalleryModal}
           />
           <UploadMonitor
-            isVisible={isUploadMonitorVisible}
-            onClose={() => setIsUploadMonitorVisible(false)}
+            isVisible={showUploadMonitor}
+            onClose={() => updateUploadMonitorVisibility(false)}
           />
-          {uploadMonitorEverShown && !isUploadMonitorVisible && (
+          {uploadMonitorEverShown && !showUploadMonitor && (
             <Tooltip content="View uploads">
               <Button
                 zIndex={0}
@@ -187,7 +189,7 @@ const AdminGalleryManagerPage = () => {
                 size="lg"
                 colorPalette={hasActiveUploads ? "blue" : "gray"}
                 aria-label="Show uploads"
-                onClick={() => setIsUploadMonitorVisible(true)}
+                onClick={() => updateUploadMonitorVisibility(true)}
               >
                 {hasActiveUploads ? (
                   <Spinner />
