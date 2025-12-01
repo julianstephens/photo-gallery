@@ -15,6 +15,7 @@ describe("GuildSettingsController", () => {
     get: ReturnType<typeof vi.fn>;
     set: ReturnType<typeof vi.fn>;
     del: ReturnType<typeof vi.fn>;
+    expire: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -36,7 +37,7 @@ describe("GuildSettingsController", () => {
       const result = await controller.getSettings(guildId);
 
       expect(result).toEqual(DEFAULT_GUILD_SETTINGS);
-      expect(mockRedisClient.get).toHaveBeenCalledWith("guilds:guild-123:settings");
+      expect(mockRedisClient.get).toHaveBeenCalledWith("guild:guild-123:settings");
     });
 
     it("should return stored settings when they exist", async () => {
@@ -51,11 +52,16 @@ describe("GuildSettingsController", () => {
         },
       };
       mockRedisClient.get.mockResolvedValueOnce(JSON.stringify(storedSettings));
+      mockRedisClient.expire.mockResolvedValueOnce(1);
 
       const result = await controller.getSettings(guildId);
 
       expect(result).toEqual(storedSettings);
-      expect(mockRedisClient.get).toHaveBeenCalledWith("guilds:guild-456:settings");
+      expect(mockRedisClient.get).toHaveBeenCalledWith("guild:guild-456:settings");
+      expect(mockRedisClient.expire).toHaveBeenCalledWith(
+        "guild:guild-456:settings",
+        90 * 24 * 60 * 60,
+      );
     });
 
     it("should return default settings when stored JSON is invalid", async () => {
@@ -99,7 +105,7 @@ describe("GuildSettingsController", () => {
 
       await controller.getSettings(guildId);
 
-      expect(mockRedisClient.get).toHaveBeenCalledWith("guilds:guild-trimmed:settings");
+      expect(mockRedisClient.get).toHaveBeenCalledWith("guild:guild-trimmed:settings");
     });
   });
 
@@ -116,13 +122,18 @@ describe("GuildSettingsController", () => {
         },
       };
       mockRedisClient.set.mockResolvedValueOnce("OK");
+      mockRedisClient.expire.mockResolvedValueOnce(1);
 
       const result = await controller.updateSettings(guildId, settings);
 
       expect(result).toEqual(settings);
       expect(mockRedisClient.set).toHaveBeenCalledWith(
-        "guilds:guild-123:settings",
+        "guild:guild-123:settings",
         JSON.stringify(settings),
+      );
+      expect(mockRedisClient.expire).toHaveBeenCalledWith(
+        "guild:guild-123:settings",
+        90 * 24 * 60 * 60,
       );
     });
 
@@ -167,11 +178,12 @@ describe("GuildSettingsController", () => {
         },
       };
       mockRedisClient.set.mockResolvedValueOnce("OK");
+      mockRedisClient.expire.mockResolvedValueOnce(1);
 
       await controller.updateSettings(guildId, settings);
 
       expect(mockRedisClient.set).toHaveBeenCalledWith(
-        "guilds:guild-trimmed:settings",
+        "guild:guild-trimmed:settings",
         JSON.stringify(settings),
       );
     });
@@ -184,7 +196,7 @@ describe("GuildSettingsController", () => {
 
       await controller.deleteSettings(guildId);
 
-      expect(mockRedisClient.del).toHaveBeenCalledWith("guilds:guild-123:settings");
+      expect(mockRedisClient.del).toHaveBeenCalledWith("guild:guild-123:settings");
     });
 
     it("should throw error when guildId is empty", async () => {
@@ -204,7 +216,7 @@ describe("GuildSettingsController", () => {
 
       await controller.deleteSettings(guildId);
 
-      expect(mockRedisClient.del).toHaveBeenCalledWith("guilds:guild-trimmed:settings");
+      expect(mockRedisClient.del).toHaveBeenCalledWith("guild:guild-trimmed:settings");
     });
   });
 });

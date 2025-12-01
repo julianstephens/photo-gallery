@@ -1,18 +1,9 @@
 import { SettingsLayout, type SettingsTab } from "@/components/admin/SettingsLayout";
 import { GuildSelect } from "@/components/forms";
+import { Loader } from "@/components/Loader";
 import { Toaster, toaster } from "@/components/ui/toaster";
 import { useAuth, useGalleryContext, useGuildSettings, useUpdateGuildSettings } from "@/hooks";
-import {
-  Button,
-  Field,
-  Flex,
-  HStack,
-  Input,
-  Spinner,
-  Switch,
-  Text,
-  VStack,
-} from "@chakra-ui/react";
+import { Button, Field, Flex, HStack, Input, Switch, Text, VStack } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_GUILD_SETTINGS, type GuildSettings } from "utils";
 
@@ -42,6 +33,10 @@ const NotificationSettings = ({
   };
 
   const handleChannelChange = (channelId: string) => {
+    // Only allow digits or empty string (Discord snowflake IDs are 17-19 digits)
+    if (channelId && !/^\d*$/.test(channelId)) {
+      return; // Ignore non-digit input
+    }
     onSettingsChange({
       ...settings,
       notifications: {
@@ -53,6 +48,18 @@ const NotificationSettings = ({
       },
     });
   };
+
+  // Validate channel ID format (17-19 digits)
+  const isChannelIdValid = (id: string | null): boolean => {
+    if (!id) return true; // Empty is valid (optional field)
+    return /^\d{17,19}$/.test(id);
+  };
+
+  const channelIdError =
+    settings.notifications.galleryExpiration.channelId &&
+    !isChannelIdValid(settings.notifications.galleryExpiration.channelId)
+      ? "Channel ID must be 17-19 digits"
+      : undefined;
 
   const handleDaysChange = (days: number) => {
     const validDays = Math.max(1, Math.min(30, days));
@@ -99,18 +106,22 @@ const NotificationSettings = ({
 
         {settings.notifications.galleryExpiration.enabled && (
           <>
-            <Field.Root>
+            <Field.Root invalid={!!channelIdError}>
               <Field.Label htmlFor="channelId">Discord Channel ID</Field.Label>
               <Input
                 id="channelId"
-                placeholder="Enter Discord channel ID"
+                placeholder="Enter Discord channel ID (17-19 digits)"
                 value={settings.notifications.galleryExpiration.channelId || ""}
                 onChange={(e) => handleChannelChange(e.target.value)}
                 disabled={isSaving}
               />
-              <Text fontSize="xs" color="gray.500" mt="1">
-                The channel where expiration notifications will be sent.
-              </Text>
+              {channelIdError ? (
+                <Field.ErrorText>{channelIdError}</Field.ErrorText>
+              ) : (
+                <Text fontSize="xs" color="gray.500" mt="1">
+                  The channel where expiration notifications will be sent.
+                </Text>
+              )}
             </Field.Root>
 
             <Field.Root>
@@ -155,7 +166,7 @@ const AdminSettingsPage = () => {
   const hasGuilds = userGuilds.length > 0;
 
   const { data: serverSettings, isLoading, error } = useGuildSettings(guildId);
-  const { updateSettings, isUpdating, error: updateError } = useUpdateGuildSettings(guildId);
+  const { updateSettings, isUpdating } = useUpdateGuildSettings(guildId);
 
   // Initialize guild from default when available
   useEffect(() => {
@@ -175,6 +186,9 @@ const AdminSettingsPage = () => {
   const onGuildChange = (selectedGuild: string) => {
     if (!hasGuilds) return;
     setGuildId(selectedGuild);
+    // Reset local settings when guild changes to avoid showing stale data
+    setLocalSettings(DEFAULT_GUILD_SETTINGS);
+    setHasChanges(false);
   };
 
   const handleSettingsChange = useCallback((newSettings: GuildSettings) => {
@@ -192,10 +206,11 @@ const AdminSettingsPage = () => {
         title: "Settings saved",
         description: "Your settings have been updated successfully.",
       });
-    } catch {
+    } catch (err) {
       toaster.error({
         title: "Error saving settings",
-        description: updateError?.message || "Failed to save settings. Please try again.",
+        description:
+          err instanceof Error ? err.message : "Failed to save settings. Please try again.",
       });
     }
   };
@@ -256,25 +271,16 @@ const AdminSettingsPage = () => {
               colorPalette="blue"
               onClick={handleSave}
               disabled={!hasChanges || isUpdating || !guildId}
+              loading={isUpdating}
+              loadingText="Saving..."
             >
-              {isUpdating ? (
-                <>
-                  <Spinner size="sm" />
-                  Saving...
-                </>
-              ) : (
-                "Save Changes"
-              )}
+              Save Changes
             </Button>
           </HStack>
         </HStack>
 
         {/* Loading state */}
-        {isLoading && (
-          <Flex w="full" h="200px" align="center" justify="center">
-            <Spinner size="lg" />
-          </Flex>
-        )}
+        {isLoading && <Loader text="Loading settings..." />}
 
         {/* Error state */}
         {error && !isLoading && (

@@ -2,13 +2,14 @@ import { DEFAULT_GUILD_SETTINGS, guildSettingsSchema, type GuildSettings } from 
 import redis from "../redis.ts";
 import { validateString } from "../utils.ts";
 
+// TTL for guild settings: 90 days (refreshed on read/write)
+const SETTINGS_TTL_SECONDS = 90 * 24 * 60 * 60;
+
 /**
  * Controller for managing guild settings in Redis.
  */
 export class GuildSettingsController {
-  private readonly keyPrefix = "guilds";
-
-  constructor() {}
+  private readonly keyPrefix = "guild";
 
   /**
    * Generates the Redis key for guild settings.
@@ -20,6 +21,7 @@ export class GuildSettingsController {
   /**
    * Retrieves the settings for a guild.
    * Returns default settings if no settings exist.
+   * Refreshes TTL on successful read.
    */
   getSettings = async (guildId: string): Promise<GuildSettings> => {
     const validatedGuildId = validateString(guildId, "guildId cannot be empty");
@@ -36,6 +38,8 @@ export class GuildSettingsController {
       // Validate and merge with defaults to ensure all fields exist
       const validated = guildSettingsSchema.safeParse(parsed);
       if (validated.success) {
+        // Refresh TTL on successful read
+        await redis.client.expire(key, SETTINGS_TTL_SECONDS);
         return validated.data;
       }
       // If validation fails, return defaults
@@ -48,6 +52,7 @@ export class GuildSettingsController {
 
   /**
    * Updates the settings for a guild.
+   * Sets TTL to ensure settings expire after period of inactivity.
    */
   updateSettings = async (guildId: string, settings: GuildSettings): Promise<GuildSettings> => {
     const validatedGuildId = validateString(guildId, "guildId cannot be empty");
@@ -57,6 +62,7 @@ export class GuildSettingsController {
 
     const key = this.getSettingsKey(validatedGuildId);
     await redis.client.set(key, JSON.stringify(validated));
+    await redis.client.expire(key, SETTINGS_TTL_SECONDS);
 
     return validated;
   };
