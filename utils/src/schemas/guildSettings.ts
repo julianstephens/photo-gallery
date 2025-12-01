@@ -1,11 +1,19 @@
 import { z } from "zod";
 
 /**
+ * Regex pattern for Discord snowflake IDs (17-19 digit numbers).
+ */
+const discordSnowflakePattern = /^\d{17,19}$/;
+
+/**
  * Notification settings for gallery expiration alerts.
  */
 export const galleryExpirationNotificationSchema = z.object({
   enabled: z.boolean(),
-  channelId: z.string().nullable(),
+  channelId: z
+    .string()
+    .regex(discordSnowflakePattern, "Invalid Discord channel ID format")
+    .nullable(),
   daysBefore: z.number().int().min(1).max(30),
 });
 

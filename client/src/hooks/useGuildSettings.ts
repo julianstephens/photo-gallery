@@ -1,10 +1,14 @@
 import { getGuildSettings, updateGuildSettings } from "@/queries";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type { GuildSettings } from "utils";
 import { useAuth } from "./useAuth";
 
 // 10 minutes in milliseconds - settings change infrequently
 const STALE_TIME = 10 * 60 * 1000;
+
+// Static error for unauthenticated users to avoid creating new Error on each render
+const UNAUTHENTICATED_ERROR = new Error("User not authenticated");
 
 /**
  * Hook to fetch guild settings.
@@ -20,12 +24,18 @@ export const useGuildSettings = (guildId: string | undefined) => {
     staleTime: STALE_TIME,
   });
 
-  if (!enabled) {
-    return {
+  // Memoize the disabled state result to prevent unnecessary re-renders
+  const disabledResult = useMemo(
+    () => ({
       data: null,
       isLoading: false,
-      error: !isAuthed ? new Error("User not authenticated") : null,
-    };
+      error: !isAuthed ? UNAUTHENTICATED_ERROR : null,
+    }),
+    [isAuthed],
+  );
+
+  if (!enabled) {
+    return disabledResult;
   }
 
   return {

@@ -121,7 +121,12 @@ const NotificationSettings = ({
                 min={1}
                 max={30}
                 value={settings.notifications.galleryExpiration.daysBefore}
-                onChange={(e) => handleDaysChange(parseInt(e.target.value, 10) || 7)}
+                onChange={(e) =>
+                  handleDaysChange(
+                    parseInt(e.target.value, 10) ||
+                      settings.notifications.galleryExpiration.daysBefore,
+                  )
+                }
                 disabled={isSaving}
               />
               <Text fontSize="xs" color="gray.500" mt="1">

@@ -37,11 +37,14 @@ const createReq = (overrides: Partial<Request> = {}) => {
   return req as Request;
 };
 
+// Valid Discord snowflake ID for testing (17-19 digits)
+const VALID_CHANNEL_ID = "123456789012345678";
+
 const validSettings: GuildSettings = {
   notifications: {
     galleryExpiration: {
       enabled: true,
-      channelId: "channel-123",
+      channelId: VALID_CHANNEL_ID,
       daysBefore: 5,
     },
   },

@@ -6,6 +6,9 @@ import { GuildSettingsController } from "./guildSettings.ts";
 // Mock redis
 vi.mock("../redis.ts", () => mockRedisModule());
 
+// Valid Discord snowflake ID for testing (17-19 digits)
+const VALID_CHANNEL_ID = "123456789012345678";
+
 describe("GuildSettingsController", () => {
   let controller: GuildSettingsController;
   let mockRedisClient: {
@@ -42,7 +45,7 @@ describe("GuildSettingsController", () => {
         notifications: {
           galleryExpiration: {
             enabled: true,
-            channelId: "channel-789",
+            channelId: VALID_CHANNEL_ID,
             daysBefore: 3,
           },
         },
@@ -107,7 +110,7 @@ describe("GuildSettingsController", () => {
         notifications: {
           galleryExpiration: {
             enabled: true,
-            channelId: "channel-abc",
+            channelId: VALID_CHANNEL_ID,
             daysBefore: 5,
           },
         },
