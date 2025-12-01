@@ -39,20 +39,14 @@ jobs:
               - 'package.json'
               - '.github/workflows/deploy.yml'
 
-  build-and-push:
-    name: Build and Push ${{ matrix.service }} Image
+  build-server:
+    name: Build and Push Server Image
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: |
-      (matrix.service == 'server' && needs.detect-changes.outputs.server == 'true') ||
-      (matrix.service == 'client' && needs.detect-changes.outputs.client == 'true')
+    if: needs.detect-changes.outputs.server == 'true'
     permissions:
       contents: read
       packages: write
-    strategy:
-      matrix:
-        service: [server, client]
-      max-parallel: 2
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -68,7 +62,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Server image
-        if: matrix.service == 'server'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -78,8 +71,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  build-client:
+    name: Build and Push Client Image
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.client == 'true'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Client image
-        if: matrix.service == 'client'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -92,32 +106,17 @@ jobs:
             VITE_API_URL=${{ secrets.VITE_API_URL }}
             VITE_LOG_LEVEL=${{ secrets.VITE_LOG_LEVEL }}
 
-  deploy:
-    name: Deploy ${{ matrix.service }} to Coolify
+  deploy-server:
+    name: Deploy Server to Coolify
     runs-on: ubuntu-latest
     needs:
       - detect-changes
-      - build-and-push
-    if: always()
+      - build-server
+    if: needs.detect-changes.outputs.server == 'true' && needs.build-server.result == 'success'
     permissions:
       contents: read
-    strategy:
-      matrix:
-        service: [server, client]
-      max-parallel: 2
     steps:
-      - name: Check build status
-        run: |
-          if [[ "${{ needs.build-and-push.result }}" == "failure" ]]; then
-            echo "Build job failed, skipping deployment"
-            exit 1
-          fi
-
       - name: Deploy Server to Coolify
-        if: |
-          matrix.service == 'server' &&
-          needs.detect-changes.outputs.server == 'true' &&
-          needs.build-and-push.result == 'success'
         env:
           COOLIFY_SERVER_WEBHOOK: ${{ secrets.COOLIFY_SERVER_WEBHOOK }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -129,11 +128,17 @@ jobs:
           curl --request GET "$COOLIFY_SERVER_WEBHOOK" \
                --header "Authorization: Bearer $COOLIFY_TOKEN"
 
+  deploy-client:
+    name: Deploy Client to Coolify
+    runs-on: ubuntu-latest
+    needs:
+      - detect-changes
+      - build-client
+    if: needs.detect-changes.outputs.client == 'true' && needs.build-client.result == 'success'
+    permissions:
+      contents: read
+    steps:
       - name: Deploy Client to Coolify
-        if: |
-          matrix.service == 'client' &&
-          needs.detect-changes.outputs.client == 'true' &&
-          needs.build-and-push.result == 'success'
         env:
           COOLIFY_CLIENT_WEBHOOK: ${{ secrets.COOLIFY_CLIENT_WEBHOOK }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
