@@ -814,6 +814,70 @@ export class GalleryController {
     await this.#bucketService.deleteBucketFolder(folderName);
   };
 
+  removeGalleryItems = async (guildId: string, galleryName: string, itemNames: string[]) => {
+    const validatedGuildId = validateString(guildId, "Guild ID is required");
+    const validatedName = validateString(galleryName, GalleryNameError);
+    const folderName = await this.getGalleryFolderName(validatedGuildId, validatedName);
+
+    if (!itemNames || itemNames.length === 0) {
+      throw new InvalidInputError("No items specified for deletion");
+    }
+
+    appLogger.info(
+      { guildId: validatedGuildId, galleryName: validatedName, itemCount: itemNames.length },
+      "[removeGalleryItems] Starting batch item deletion",
+    );
+
+    const deletedItems: string[] = [];
+    const failedItems: string[] = [];
+
+    for (const itemName of itemNames) {
+      try {
+        // Items are stored in the uploads subfolder
+        const objectPath = `uploads/${itemName}`;
+        await this.#bucketService.deleteObjectFromBucket(folderName, objectPath);
+
+        // Also delete gradient metadata for this item
+        const storageKey = `${folderName}/uploads/${itemName}`;
+        await this.#gradientMetaService.deleteGradient(storageKey);
+
+        deletedItems.push(itemName);
+        appLogger.debug(
+          { guildId: validatedGuildId, galleryName: validatedName, itemName },
+          "[removeGalleryItems] Successfully deleted item",
+        );
+      } catch (error) {
+        failedItems.push(itemName);
+        appLogger.error(
+          { error, guildId: validatedGuildId, galleryName: validatedName, itemName },
+          "[removeGalleryItems] Failed to delete item",
+        );
+      }
+    }
+
+    // Update gallery item count
+    if (deletedItems.length > 0) {
+      await this.decrementGalleryItemCount(validatedGuildId, validatedName, deletedItems.length);
+    }
+
+    appLogger.info(
+      {
+        guildId: validatedGuildId,
+        galleryName: validatedName,
+        deletedCount: deletedItems.length,
+        failedCount: failedItems.length,
+      },
+      "[removeGalleryItems] Batch item deletion completed",
+    );
+
+    return {
+      deletedCount: deletedItems.length,
+      failedCount: failedItems.length,
+      deletedItems,
+      failedItems,
+    };
+  };
+
   setDefaultGallery = async (body: SetDefaultGalleryRequest, userId: string) => {
     const validatedGuildId = validateString(body.guildId, "Guild ID is required");
     const validatedUserId = validateString(userId, "User ID is required");

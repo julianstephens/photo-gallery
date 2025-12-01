@@ -1,11 +1,13 @@
 import {
   createGallerySchema,
+  removeGalleryItemsSchema,
   removeGallerySchema,
   updateGalleryNameSchema,
   type CreateGalleryRequest,
   type Gallery,
   type GalleryItemResponse,
   type GalleryMeta,
+  type RemoveGalleryItemsRequest,
   type RemoveGalleryRequest,
   type UpdateGalleryNameRequest,
   type User,
@@ -67,6 +69,23 @@ export const setDefaultGallery = async (guildId: string, galleryName: string): P
 export const removeGallery = async (req: RemoveGalleryRequest): Promise<void> => {
   const body = removeGallerySchema.parse(req);
   await httpClient.delete("galleries", { data: body });
+};
+
+export interface RemoveGalleryItemsResponse {
+  deletedCount: number;
+  failedCount: number;
+  deletedItems: string[];
+  failedItems: string[];
+}
+
+export const removeGalleryItems = async (
+  req: RemoveGalleryItemsRequest,
+): Promise<RemoveGalleryItemsResponse> => {
+  const body = removeGalleryItemsSchema.parse(req);
+  const res = await httpClient.delete<RemoveGalleryItemsResponse>("galleries/items", {
+    data: body,
+  });
+  return res.data;
 };
 
 /**********************

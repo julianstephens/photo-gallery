@@ -42,6 +42,7 @@ galleryRouter.post("/galleries", requiresAdmin, handlers.createGallery);
 galleryRouter.post("/galleries/default", handlers.setDefaultGallery);
 galleryRouter.put("/galleries", requiresAdmin, handlers.updateGalleryName);
 galleryRouter.delete("/galleries", requiresAdmin, handlers.removeGallery);
+galleryRouter.delete("/galleries/items", requiresAdmin, handlers.removeGalleryItems);
 
 /**********************
  * GUILD ROUTES
