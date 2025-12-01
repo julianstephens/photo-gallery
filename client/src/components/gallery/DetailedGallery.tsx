@@ -73,6 +73,12 @@ export const DetailedGallery = ({
     setSelectedItems(new Set());
   }, []);
 
+  const handleCloseDeleteModal = useCallback(() => {
+    if (!isDeleting) {
+      setIsDeleteModalOpen(false);
+    }
+  }, [isDeleting]);
+
   const handleEnterSelectMode = useCallback(() => {
     setSelectMode(true);
   }, []);
@@ -242,7 +248,7 @@ export const DetailedGallery = ({
       />
       <ConfirmDeleteModal
         open={isDeleteModalOpen}
-        closeModal={isDeleting ? () => {} : () => setIsDeleteModalOpen(false)}
+        closeModal={handleCloseDeleteModal}
         actionButtonLoading={isDeleting}
         actionButtonOnClick={handleDeleteSelected}
       />
