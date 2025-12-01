@@ -107,7 +107,7 @@ function pollServerProgressWithWorker(
 }
 
 /**
- * Upload a single chunk with retry logic
+ * Upload a single chunk with retry logic and rate limit handling
  */
 async function uploadChunkWithRetry(
   uploadId: string,
@@ -132,12 +132,24 @@ async function uploadChunkWithRetry(
       lastError = error instanceof Error ? error : new Error(String(error));
       onError?.(lastError, index);
 
+      // Check for rate limit response (429) with Retry-After header
+      const isRateLimit = lastError.message?.includes("429");
+      const retryAfter = (error as Record<string, unknown>)?.retryAfterMs as number | undefined;
+
       if (attempt < maxRetries - 1) {
+        const delayMs = retryAfter || RETRY_DELAY_MS * Math.pow(2, attempt);
         logger.debug(
-          { uploadId, chunkIndex: index, attempt: attempt + 1, maxRetries },
+          {
+            uploadId,
+            chunkIndex: index,
+            attempt: attempt + 1,
+            maxRetries,
+            isRateLimit,
+            delayMs,
+          },
           "[upload] Retrying chunk upload",
         );
-        await delay(RETRY_DELAY_MS * Math.pow(2, attempt));
+        await delay(delayMs);
       }
     }
   }

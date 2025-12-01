@@ -134,12 +134,15 @@ export const UploadPhotosButton = ({
         "[UploadPhotosButton] Starting file uploads",
       );
 
-      const uploadPromises = validFiles.map(async (file) => {
+      // Limit concurrent uploads to 5 to avoid overwhelming the server and hitting rate limits
+      const MAX_CONCURRENT_UPLOADS = 5;
+      const uploadQueue = validFiles.map((file) => async () => {
         const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
         uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
 
         try {
           logger.debug({ uploadId, fileName: file.name }, "[UploadPhotosButton] Processing upload");
+          uploadProgressStore.startUpload(uploadId);
           await uploadFileInChunks(file, galleryName, guildId, (progress) => {
             uploadProgressStore.updateProgress(uploadId, progress);
           });
@@ -159,7 +162,43 @@ export const UploadPhotosButton = ({
         }
       });
 
-      const results = await Promise.allSettled(uploadPromises);
+      // Execute uploads with concurrency limit
+      const results: PromiseSettledResult<void>[] = [];
+      let activeCount = 0;
+      let queueIndex = 0;
+
+      await new Promise<void>((resolve) => {
+        const executeNext = async () => {
+          while (queueIndex < uploadQueue.length && activeCount < MAX_CONCURRENT_UPLOADS) {
+            activeCount++;
+            const currentIndex = queueIndex;
+            queueIndex++;
+
+            try {
+              await uploadQueue[currentIndex]();
+              results[currentIndex] = { status: "fulfilled", value: undefined };
+            } catch (error) {
+              results[currentIndex] = { status: "rejected", reason: error };
+            }
+
+            activeCount--;
+            if (queueIndex < uploadQueue.length) {
+              setImmediate(executeNext);
+            } else if (activeCount === 0) {
+              resolve();
+            }
+          }
+
+          if (activeCount === 0 && queueIndex >= uploadQueue.length) {
+            resolve();
+          }
+        };
+
+        for (let i = 0; i < Math.min(MAX_CONCURRENT_UPLOADS, uploadQueue.length); i++) {
+          setImmediate(executeNext);
+        }
+      });
+
       const failedCount = results.filter((r) => r.status === "rejected").length;
       const successCount = results.filter((r) => r.status === "fulfilled").length;
 
