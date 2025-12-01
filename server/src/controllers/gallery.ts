@@ -819,10 +819,6 @@ export class GalleryController {
     const validatedName = validateString(galleryName, GalleryNameError);
     const folderName = await this.getGalleryFolderName(validatedGuildId, validatedName);
 
-    if (!itemNames || itemNames.length === 0) {
-      throw new InvalidInputError("No items specified for deletion");
-    }
-
     appLogger.info(
       { guildId: validatedGuildId, galleryName: validatedName, itemCount: itemNames.length },
       "[removeGalleryItems] Starting batch item deletion",

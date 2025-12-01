@@ -105,15 +105,16 @@ export const DetailedGallery = ({
       // Exit select mode and clear selections
       setSelectMode(false);
       setSelectedItems(new Set());
+      setIsDeleteModalOpen(false);
     } catch (err) {
       logger.error({ error: err }, "Error deleting gallery items");
       toaster.error({
         title: "Deletion Error",
         description: "Failed to delete selected photos.",
       });
+      // Keep modal open on error so user can retry or cancel
     } finally {
       setIsDeleting(false);
-      setIsDeleteModalOpen(false);
     }
   };
 
