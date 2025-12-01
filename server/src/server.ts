@@ -93,11 +93,27 @@ export const createApp = () => {
 
   app.use(session(sess));
 
-  // CSRF protection
-  const { csrfSynchronisedProtection, generateToken } = csrfSync();
-  app.get("/api/csrf-token", (req, res) => {
-    res.json({ token: generateToken(req, true) });
+  // CSRF protection (csrf-sync):
+  // - Protects against Cross-Site Request Forgery attacks
+  // - Only applies to unsafe methods (POST, PUT, PATCH, DELETE) by default
+  // - Expects valid CSRF token in 'x-csrf-token' header or '_csrf' body param
+  // - Token is generated via GET /api/csrf-token endpoint
+  // - Clients must fetch token and include it in headers for state-changing requests
+  const { csrfSynchronisedProtection, generateToken } = csrfSync({
+    ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+    getTokenFromRequest: (req) => (req.headers["x-csrf-token"] as string) || req.body?._csrf,
+    size: 32,
   });
+
+  // The CSRF token endpoint is intentionally registered BEFORE the CSRF protection middleware.
+  // This allows clients to fetch a CSRF token without already having one.
+  // Any routes registered before `app.use(csrfSynchronisedProtection)` are NOT protected by CSRF middleware.
+  // Only add endpoints here if they must be exempt from CSRF protection.
+  app.get("/api/csrf-token", (req, res) => {
+    res.json({ token: generateToken(req) });
+  });
+
+  // All routes registered after this middleware are protected by CSRF.
   app.use(csrfSynchronisedProtection);
 
   app.use("/api", routers.healthRouter);
