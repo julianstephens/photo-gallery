@@ -32,11 +32,11 @@ export const SettingsLayout = ({
   backPath = "/admin",
 }: SettingsLayoutProps) => {
   const navigate = useNavigate();
+  const componentIdentifier = "settings-layout";
 
   return (
-    <VStack w="full" h="full" gap="6" align="stretch">
-      {/* Header */}
-      <HStack w="full" justify="space-between" align="center">
+    <VStack id={`${componentIdentifier}-container`} w="full" h="full" gap="6" align="stretch">
+      <HStack id={`${componentIdentifier}-header`} w="full" justify="space-between" align="center">
         <VStack align="start" gap="0">
           <Heading size="lg">{title}</Heading>
           {description && (
@@ -57,10 +57,9 @@ export const SettingsLayout = ({
         </Tooltip>
       </HStack>
 
-      {/* Main content area with sidebar */}
-      <HStack w="full" h="full" align="stretch" gap="6">
-        {/* Sidebar navigation */}
+      <HStack id={`${componentIdentifier}-main`} w="full" h="full" align="stretch" gap="6">
         <VStack
+          id={`${componentIdentifier}-sidebar`}
           w="220px"
           minW="200px"
           align="stretch"
@@ -96,8 +95,14 @@ export const SettingsLayout = ({
           ))}
         </VStack>
 
-        {/* Content area */}
-        <Box flex="1" p="6" bg="gray.900" borderRadius="md" overflow="auto">
+        <Box
+          id={`${componentIdentifier}-content`}
+          flex="1"
+          p="6"
+          bg="gray.900"
+          borderRadius="md"
+          overflow="auto"
+        >
           {tabs.find((tab) => tab.id === activeTabId)?.content}
         </Box>
       </HStack>

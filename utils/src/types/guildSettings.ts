@@ -25,7 +25,7 @@ export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
     galleryExpiration: {
       enabled: false,
       channelId: null,
-      daysBefore: 7,
+      daysBefore: 3,
     },
   },
 };
