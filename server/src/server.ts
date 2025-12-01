@@ -1,8 +1,8 @@
-import express from "express";
 import { csrfSync } from "csrf-sync";
+import express from "express";
 import session from "express-session";
 import { errorHandler, notFoundHandler } from "./middleware/errors.ts";
-import { httpLogger } from "./middleware/logger.ts";
+import { appLogger, httpLogger } from "./middleware/logger.ts";
 import { lokiProxy } from "./middleware/lokiProxy.ts";
 import { setupMetrics } from "./middleware/metrics.ts";
 import { apiRateLimiter, authRateLimiter, lokiRateLimiter } from "./middleware/rateLimit.ts";
@@ -110,16 +110,36 @@ export const createApp = () => {
   // Any routes registered before `app.use(csrfSynchronisedProtection)` are NOT protected by CSRF middleware.
   // Only add endpoints here if they must be exempt from CSRF protection.
   app.get("/api/csrf-token", (req, res) => {
-    res.json({ token: generateToken(req) });
+    const token = generateToken(req);
+    appLogger.debug({ sessionId: req.sessionID }, "[csrf-token] Generated CSRF token");
+    res.json({ token });
   });
 
   // Health endpoints are intentionally registered BEFORE CSRF protection to ensure they are always accessible to external systems.
   app.use("/api", routers.healthRouter);
 
-  // All routes registered after this middleware are protected by CSRF.
-  app.use(csrfSynchronisedProtection);
-  // Loki log proxy (client-side logging - mounted FIRST before other /api routes to take precedence)
+  // Loki log proxy (client-side logging - exempt from CSRF since it's stateless and doesn't mutate user data).
+  // Mounted BEFORE CSRF middleware to bypass protection, and BEFORE other /api routes for precedence.
   app.use("/api/loki", lokiRateLimiter, lokiProxy);
+
+  // CSRF protection with logging middleware wrapper
+  app.use((req, res, next) => {
+    const methodsRequiringCsrf = ["post", "put", "patch", "delete"];
+    if (methodsRequiringCsrf.includes(req.method.toLowerCase())) {
+      const csrfTokenHeader = req.headers["x-csrf-token"];
+      const csrfTokenBody = req.body?._csrf;
+      appLogger.debug(
+        {
+          method: req.method,
+          path: req.path,
+          hasHeader: !!csrfTokenHeader,
+          hasBody: !!csrfTokenBody,
+        },
+        "[csrf] Validating token for request",
+      );
+    }
+    csrfSynchronisedProtection(req, res, next);
+  });
 
   // API routes with scoped rate limits
   app.use("/api/auth", authRateLimiter);
