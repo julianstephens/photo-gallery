@@ -12,6 +12,14 @@ vi.mock("../controllers/index.ts", () => ({
   }),
 }));
 
+vi.mock("../middleware/responseCache.ts", () => ({
+  invalidateDefaultGuildCache: vi.fn().mockResolvedValue(undefined),
+  invalidateGalleriesCache: vi.fn().mockResolvedValue(undefined),
+  defaultGuildCache: vi.fn(),
+  galleriesCache: vi.fn(),
+  createResponseCache: vi.fn(),
+}));
+
 const handlers = await import("./guild.ts");
 const { getDefaultGuild, setDefaultGuild } = handlers;
 
