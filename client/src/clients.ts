@@ -83,7 +83,7 @@ const createHttpClient = (baseURL: string) => {
       if (error.response?.status === 403 && !config._csrfRetried && isCsrfError(error)) {
         csrfToken = null;
         tokenFetchPromise = null; // Clear any pending fetch
-        csrfToken = await getCsrfToken();
+        await getCsrfToken();
         if (!csrfToken) {
           // Token fetch failed, don't retry
           return Promise.reject(error);
