@@ -136,9 +136,17 @@ export const UploadPhotosButton = ({
 
       // Limit concurrent uploads to 5 to avoid overwhelming the server and hitting rate limits
       const MAX_CONCURRENT_UPLOADS = 5;
-      const uploadQueue = validFiles.map((file) => async () => {
-        const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
+
+      // Create upload IDs and add all uploads to the store upfront so queued items are visible
+      const uploadIds = validFiles.map(
+        () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      );
+      uploadIds.forEach((uploadId, index) => {
+        uploadProgressStore.addUpload(uploadId, validFiles[index].name, galleryName, guildId);
+      });
+
+      const uploadQueue = validFiles.map((file, index) => async () => {
+        const uploadId = uploadIds[index];
 
         try {
           logger.debug({ uploadId, fileName: file.name }, "[UploadPhotosButton] Processing upload");
@@ -183,7 +191,7 @@ export const UploadPhotosButton = ({
 
             activeCount--;
             if (queueIndex < uploadQueue.length) {
-              setImmediate(executeNext);
+              setTimeout(executeNext, 0);
             } else if (activeCount === 0) {
               resolve();
             }
@@ -195,7 +203,7 @@ export const UploadPhotosButton = ({
         };
 
         for (let i = 0; i < Math.min(MAX_CONCURRENT_UPLOADS, uploadQueue.length); i++) {
-          setImmediate(executeNext);
+          setTimeout(executeNext, 0);
         }
       });
 
@@ -237,13 +245,15 @@ export const UploadPhotosButton = ({
           queryKey: ["galleryItems", { guildId, galleryName }],
         });
         // Refetch the specific gallery to update photo count in DetailedGallery
-        await queryClient.refetchQueries({
+        await queryClient.invalidateQueries({
           queryKey: ["gallery", { guildId, galleryName }],
-          type: "active",
         });
       }
     } catch (error) {
-      logger.error({ err: error }, "[UploadPhotosButton] Error uploading files");
+      logger.error(
+        { err: error, errorMessage: error instanceof Error ? error.message : String(error) },
+        "[UploadPhotosButton] Error uploading files",
+      );
     } finally {
       setIsLoading(false);
       setUploadProgress(null);

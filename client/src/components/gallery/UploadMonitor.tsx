@@ -57,9 +57,8 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
     });
 
     setTimeout(() => {
-      for (const upload of removable) {
-        uploadProgressStore.removeUpload(upload.id);
-      }
+      // Use the store's optimized clearCompleted method instead of removing one by one
+      uploadProgressStore.clearCompleted();
       setClearingIds((prev) => {
         const next = new Set(prev);
         for (const upload of removable) {
