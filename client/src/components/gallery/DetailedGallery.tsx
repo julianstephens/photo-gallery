@@ -251,6 +251,7 @@ export const DetailedGallery = ({
         closeModal={handleCloseDeleteModal}
         actionButtonLoading={isDeleting}
         actionButtonOnClick={handleDeleteSelected}
+        itemCount={selectedItems.size}
       />
     </>
   );
