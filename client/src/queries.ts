@@ -12,7 +12,6 @@ import {
 } from "utils";
 import { API_BASE_URL, httpClient } from "./clients";
 import { logger } from "./lib/logger";
-import type { Axios } from "axios";
 
 /**********************
  * GALLERY QUERIES
@@ -136,14 +135,4 @@ export const logout = async () => {
 export const getCurrentUser = async () => {
   const { data } = await httpClient.get<User>("auth/me");
   return data;
-};
-
-export const fetchCsrfToken = async (instance: Axios) => {
-  try {
-    const { data } = await instance.get<{ token: string }>("/csrf-token");
-    return data.token;
-  } catch (error) {
-    logger.error({ error }, "[queries] Failed to fetch CSRF token");
-    return null;
-  }
 };
