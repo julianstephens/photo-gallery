@@ -129,28 +129,102 @@ export const UploadPhotosButton = ({
     try {
       setHasActiveUploads(true);
       updateUploadMonitorVisibility(true);
-      const uploadPromises = validFiles.map(async (file) => {
-        const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-        uploadProgressStore.addUpload(uploadId, file.name, galleryName, guildId);
+      logger.info(
+        { fileCount: validFiles.length, galleryName, guildId },
+        "[UploadPhotosButton] Starting file uploads",
+      );
+
+      // Limit concurrent uploads to 5 to avoid overwhelming the server and hitting rate limits
+      const MAX_CONCURRENT_UPLOADS = 5;
+
+      // Create upload IDs and add all uploads to the store upfront so queued items are visible
+      const uploadIds = validFiles.map(
+        () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      );
+      uploadIds.forEach((uploadId, index) => {
+        uploadProgressStore.addUpload(uploadId, validFiles[index].name, galleryName, guildId);
+      });
+
+      const uploadQueue = validFiles.map((file, index) => async () => {
+        const uploadId = uploadIds[index];
 
         try {
+          logger.debug({ uploadId, fileName: file.name }, "[UploadPhotosButton] Processing upload");
+          uploadProgressStore.startUpload(uploadId);
           await uploadFileInChunks(file, galleryName, guildId, (progress) => {
             uploadProgressStore.updateProgress(uploadId, progress);
           });
           uploadProgressStore.completeUpload(uploadId);
+          logger.debug({ uploadId, fileName: file.name }, "[UploadPhotosButton] Upload completed");
         } catch (error) {
           let errMsg = "An error occurred during the upload.";
           if (error instanceof AxiosError) {
             errMsg = error.response?.data?.error || errMsg;
           }
           uploadProgressStore.failUpload(uploadId, errMsg);
+          logger.error(
+            { uploadId, fileName: file.name, error: errMsg },
+            "[UploadPhotosButton] Upload failed",
+          );
           throw error;
         }
       });
 
-      const results = await Promise.allSettled(uploadPromises);
+      // Execute uploads with concurrency limit
+      const results: PromiseSettledResult<void>[] = [];
+      let activeCount = 0;
+      let queueIndex = 0;
+
+      await new Promise<void>((resolve) => {
+        const executeNext = async () => {
+          while (queueIndex < uploadQueue.length && activeCount < MAX_CONCURRENT_UPLOADS) {
+            activeCount++;
+            const currentIndex = queueIndex;
+            queueIndex++;
+
+            try {
+              await uploadQueue[currentIndex]();
+              results[currentIndex] = { status: "fulfilled", value: undefined };
+            } catch (error) {
+              results[currentIndex] = { status: "rejected", reason: error };
+            }
+
+            activeCount--;
+
+            // After each upload completes, invalidate the gallery queries to show updated counts
+            if (guildId && results[currentIndex].status === "fulfilled") {
+              queryClient.invalidateQueries({
+                queryKey: ["galleries", { guildId }],
+              });
+              queryClient.invalidateQueries({
+                queryKey: ["gallery", { guildId, galleryName }],
+              });
+            }
+
+            if (queueIndex < uploadQueue.length) {
+              setTimeout(executeNext, 0);
+            } else if (activeCount === 0) {
+              resolve();
+            }
+          }
+
+          if (activeCount === 0 && queueIndex >= uploadQueue.length) {
+            resolve();
+          }
+        };
+
+        for (let i = 0; i < Math.min(MAX_CONCURRENT_UPLOADS, uploadQueue.length); i++) {
+          setTimeout(executeNext, 0);
+        }
+      });
+
       const failedCount = results.filter((r) => r.status === "rejected").length;
       const successCount = results.filter((r) => r.status === "fulfilled").length;
+
+      logger.info(
+        { successCount, failedCount, galleryName, guildId },
+        "[UploadPhotosButton] Upload batch completed",
+      );
 
       if (failedCount === 0) {
         toaster.success({
@@ -169,26 +243,25 @@ export const UploadPhotosButton = ({
         });
       }
 
-      // Refetch gallery list to update totalItems count
+      // Refetch gallery list to update totalItems count (final refresh after all uploads)
       if (guildId) {
-        // Refetch the galleries list to get updated metadata
+        logger.debug({ guildId, galleryName }, "[UploadPhotosButton] Final gallery data refresh");
+        // Do a final refetch to ensure gallery list is up to date
         await queryClient.refetchQueries({
           queryKey: ["galleries", { guildId }],
           type: "active",
         });
-        // Also refetch gallery items for this specific gallery
+        // Final refresh for gallery items
         await queryClient.refetchQueries({
           queryKey: ["galleryItems", { guildId, galleryName }],
           type: "active",
         });
-        // Refetch the specific gallery to update photo count in DetailedGallery
-        await queryClient.refetchQueries({
-          queryKey: ["gallery", { guildId, galleryName }],
-          type: "active",
-        });
       }
     } catch (error) {
-      logger.error({ err: error }, "[UploadPhotosButton] Error uploading files");
+      logger.error(
+        { err: error, errorMessage: error instanceof Error ? error.message : String(error) },
+        "[UploadPhotosButton] Error uploading files",
+      );
     } finally {
       setIsLoading(false);
       setUploadProgress(null);

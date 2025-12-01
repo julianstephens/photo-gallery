@@ -11,12 +11,12 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-deploy:
+  detect-changes:
+    name: Detect Changes
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      client: ${{ steps.filter.outputs.client }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -39,6 +39,18 @@ jobs:
               - 'package.json'
               - '.github/workflows/deploy.yml'
 
+  build-server:
+    name: Build and Push Server Image
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.server == 'true'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
@@ -50,7 +62,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Server image
-        if: steps.filter.outputs.server == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -60,8 +71,29 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  build-client:
+    name: Build and Push Client Image
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.client == 'true'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push Client image
-        if: steps.filter.outputs.client == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -74,20 +106,46 @@ jobs:
             VITE_API_URL=${{ secrets.VITE_API_URL }}
             VITE_LOG_LEVEL=${{ secrets.VITE_LOG_LEVEL }}
 
+  deploy-server:
+    name: Deploy Server to Coolify
+    runs-on: ubuntu-latest
+    needs:
+      - detect-changes
+      - build-server
+    if: needs.detect-changes.outputs.server == 'true' && needs.build-server.result == 'success'
+    permissions:
+      contents: read
+    steps:
       - name: Deploy Server to Coolify
-        if: ${{ steps.filter.outputs.server == 'true' && env.COOLIFY_SERVER_WEBHOOK != '' }}
         env:
           COOLIFY_SERVER_WEBHOOK: ${{ secrets.COOLIFY_SERVER_WEBHOOK }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
+          if [ -z "$COOLIFY_SERVER_WEBHOOK" ]; then
+            echo "Warning: COOLIFY_SERVER_WEBHOOK not set, skipping deployment"
+            exit 0
+          fi
           curl --request GET "$COOLIFY_SERVER_WEBHOOK" \
                --header "Authorization: Bearer $COOLIFY_TOKEN"
 
+  deploy-client:
+    name: Deploy Client to Coolify
+    runs-on: ubuntu-latest
+    needs:
+      - detect-changes
+      - build-client
+    if: needs.detect-changes.outputs.client == 'true' && needs.build-client.result == 'success'
+    permissions:
+      contents: read
+    steps:
       - name: Deploy Client to Coolify
-        if: ${{ steps.filter.outputs.client == 'true' && env.COOLIFY_CLIENT_WEBHOOK != '' }}
         env:
           COOLIFY_CLIENT_WEBHOOK: ${{ secrets.COOLIFY_CLIENT_WEBHOOK }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
+          if [ -z "$COOLIFY_CLIENT_WEBHOOK" ]; then
+            echo "Warning: COOLIFY_CLIENT_WEBHOOK not set, skipping deployment"
+            exit 0
+          fi
           curl --request GET "$COOLIFY_CLIENT_WEBHOOK" \
                --header "Authorization: Bearer $COOLIFY_TOKEN"

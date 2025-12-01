@@ -1,3 +1,4 @@
+import { csrfSync } from "csrf-sync";
 import express from "express";
 import session from "express-session";
 import { errorHandler, notFoundHandler } from "./middleware/errors.ts";
@@ -92,10 +93,38 @@ export const createApp = () => {
 
   app.use(session(sess));
 
+  // CSRF protection (csrf-sync):
+  // - Protects against Cross-Site Request Forgery attacks
+  // - Only applies to unsafe methods (POST, PUT, PATCH, DELETE) by default
+  // - Expects valid CSRF token in 'x-csrf-token' header or '_csrf' body param
+  // - Token is generated via GET /api/csrf-token endpoint
+  // - Clients must fetch token and include it in headers for state-changing requests
+  const { csrfSynchronisedProtection, generateToken } = csrfSync({
+    ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+    getTokenFromRequest: (req) => (req.headers["x-csrf-token"] as string) || req.body?._csrf,
+    size: 32,
+  });
+
+  // The CSRF token endpoint is intentionally registered BEFORE the CSRF protection middleware.
+  // This allows clients to fetch a CSRF token without already having one.
+  // Any routes registered before `app.use(csrfSynchronisedProtection)` are NOT protected by CSRF middleware.
+  // Only add endpoints here if they must be exempt from CSRF protection.
+  app.get("/api/csrf-token", (req, res) => {
+    const token = generateToken(req);
+    res.json({ token });
+  });
+
+  // Health endpoints are intentionally registered BEFORE CSRF protection to ensure they are always accessible to external systems.
   app.use("/api", routers.healthRouter);
 
-  // Loki log proxy (client-side logging - mounted FIRST before other /api routes to take precedence)
+  // Loki log proxy (client-side logging - exempt from CSRF since it's stateless and doesn't mutate user data).
+  // Mounted BEFORE CSRF middleware to bypass protection, and BEFORE other /api routes for precedence.
   app.use("/api/loki", lokiRateLimiter, lokiProxy);
+
+  // CSRF protection
+  app.use((req, res, next) => {
+    csrfSynchronisedProtection(req, res, next);
+  });
 
   // API routes with scoped rate limits
   app.use("/api/auth", authRateLimiter);

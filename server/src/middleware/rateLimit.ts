@@ -41,10 +41,13 @@ export const apiRateLimiter: RateLimitRequestHandler = rateLimit({
   handler: createRateLimitHandler(),
 });
 
-// Lenient limiter for chunked uploads (5 min window, 500 reqs per IP)
+// Lenient limiter for chunked uploads (5 min window, 1200 reqs per IP)
+// For 50 concurrent files: each file = ~3 requests (initiate + finalize + at least 1 chunk)
+// 50 files * ~3 requests = 150 requests for a full 5-file batch, but with retries and multiple
+// batch uploads, 1200 allows for flexibility while still rate-limiting abuse.
 export const uploadRateLimiter: RateLimitRequestHandler = rateLimit({
   windowMs: 5 * 60 * 1000,
-  max: 500,
+  max: 1200,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   validate: { trustProxy: true },

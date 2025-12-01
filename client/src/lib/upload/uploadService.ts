@@ -1,4 +1,5 @@
 import { API_BASE_URL, httpClient } from "@/clients.ts";
+import { logger } from "@/lib/logger";
 import type { UploadProgress } from "utils";
 import { chunkedUpload } from "./chunkedUpload";
 
@@ -67,6 +68,11 @@ export const uploadFileInChunks = async (
   onProgress: (progress: number) => void,
 ) => {
   try {
+    logger.info(
+      { fileName: file.name, galleryName, guildId },
+      "[uploadService] Starting file upload",
+    );
+
     const result = await chunkedUpload(file, {
       galleryName,
       guildId,
@@ -84,13 +90,22 @@ export const uploadFileInChunks = async (
     onProgress(100);
 
     if (!result.success) {
+      logger.error({ fileName: file.name, error: result.error }, "[uploadService] Upload failed");
       throw new Error(result.error || "Upload failed");
     }
 
+    logger.info(
+      { fileName: file.name, filePath: result.filePath },
+      "[uploadService] Upload completed successfully",
+    );
     return result;
   } catch (error) {
     // Set progress to 100% on error to show 'complete but errored' state
     onProgress(100);
+    logger.error(
+      { fileName: file.name, error: error instanceof Error ? error.message : String(error) },
+      "[uploadService] Upload error",
+    );
     throw error;
   }
 };

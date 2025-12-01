@@ -19,7 +19,7 @@ export interface ActiveUpload {
   galleryName: string;
   guildId: string;
   progress: number; // 0-100
-  status: "uploading" | "completed" | "failed";
+  status: "queued" | "uploading" | "completed" | "failed";
   error?: string;
   startTime: number;
   completedTime?: number;
@@ -159,7 +159,7 @@ class UploadProgressStore {
       galleryName,
       guildId,
       progress: 0,
-      status: "uploading",
+      status: "queued",
       startTime: Date.now(),
       seen: false,
     });
@@ -174,6 +174,15 @@ class UploadProgressStore {
       this.notifyListeners();
       // Use debounced persistence for frequent progress updates
       this.persistStateDebounced();
+    }
+  }
+
+  startUpload(id: string): void {
+    const upload = this.uploads.get(id);
+    if (upload) {
+      upload.status = "uploading";
+      this.notifyListeners();
+      this.persistState();
     }
   }
 
@@ -223,7 +232,7 @@ class UploadProgressStore {
   clearCompleted(): void {
     const uploadsToRemove: string[] = [];
     for (const upload of this.uploads.values()) {
-      if (upload.status !== "uploading") {
+      if (upload.status !== "uploading" && upload.status !== "queued") {
         uploadsToRemove.push(upload.id);
         // Mark as seen in storage directly
         if (this.persistenceConfig?.enabled && this.persistenceConfig.userId) {

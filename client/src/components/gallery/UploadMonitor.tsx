@@ -43,7 +43,9 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
   }, []);
 
   const handleClearAll = () => {
-    const removable = uploads.filter((upload) => upload.status !== "uploading");
+    const removable = uploads.filter(
+      (upload) => upload.status !== "uploading" && upload.status !== "queued",
+    );
     if (removable.length === 0) return;
 
     setClearingIds((prev) => {
@@ -55,9 +57,8 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
     });
 
     setTimeout(() => {
-      for (const upload of removable) {
-        uploadProgressStore.removeUpload(upload.id);
-      }
+      // Use the store's optimized clearCompleted method instead of removing one by one
+      uploadProgressStore.clearCompleted();
       setClearingIds((prev) => {
         const next = new Set(prev);
         for (const upload of removable) {
@@ -69,7 +70,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
   };
 
   const handleClearSingle = (upload: ActiveUpload) => {
-    if (upload.status === "uploading") return;
+    if (upload.status === "uploading" || upload.status === "queued") return;
 
     setClearingIds((prev) => {
       const next = new Set(prev);
@@ -209,6 +210,11 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
                 </VStack>
 
                 <HStack gap={1}>
+                  {upload.status === "queued" && (
+                    <Badge colorPalette="gray" variant="subtle">
+                      Queued
+                    </Badge>
+                  )}
                   {upload.status === "uploading" && (
                     <Badge colorPalette="blue" variant="subtle">
                       <Spinner size="xs" mr={1} />
@@ -231,7 +237,11 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
                     aria-label={`Clear ${upload.fileName}`}
                     size="xs"
                     variant="ghost"
-                    disabled={upload.status === "uploading" || clearingIds.has(upload.id)}
+                    disabled={
+                      upload.status === "uploading" ||
+                      upload.status === "queued" ||
+                      clearingIds.has(upload.id)
+                    }
                     onClick={() => handleClearSingle(upload)}
                   >
                     <HiXMark />
@@ -247,11 +257,13 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
                 striped={upload.status === "uploading"}
                 animated={upload.status === "uploading"}
                 colorPalette={
-                  upload.status === "uploading"
-                    ? "blue"
-                    : upload.status === "completed"
-                      ? "green"
-                      : "red"
+                  upload.status === "queued"
+                    ? "gray"
+                    : upload.status === "uploading"
+                      ? "blue"
+                      : upload.status === "completed"
+                        ? "green"
+                        : "red"
                 }
               >
                 <Progress.Track>

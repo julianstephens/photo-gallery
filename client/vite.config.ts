@@ -12,7 +12,6 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": process.env.VITE_API_URL || "http://localhost:3000",
-      "/media": process.env.VITE_API_URL || "http://localhost:3000",
     },
     allowedHosts: [
       "localhost",
