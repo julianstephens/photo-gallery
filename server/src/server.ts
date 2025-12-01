@@ -1,4 +1,5 @@
 import express from "express";
+import { csrfSync } from "csrf-sync";
 import session from "express-session";
 import { errorHandler, notFoundHandler } from "./middleware/errors.ts";
 import { httpLogger } from "./middleware/logger.ts";
@@ -92,8 +93,31 @@ export const createApp = () => {
 
   app.use(session(sess));
 
+  // CSRF protection (csrf-sync):
+  // - Protects against Cross-Site Request Forgery attacks
+  // - Only applies to unsafe methods (POST, PUT, PATCH, DELETE) by default
+  // - Expects valid CSRF token in 'x-csrf-token' header or '_csrf' body param
+  // - Token is generated via GET /api/csrf-token endpoint
+  // - Clients must fetch token and include it in headers for state-changing requests
+  const { csrfSynchronisedProtection, generateToken } = csrfSync({
+    ignoredMethods: ["GET", "HEAD", "OPTIONS"],
+    getTokenFromRequest: (req) => (req.headers["x-csrf-token"] as string) || req.body?._csrf,
+    size: 32,
+  });
+
+  // The CSRF token endpoint is intentionally registered BEFORE the CSRF protection middleware.
+  // This allows clients to fetch a CSRF token without already having one.
+  // Any routes registered before `app.use(csrfSynchronisedProtection)` are NOT protected by CSRF middleware.
+  // Only add endpoints here if they must be exempt from CSRF protection.
+  app.get("/api/csrf-token", (req, res) => {
+    res.json({ token: generateToken(req) });
+  });
+
+  // Health endpoints are intentionally registered BEFORE CSRF protection to ensure they are always accessible to external systems.
   app.use("/api", routers.healthRouter);
 
+  // All routes registered after this middleware are protected by CSRF.
+  app.use(csrfSynchronisedProtection);
   // Loki log proxy (client-side logging - mounted FIRST before other /api routes to take precedence)
   app.use("/api/loki", lokiRateLimiter, lokiProxy);
 

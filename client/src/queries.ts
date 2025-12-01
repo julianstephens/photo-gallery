@@ -85,10 +85,6 @@ export const setDefaultGuild = async (guildId: string): Promise<void> => {
 };
 
 /**********************
- * UPLOAD QUERIES
- **********************/
-
-/**********************
  * AUTH QUERIES
  **********************/
 

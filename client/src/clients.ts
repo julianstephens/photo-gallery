@@ -1,5 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import axios, { AxiosError, type AxiosInstance } from "axios";
+import { fetchCsrfToken } from "./lib/csrf";
 
 type RetriableAxiosError = AxiosError & { retryAfterMs?: number };
 
@@ -28,6 +29,76 @@ const createHttpClient = (baseURL: string) => {
     withCredentials: true,
   });
   attachRetryAfterInterceptor(instance);
+
+  let csrfToken: string | null = null;
+  let tokenFetchPromise: Promise<string | null> | null = null;
+
+  // Deduplicated token fetch to prevent race conditions with concurrent requests
+  const getCsrfToken = async (): Promise<string | null> => {
+    if (csrfToken) return csrfToken;
+    if (tokenFetchPromise) return tokenFetchPromise;
+
+    tokenFetchPromise = fetchCsrfToken(instance);
+    csrfToken = await tokenFetchPromise;
+    tokenFetchPromise = null;
+    return csrfToken;
+  };
+
+  instance.interceptors.request.use(
+    async (config) => {
+      const methodsRequiringCsrf = ["post", "put", "patch", "delete"];
+      if (config.method && methodsRequiringCsrf.includes(config.method.toLowerCase())) {
+        const token = await getCsrfToken();
+        if (token) {
+          config.headers["x-csrf-token"] = token;
+        }
+      }
+      return config;
+    },
+    (error) => Promise.reject(error),
+  );
+
+  // Helper to detect CSRF-specific 403 errors.
+  // csrf-sync uses error code "EBADCSRFTOKEN" or includes "csrf" in error message.
+  function isCsrfError(error: AxiosError): boolean {
+    const data = error.response?.data as { error?: string; code?: string } | undefined;
+    // Prefer checking for specific error code (used by csrf-sync and similar libraries)
+    if (typeof data?.code === "string" && data.code === "EBADCSRFTOKEN") {
+      return true;
+    }
+    // Fallback: check for "csrf" in the error message
+    if (typeof data?.error === "string" && data.error.toLowerCase().includes("csrf")) {
+      return true;
+    }
+    return false;
+  }
+
+  // Handle CSRF token invalidation on CSRF-specific 403 responses
+  instance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      // _csrfRetried is a runtime property to prevent infinite CSRF retry loops; not part of Axios config type.
+      const config = error.config as typeof error.config & { _csrfRetried?: boolean };
+      // Only retry if 403 is due to CSRF token failure
+      if (error.response?.status === 403 && !config._csrfRetried && isCsrfError(error)) {
+        csrfToken = null;
+        tokenFetchPromise = null; // Clear any pending fetch
+        await getCsrfToken();
+        if (!csrfToken) {
+          // Token fetch failed, don't retry
+          return Promise.reject(error);
+        }
+        const retryConfig = {
+          ...error.config,
+          _csrfRetried: true,
+        } as typeof error.config & { _csrfRetried: boolean };
+        retryConfig.headers = { ...retryConfig.headers, "x-csrf-token": csrfToken };
+        return instance.request(retryConfig);
+      }
+      return Promise.reject(error);
+    },
+  );
+
   if (needsAbsolutePathNormalization(baseURL)) {
     instance.interceptors.request.use((config) => {
       if (typeof config.url === "string" && config.url.startsWith("/")) {
