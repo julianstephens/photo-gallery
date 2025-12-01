@@ -37,6 +37,7 @@ export const BlurredImage = ({
   objectFit = "cover",
   borderRadius,
 }: BlurredImageProps) => {
+  const componentIdentifier = "blurred-image";
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [blurError, setBlurError] = useState(false);
@@ -73,6 +74,7 @@ export const BlurredImage = ({
 
   return (
     <Box
+      id={componentIdentifier}
       position="relative"
       width={width}
       height={height}
@@ -83,6 +85,7 @@ export const BlurredImage = ({
       {/* Blurred placeholder layer (if available) */}
       {showBlurPlaceholder && (
         <Image
+          id={`${componentIdentifier}-blur-placeholder`}
           position="absolute"
           top={0}
           left={0}
@@ -102,6 +105,7 @@ export const BlurredImage = ({
       {/* Full resolution image */}
       {!hasError && (
         <Image
+          id={`${componentIdentifier}-full-image`}
           position="absolute"
           top={0}
           left={0}

@@ -12,7 +12,7 @@ import { TbCheckbox, TbSquare, TbSquareCheck } from "react-icons/tb";
 import { Gallery as GalleryDisplay } from "./Gallery";
 
 interface DetailedGalleryProps {
-  pageSlug: string;
+  componentIdentifier: string;
   galleryName: string;
   guildId: string;
   closeGallery: () => void;
@@ -20,7 +20,7 @@ interface DetailedGalleryProps {
 
 export const DetailedGallery = ({
   galleryName,
-  pageSlug,
+  componentIdentifier,
   guildId,
   closeGallery,
 }: DetailedGalleryProps) => {
@@ -147,7 +147,7 @@ export const DetailedGallery = ({
   return (
     <>
       <HStack
-        id={`${pageSlug}-detailed-gallery-header`}
+        id={`${componentIdentifier}-detailed-gallery-header`}
         w="full"
         justify="space-between"
         align="center"
@@ -163,7 +163,7 @@ export const DetailedGallery = ({
           >
             <HiArrowLongLeft /> {selectMode ? "Exit select mode" : "Back to galleries"}
           </Button>
-          <VStack align="start" gap="0.5">
+          <VStack id={`${componentIdentifier}-detailed-gallery-meta`} align="start" gap="0.5">
             <Heading size="xs">{gallery.name}</Heading>
             <Text fontSize="sm" color="gray.500">
               Created: {new Date(gallery.meta.createdAt).toLocaleDateString()}
@@ -177,7 +177,7 @@ export const DetailedGallery = ({
             </Text>
           </VStack>
         </VStack>
-        <HStack gap="2">
+        <HStack id={`${componentIdentifier}-detailed-gallery-actions`} gap="2">
           {selectMode ? (
             <>
               <Button variant="outline" onClick={handleSelectAll}>

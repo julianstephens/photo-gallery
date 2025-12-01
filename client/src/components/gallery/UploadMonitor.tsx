@@ -32,6 +32,7 @@ export interface UploadMonitorProps {
 }
 
 export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps) => {
+  const componentIdentifier = "upload-monitor";
   const [uploads, setUploads] = useState<ActiveUpload[]>([]);
   const [clearingIds, setClearingIds] = useState<Set<string>>(new Set());
 
@@ -107,7 +108,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
 
   return (
     <Box
-      id="upload-monitor"
+      id={`${componentIdentifier}-container`}
       position="fixed"
       bottom="1rem"
       right="1rem"
@@ -124,7 +125,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
       aria-label="Upload monitor"
     >
       <HStack
-        id={`upload-monitor-header`}
+        id={`${componentIdentifier}-header`}
         px={3}
         py={2}
         gap={3}
@@ -157,7 +158,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
       </HStack>
 
       <VStack
-        id={`upload-monitor-list`}
+        id={`${componentIdentifier}-list`}
         gap={0}
         align="stretch"
         maxH="calc(70vh - 2.5rem)"
@@ -169,7 +170,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
 
           return (
             <VStack
-              id={`upload-monitor-item-${upload.id}`}
+              id={`${componentIdentifier}-item-${upload.id}`}
               key={upload.id}
               align="start"
               gap={2}
@@ -186,14 +187,14 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
             >
               {/* Header with file name and status */}
               <HStack
-                id={`upload-monitor-item-header-${upload.id}`}
+                id={`${componentIdentifier}-item-header-${upload.id}`}
                 w="full"
                 justify="space-between"
                 align="start"
                 gap={2}
               >
                 <VStack
-                  id={`upload-monitor-item-header-info-${upload.id}`}
+                  id={`${componentIdentifier}-item-header-info-${upload.id}`}
                   align="start"
                   gap={0}
                   flex={1}
@@ -209,7 +210,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
                   </Text>
                 </VStack>
 
-                <HStack gap={1}>
+                <HStack id={`${componentIdentifier}-item-header-status-${upload.id}`} gap={1}>
                   {upload.status === "queued" && (
                     <Badge colorPalette="gray" variant="subtle">
                       Queued
@@ -292,7 +293,7 @@ export const UploadMonitor = ({ onClose, isVisible = true }: UploadMonitorProps)
 
       {/* Summary */}
       <HStack
-        id={`upload-monitor-summary`}
+        id={`${componentIdentifier}-summary`}
         px={3}
         py={2}
         gap={4}

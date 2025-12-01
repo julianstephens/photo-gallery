@@ -52,7 +52,7 @@ export const AdminLayout = () => {
           </IconButton>
         </Tooltip>
       </HStack>
-      <HStack w="full">
+      <HStack id={`${prefix}-tabs`} w="full">
         <SegmentGroup.Root
           value={activeTab}
           onValueChange={(details) => updateTab(details.value as unknown as Tab)}

@@ -11,7 +11,7 @@ interface GalleryListProps {
   guildId: string | undefined;
   openCreateGalleryModal: () => void;
   openDetailedGalleryView: (gallery: Gallery) => void;
-  pageSlug: string;
+  componentIdentifier: string;
 }
 
 export const GalleryList = ({
@@ -21,18 +21,19 @@ export const GalleryList = ({
   guildId,
   openCreateGalleryModal,
   openDetailedGalleryView,
-  pageSlug,
+  componentIdentifier,
 }: GalleryListProps) => {
+  const identifierPrefix = `${componentIdentifier}-gallery-list`;
   return (
-    <Box id={`${pageSlug}-gallery-list`} w="full" h="full">
+    <Box id={`${identifierPrefix}-container`} w="full" h="full">
       <Flex
-        id={`${pageSlug}-gallery-header`}
+        id={`${identifierPrefix}-gallery-header`}
         w="full"
         justify="space-between"
         align="center"
         mb="4"
       >
-        <VStack align="start" gap="0">
+        <VStack id={`${identifierPrefix}-header-info`} align="start" gap="0">
           <Heading size="sm">Photo Galleries</Heading>
           <Text fontSize="sm" color="gray.500">
             {data?.length ?? 0} {data?.length === 1 ? "gallery" : "galleries"} in this guild
@@ -55,12 +56,12 @@ export const GalleryList = ({
         </Flex>
       ) : (
         <Grid
-          id={`${pageSlug}-gallery-grid`}
+          id={`${identifierPrefix}-gallery-grid`}
           templateColumns="repeat(auto-fill, minmax(500px, 1fr))"
           gap="6"
         >
           {data?.map((gallery) => (
-            <GridItem id={`${pageSlug}-gallery-${gallery.name}`} key={gallery.name}>
+            <GridItem id={`${identifierPrefix}-gallery-${gallery.name}`} key={gallery.name}>
               <GalleryCard
                 key={gallery.name}
                 info={gallery}
