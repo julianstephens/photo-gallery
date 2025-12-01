@@ -61,8 +61,8 @@ export class GuildSettingsController {
     const validated = guildSettingsSchema.parse(settings);
 
     const key = this.getSettingsKey(validatedGuildId);
-    await redis.client.set(key, JSON.stringify(validated));
-    await redis.client.expire(key, SETTINGS_TTL_SECONDS);
+    // Use EX option to atomically set value with TTL
+    await redis.client.set(key, JSON.stringify(validated), { EX: SETTINGS_TTL_SECONDS });
 
     return validated;
   };

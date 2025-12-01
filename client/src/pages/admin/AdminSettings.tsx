@@ -4,8 +4,21 @@ import { Loader } from "@/components/Loader";
 import { Toaster, toaster } from "@/components/ui/toaster";
 import { useAuth, useGalleryContext, useGuildSettings, useUpdateGuildSettings } from "@/hooks";
 import { Button, Field, Flex, HStack, Input, Switch, Text, VStack } from "@chakra-ui/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DEFAULT_GUILD_SETTINGS, type GuildSettings } from "utils";
+
+/**
+ * Discord snowflake ID validation pattern (17-19 digits).
+ */
+const DISCORD_SNOWFLAKE_PATTERN = /^\d{17,19}$/;
+
+/**
+ * Validates if a string is a valid Discord snowflake ID.
+ */
+const isValidDiscordSnowflake = (id: string | null): boolean => {
+  if (!id) return true; // Empty is valid (optional field)
+  return DISCORD_SNOWFLAKE_PATTERN.test(id);
+};
 
 /**
  * Notification settings section component.
@@ -49,17 +62,14 @@ const NotificationSettings = ({
     });
   };
 
-  // Validate channel ID format (17-19 digits)
-  const isChannelIdValid = (id: string | null): boolean => {
-    if (!id) return true; // Empty is valid (optional field)
-    return /^\d{17,19}$/.test(id);
-  };
-
-  const channelIdError =
-    settings.notifications.galleryExpiration.channelId &&
-    !isChannelIdValid(settings.notifications.galleryExpiration.channelId)
-      ? "Channel ID must be 17-19 digits"
-      : undefined;
+  // Memoize channel ID error to avoid recalculation on every render
+  const channelIdError = useMemo(() => {
+    const channelId = settings.notifications.galleryExpiration.channelId;
+    if (channelId && !isValidDiscordSnowflake(channelId)) {
+      return "Channel ID must be 17-19 digits";
+    }
+    return undefined;
+  }, [settings.notifications.galleryExpiration.channelId]);
 
   const handleDaysChange = (days: number) => {
     const validDays = Math.max(1, Math.min(30, days));

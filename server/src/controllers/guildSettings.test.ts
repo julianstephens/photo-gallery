@@ -110,7 +110,7 @@ describe("GuildSettingsController", () => {
   });
 
   describe("updateSettings", () => {
-    it("should store settings and return them", async () => {
+    it("should store settings with TTL and return them", async () => {
       const guildId = "guild-123";
       const settings: GuildSettings = {
         notifications: {
@@ -122,7 +122,6 @@ describe("GuildSettingsController", () => {
         },
       };
       mockRedisClient.set.mockResolvedValueOnce("OK");
-      mockRedisClient.expire.mockResolvedValueOnce(1);
 
       const result = await controller.updateSettings(guildId, settings);
 
@@ -130,10 +129,7 @@ describe("GuildSettingsController", () => {
       expect(mockRedisClient.set).toHaveBeenCalledWith(
         "guild:guild-123:settings",
         JSON.stringify(settings),
-      );
-      expect(mockRedisClient.expire).toHaveBeenCalledWith(
-        "guild:guild-123:settings",
-        90 * 24 * 60 * 60,
+        { EX: 90 * 24 * 60 * 60 },
       );
     });
 
@@ -178,13 +174,13 @@ describe("GuildSettingsController", () => {
         },
       };
       mockRedisClient.set.mockResolvedValueOnce("OK");
-      mockRedisClient.expire.mockResolvedValueOnce(1);
 
       await controller.updateSettings(guildId, settings);
 
       expect(mockRedisClient.set).toHaveBeenCalledWith(
         "guild:guild-trimmed:settings",
         JSON.stringify(settings),
+        { EX: 90 * 24 * 60 * 60 },
       );
     });
   });
