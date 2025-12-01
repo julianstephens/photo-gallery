@@ -171,33 +171,35 @@ describe("responseCache middleware", () => {
   });
 
   describe("invalidateGalleriesCache", () => {
-    it("should delete all cache keys matching the guild pattern", async () => {
+    it("should delete all cache keys matching the guild pattern using SCAN", async () => {
       const keys = [
         "cache:response:galleries:list:guild:123:user:a",
         "cache:response:galleries:list:guild:123:user:b",
       ];
-      mockRedisClient.keys.mockResolvedValue(keys);
+      // SCAN returns cursor 0 to indicate completion
+      mockRedisClient.scan.mockResolvedValue({ cursor: 0, keys });
       mockRedisClient.del.mockResolvedValue(2);
 
       await invalidateGalleriesCache("123", "user-a");
 
-      expect(mockRedisClient.keys).toHaveBeenCalledWith(
-        "cache:response:galleries:list:guild:123:*",
-      );
+      expect(mockRedisClient.scan).toHaveBeenCalledWith(0, {
+        MATCH: "cache:response:galleries:list:guild:123:*",
+        COUNT: 100,
+      });
       expect(mockRedisClient.del).toHaveBeenCalledWith(keys);
     });
 
     it("should not call del if no matching keys found", async () => {
-      mockRedisClient.keys.mockResolvedValue([]);
+      mockRedisClient.scan.mockResolvedValue({ cursor: 0, keys: [] });
 
       await invalidateGalleriesCache("123");
 
-      expect(mockRedisClient.keys).toHaveBeenCalled();
+      expect(mockRedisClient.scan).toHaveBeenCalled();
       expect(mockRedisClient.del).not.toHaveBeenCalled();
     });
 
     it("should handle Redis errors gracefully", async () => {
-      mockRedisClient.keys.mockRejectedValue(new Error("Redis error"));
+      mockRedisClient.scan.mockRejectedValue(new Error("Redis error"));
 
       await expect(invalidateGalleriesCache("123")).resolves.not.toThrow();
     });

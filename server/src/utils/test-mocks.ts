@@ -117,6 +117,7 @@ export const mockRedisClient = {
   exists: vi.fn(),
   expire: vi.fn(),
   keys: vi.fn(),
+  scan: vi.fn(),
   rPush: vi.fn(),
   lRem: vi.fn(),
   lLen: vi.fn(),

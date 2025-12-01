@@ -66,6 +66,9 @@ export const createResponseCache = (options: CacheOptions = {}) => {
     // Store original res.json to intercept the response
     const originalJson = res.json.bind(res);
 
+    // Set X-Cache header before response override happens
+    res.set("X-Cache", "MISS");
+
     res.json = (body: unknown): Response => {
       // Only cache successful responses (2xx status codes)
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -84,7 +87,6 @@ export const createResponseCache = (options: CacheOptions = {}) => {
           });
       }
 
-      res.set("X-Cache", "MISS");
       return originalJson(body);
     };
 
@@ -125,7 +127,17 @@ export const invalidateGalleriesCache = async (guildId: string, userId?: string)
   try {
     // Pattern to match all gallery cache keys for this guild
     const pattern = `${CACHE_PREFIX}galleries:list:guild:${guildId}:*`;
-    const keys = await redis.client.keys(pattern);
+
+    // Use SCAN to avoid blocking Redis (unlike KEYS which blocks)
+    let cursor = 0;
+    const keys: string[] = [];
+    do {
+      const result = await redis.client.scan(cursor, { MATCH: pattern, COUNT: 100 });
+      cursor = result.cursor;
+      if (result.keys.length > 0) {
+        keys.push(...result.keys);
+      }
+    } while (cursor !== 0);
 
     if (keys.length > 0) {
       await redis.client.del(keys);
