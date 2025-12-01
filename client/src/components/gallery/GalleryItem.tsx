@@ -26,6 +26,7 @@ export const GalleryItem = ({
   const normalizedGalleryName = uploadsIndex > 0 ? urlParts[uploadsIndex - 1] : galleryName;
   const imagePath = uploadsIndex !== -1 ? urlParts.slice(uploadsIndex + 1).join("/") : item.url;
   const imageSrc = `/api/media/${normalizedGalleryName}/${imagePath}?guildId=${guildId}`;
+  const componentIdentifier = `gallery-item-${item.name}`;
 
   const handleClick = (e: React.MouseEvent) => {
     if (selectMode && onToggleSelect) {
@@ -43,6 +44,7 @@ export const GalleryItem = ({
   if (selectMode) {
     return (
       <Box
+        id={`${componentIdentifier}-selectable`}
         role="button"
         tabIndex={0}
         position="relative"
@@ -61,6 +63,7 @@ export const GalleryItem = ({
       >
         {content}
         <Box
+          id={`${componentIdentifier}-overlay`}
           position="absolute"
           top="0"
           left="0"

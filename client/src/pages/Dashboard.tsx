@@ -21,6 +21,7 @@ const Dashboard = () => {
     isLoading: galleriesLoading,
     error: galleriesError,
   } = useListGalleries(hasGuilds ? guild : "");
+  const pageSlug = "dashboard";
   const { setActiveGuild, setActiveGallery, defaultGuildId, activeGuildId } = useGalleryContext();
 
   const updateGuild = (selectedGuild: string) => {
@@ -59,12 +60,12 @@ const Dashboard = () => {
   if (!authReady) return <Loader />;
 
   return (
-    <Flex id="dashboard-page" direction="column" w="full" h="full">
-      <Flex id="dashboard-header" direction="row" justify="space-between" align="center">
+    <Flex id={`${pageSlug}-container`} direction="column" w="full" h="full">
+      <Flex id={`${pageSlug}-header`} direction="row" justify="space-between" align="center">
         <Heading size="2xl">
           Welcome{currentUser?.username ? ` ${currentUser.username}` : ""}!
         </Heading>
-        <Flex gap="4">
+        <Flex id={`${pageSlug}-actions`} gap="4">
           {currentUser?.isAdmin && (
             <Button
               onClick={() => {
@@ -85,7 +86,7 @@ const Dashboard = () => {
           </Button>
         </Flex>
       </Flex>
-      <Flex id="dashboard-content" direction="column" gap="4" mt="8" h="full" w="full">
+      <Flex id={`${pageSlug}-content`} direction="column" gap="4" mt="8" h="full" w="full">
         {!hasGuilds ? (
           <Flex w="full" h="full" justify="center" align="center">
             <Text color="gray.400" textAlign="center">
@@ -95,7 +96,7 @@ const Dashboard = () => {
           </Flex>
         ) : (
           <>
-            <Flex gap="4" mb="4">
+            <Flex id={`${pageSlug}-guild-select`} gap="4" mb="4">
               <GuildSelect value={guild} onChange={updateGuild} />
               <Box w="fit" alignSelf="last baseline" mb="0.5rem">
                 <SetDefaultGuildButton
@@ -135,7 +136,7 @@ const Dashboard = () => {
           </>
         )}
       </Flex>
-      <Box position="fixed" bottom="1rem" right="3rem">
+      <Box id={`${pageSlug}-scroll-to-top`} position="fixed" bottom="1rem" right="3rem">
         <Tooltip content="Scroll to top">
           <IconButton rounded="full" onClick={scrollToTop}>
             <HiArrowUp />

@@ -10,14 +10,15 @@ export interface GalleryCardProps {
 }
 
 export const GalleryCard = ({ info, guildId, openDetailedGalleryView }: GalleryCardProps) => {
+  const componentIdentifier = "gallery-card-" + info.name;
   return (
-    <Card.Root id={`gallery-card-${info.name}`}>
-      <Card.Header id={`gallery-card-header-${info.name}`}>
+    <Card.Root id={`${componentIdentifier}-container`}>
+      <Card.Header id={`${componentIdentifier}-header`}>
         <Card.Title>{info.name}</Card.Title>
       </Card.Header>
-      <Card.Body id={`gallery-card-body-${info.name}`}>
+      <Card.Body id={`${componentIdentifier}-body`}>
         <VStack align="start" gap={2}>
-          <VStack align="start" gap="4" id={`gallery-card-info-${info.name}`}>
+          <VStack align="start" gap="4" id={`${componentIdentifier}-info`}>
             <DataList.Root orientation="horizontal">
               <DataList.Item>
                 <DataList.ItemLabel>Created At</DataList.ItemLabel>
@@ -36,7 +37,7 @@ export const GalleryCard = ({ info, guildId, openDetailedGalleryView }: GalleryC
             </DataList.Root>
             <Text color="blue.400">{info.meta.totalItems} photos</Text>
           </VStack>
-          <HStack id={`gallery-card-actions-${info.name}`} w="full" gap="2" mt="4">
+          <HStack id={`${componentIdentifier}-actions`} w="full" gap="2" mt="4">
             <Button
               w="45%"
               colorPalette="blue"

@@ -7,7 +7,7 @@ const AdminRequestsPage = () => {
   const pageSlug = pageTitle.toLowerCase().replace(/\s+/g, "-");
 
   return (
-    <VStack id={pageSlug}>
+    <VStack id={`${pageSlug}-container`}>
       <HStack id={`${pageSlug}-header`} w="100%" justify="start" mb={4}>
         <VStack id={`${pageSlug}-header-info`} gap="0.5">
           <Text>My Requests</Text>

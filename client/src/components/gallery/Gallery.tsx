@@ -26,6 +26,7 @@ export const Gallery = ({
 }: GalleryProps) => {
   const [errored, setErrored] = useState(false);
   const { data, isLoading, error } = useListGalleryItems(guildId, galleryName);
+  const componentIdentifier = `gallery-${galleryName}`;
 
   useEffect(() => {
     if (error) {
@@ -38,21 +39,21 @@ export const Gallery = ({
   }, [error, data, isLoading]);
 
   return (
-    <Flex id={`gallery-${galleryName}`} w="full" h="full" pb="4rem">
+    <Flex id={componentIdentifier} w="full" h="full" pb="4rem">
       {errored ? (
         <div>Error: {error?.message ?? "Unknown error"}</div>
       ) : isLoading ? (
         <Loader text="Loading gallery..." full={true} />
       ) : data?.count && data.count > 0 ? (
-        <Flex id={`gallery-content-${galleryName}`} direction="column" gap="4" w="full">
+        <Flex id={`${componentIdentifier}-content`} direction="column" gap="4" w="full">
           {includeHeader && (
-            <HStack id={`gallery-header-${galleryName}`} justify="center" px="4">
+            <HStack id={`${componentIdentifier}-header`} justify="center" px="4">
               <Text fontWeight="bold">
                 {galleryName} ({data.count} items)
               </Text>
             </HStack>
           )}
-          <SimpleGrid id={`gallery-items-${galleryName}`} w="full" columns={columnCount} gap="8px">
+          <SimpleGrid id={`${componentIdentifier}-items`} w="full" columns={columnCount} gap="8px">
             {data?.contents.map((item: GI) => (
               <GalleryItem
                 key={item.name}

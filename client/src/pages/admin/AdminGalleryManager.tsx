@@ -115,7 +115,7 @@ const AdminGalleryManagerPage = () => {
           </Text>
         </Flex>
       ) : (
-        <Flex id={pageSlug} direction="column" w="full" h="full" gap="6" pb="10">
+        <Flex id={`${pageSlug}-container`} direction="column" w="full" h="full" gap="6" pb="10">
           <HStack
             id={`${pageSlug}-guild-select`}
             gap="4"
@@ -125,7 +125,7 @@ const AdminGalleryManagerPage = () => {
             p="4"
             borderRadius="md"
           >
-            <VStack w="full" align="start">
+            <VStack id={`${pageSlug}-guild-info`} w="full" align="start">
               <HStack w="full" justify="space-between" align="last baseline" gap="4">
                 <GuildSelect w="50%" value={guild} onChange={onGuildChange} />
                 <SetDefaultGuildButton defaultGuild={guild} disabled={defaultGuildId === guild} />
@@ -155,14 +155,14 @@ const AdminGalleryManagerPage = () => {
               guildId={guildId}
               openCreateGalleryModal={openCreateGalleryModal}
               openDetailedGalleryView={openDetailedGalleryView}
-              pageSlug={pageSlug}
+              componentIdentifier={pageSlug}
             />
           </Presence>
           {galleryOpened && activeGalleryName && (
             <DetailedGallery
               galleryName={activeGalleryName}
               guildId={guild}
-              pageSlug={pageSlug}
+              componentIdentifier={pageSlug}
               closeGallery={closeDetailedGalleryView}
             />
           )}
