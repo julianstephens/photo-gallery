@@ -43,7 +43,7 @@ describe("CSRF Protection", () => {
 
     // CSRF token endpoint (intentionally before CSRF protection middleware)
     app.get("/api/csrf-token", (req, res) => {
-      res.json({ token: generateToken(req, true) });
+      res.json({ token: generateToken(req) });
     });
 
     // Apply CSRF protection
@@ -68,6 +68,17 @@ describe("CSRF Protection", () => {
 
     app.delete("/api/test", (_req, res) => {
       res.json({ message: "DELETE success" });
+    });
+
+    // Route for session regeneration tests (registered after CSRF protection)
+    app.post("/api/regenerate-session", (req, res) => {
+      const oldSessionId = req.session.id;
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ error: "Session regeneration failed" });
+        }
+        res.json({ oldSessionId, newSessionId: req.session.id });
+      });
     });
   });
 
@@ -223,17 +234,6 @@ describe("CSRF Protection", () => {
 
   describe("session expiry/regeneration", () => {
     it("should reject old tokens after session is regenerated", async () => {
-      // Add a route that regenerates the session
-      app.post("/api/regenerate-session", (req, res) => {
-        const oldSessionId = req.session.id;
-        req.session.regenerate((err) => {
-          if (err) {
-            return res.status(500).json({ error: "Session regeneration failed" });
-          }
-          res.json({ oldSessionId, newSessionId: req.session.id });
-        });
-      });
-
       const agent = request.agent(app);
 
       // Get initial CSRF token
