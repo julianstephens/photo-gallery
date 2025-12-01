@@ -10,6 +10,9 @@ interface GalleryProps {
   galleryName: string;
   includeHeader?: boolean;
   columnCount?: number;
+  selectMode?: boolean;
+  selectedItems?: Set<string>;
+  onToggleSelect?: (itemName: string) => void;
 }
 
 export const Gallery = ({
@@ -17,6 +20,9 @@ export const Gallery = ({
   galleryName,
   includeHeader = true,
   columnCount = 3,
+  selectMode = false,
+  selectedItems,
+  onToggleSelect,
 }: GalleryProps) => {
   const [errored, setErrored] = useState(false);
   const { data, isLoading, error } = useListGalleryItems(guildId, galleryName);
@@ -53,6 +59,9 @@ export const Gallery = ({
                 item={item}
                 guildId={guildId}
                 galleryName={galleryName}
+                selectMode={selectMode}
+                isSelected={selectedItems?.has(item.name)}
+                onToggleSelect={onToggleSelect}
               />
             ))}
           </SimpleGrid>

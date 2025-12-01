@@ -5,6 +5,7 @@ import type {
   generateGradientJobSchema,
   gradientStatusSchema,
   imageGradientSchema,
+  removeGalleryItemsSchema,
   removeGallerySchema,
   setDefaultGallerySchema,
   storedGradientSchema,
@@ -47,6 +48,8 @@ export type SetDefaultGalleryRequest = z.infer<typeof setDefaultGallerySchema>;
 export type UploadToGalleryRequest = z.infer<typeof uploadToGallerySchema>;
 
 export type RemoveGalleryRequest = z.infer<typeof removeGallerySchema>;
+
+export type RemoveGalleryItemsRequest = z.infer<typeof removeGalleryItemsSchema>;
 
 export type UpdateGalleryNameRequest = z.infer<typeof updateGalleryNameSchema>;
 

@@ -814,6 +814,98 @@ export class GalleryController {
     await this.#bucketService.deleteBucketFolder(folderName);
   };
 
+  removeGalleryItems = async (guildId: string, galleryName: string, itemNames: string[]) => {
+    const validatedGuildId = validateString(guildId, "Guild ID is required");
+    const validatedName = validateString(galleryName, GalleryNameError);
+    const folderName = await this.getGalleryFolderName(validatedGuildId, validatedName);
+
+    // Note: itemNames is validated by removeGalleryItemsSchema to have max 100 items
+    // to prevent excessively long-running operations
+    appLogger.info(
+      { guildId: validatedGuildId, galleryName: validatedName, itemCount: itemNames.length },
+      "[removeGalleryItems] Starting batch item deletion",
+    );
+
+    const deletedItems: string[] = [];
+    const failedItems: string[] = [];
+
+    // Prepare object paths for batch deletion
+    const objectPaths = itemNames.map((itemName) => `uploads/${itemName}`);
+
+    // Batch delete objects from bucket (up to 1000 per call)
+    const batchDeleteResult = await this.#bucketService.deleteMultipleObjectsFromBucket(
+      folderName,
+      objectPaths,
+    );
+
+    // Process results and handle gradient metadata deletion
+    for (const itemName of itemNames) {
+      const objectPath = `uploads/${itemName}`;
+      const fullKey = `${folderName}/${objectPath}`;
+      const storageKey = `${folderName}/uploads/${itemName}`;
+
+      // Check if this item was deleted in the batch
+      const wasDeleted = batchDeleteResult.deleted.includes(fullKey);
+
+      if (wasDeleted) {
+        // Delete gradient metadata, but don't fail the whole operation if this fails
+        try {
+          await this.#gradientMetaService.deleteGradient(storageKey);
+        } catch (gradientError) {
+          appLogger.error(
+            {
+              error: gradientError,
+              guildId: validatedGuildId,
+              galleryName: validatedName,
+              itemName,
+            },
+            "[removeGalleryItems] Failed to delete gradient metadata for item",
+          );
+        }
+
+        deletedItems.push(itemName);
+        appLogger.debug(
+          { guildId: validatedGuildId, galleryName: validatedName, itemName },
+          "[removeGalleryItems] Successfully deleted item",
+        );
+      } else {
+        failedItems.push(itemName);
+        const errorObj = batchDeleteResult.errors.find((e) => e.key === fullKey);
+        appLogger.error(
+          {
+            error: errorObj?.error,
+            guildId: validatedGuildId,
+            galleryName: validatedName,
+            itemName,
+          },
+          "[removeGalleryItems] Failed to delete item in batch S3 deletion",
+        );
+      }
+    }
+
+    // Update gallery item count
+    if (deletedItems.length > 0) {
+      await this.decrementGalleryItemCount(validatedGuildId, validatedName, deletedItems.length);
+    }
+
+    appLogger.info(
+      {
+        guildId: validatedGuildId,
+        galleryName: validatedName,
+        deletedCount: deletedItems.length,
+        failedCount: failedItems.length,
+      },
+      "[removeGalleryItems] Batch item deletion completed",
+    );
+
+    return {
+      deletedCount: deletedItems.length,
+      failedCount: failedItems.length,
+      deletedItems,
+      failedItems,
+    };
+  };
+
   setDefaultGallery = async (body: SetDefaultGalleryRequest, userId: string) => {
     const validatedGuildId = validateString(body.guildId, "Guild ID is required");
     const validatedUserId = validateString(userId, "User ID is required");

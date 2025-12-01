@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import {
   createGallerySchema,
+  removeGalleryItemsSchema,
   removeGallerySchema,
   setDefaultGallerySchema,
   updateGalleryNameSchema,
@@ -156,5 +157,26 @@ export const updateGalleryName = async (req: Request, res: Response) => {
     }
     appLogger.error({ err }, "[updateGalleryName] error");
     res.status(500).json({ error: "Failed to update gallery name" });
+  }
+};
+
+export const removeGalleryItems = async (req: Request, res: Response) => {
+  try {
+    const body = removeGalleryItemsSchema.parse(req.body);
+    const result = await galleryController.removeGalleryItems(
+      body.guildId,
+      body.galleryName,
+      body.itemNames,
+    );
+    res.json(result);
+  } catch (err: unknown) {
+    if ((err as Error)?.name === "InvalidInputError") {
+      return res.status(400).json({ error: (err as Error).message });
+    }
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
+    }
+    appLogger.error({ err }, "[removeGalleryItems] error");
+    res.status(500).json({ error: "Failed to remove gallery items" });
   }
 };

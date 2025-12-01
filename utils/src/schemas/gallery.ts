@@ -44,6 +44,12 @@ export const removeGallerySchema = z.object({
   galleryName: z.string().min(1).max(100),
 });
 
+export const removeGalleryItemsSchema = z.object({
+  guildId: z.string().min(1).max(100),
+  galleryName: z.string().min(1).max(100),
+  itemNames: z.array(z.string().min(1)).min(1).max(100),
+});
+
 export const updateGalleryNameSchema = z.object({
   guildId: z.string().min(1).max(100),
   galleryName: z.string().min(1).max(100),

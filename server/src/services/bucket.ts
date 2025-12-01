@@ -332,6 +332,73 @@ export class BucketService {
     );
   };
 
+  /**
+   * Delete multiple objects from a bucket folder in a single API call.
+   * Uses DeleteObjectsCommand for efficient batch deletion (up to 1000 items per call).
+   * Returns arrays of successfully deleted keys and any errors encountered.
+   */
+  deleteMultipleObjectsFromBucket = async (
+    galleryFolderName: string,
+    objectNames: string[],
+  ): Promise<{ deleted: string[]; errors: Array<{ key: string; error: string }> }> => {
+    await this.ensureBucket();
+
+    if (objectNames.length === 0) {
+      return { deleted: [], errors: [] };
+    }
+
+    const keys = objectNames.map((name) => ({
+      Key: this.#buildKey(galleryFolderName, name),
+    }));
+
+    const deleted: string[] = [];
+    const errors: Array<{ key: string; error: string }> = [];
+
+    // Delete in batches of 1000 (S3 limit)
+    const BATCH = 1000;
+    for (let i = 0; i < keys.length; i += BATCH) {
+      const batch = keys.slice(i, i + BATCH);
+      try {
+        const result = await this.#s3.send(
+          new DeleteObjectsCommand({
+            Bucket: this.#bucketName,
+            Delete: { Objects: batch },
+          }),
+        );
+
+        // Track successfully deleted objects
+        if (result.Deleted) {
+          for (const obj of result.Deleted) {
+            if (obj.Key) {
+              deleted.push(obj.Key);
+            }
+          }
+        }
+
+        // Track errors
+        if (result.Errors) {
+          for (const err of result.Errors) {
+            errors.push({
+              key: err.Key ?? "unknown",
+              error: err.Message ?? "Unknown error",
+            });
+          }
+        }
+      } catch (err) {
+        // If the entire batch fails, mark all items as errors
+        appLogger.error({ err, batch }, "[deleteMultipleObjectsFromBucket] Batch deletion failed");
+        for (const item of batch) {
+          errors.push({
+            key: item.Key,
+            error: err instanceof Error ? err.message : "Batch deletion failed",
+          });
+        }
+      }
+    }
+
+    return { deleted, errors };
+  };
+
   deleteBucketFolder = async (name: string) => {
     await this.ensureBucket();
     const key = this.#buildKey(name);
