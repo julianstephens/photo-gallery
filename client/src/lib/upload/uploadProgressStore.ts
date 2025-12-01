@@ -121,6 +121,12 @@ class UploadProgressStore {
       for (const upload of uploads) {
         // loadPersistedUploads already filters out seen entries
         if (!this.uploads.has(upload.id)) {
+          // Fail any uploads that were queued or uploading since they cannot be resumed
+          if (upload.status === "queued" || upload.status === "uploading") {
+            upload.status = "failed";
+            upload.error = "Upload was interrupted. Please try uploading again.";
+            upload.completedTime = Date.now();
+          }
           this.uploads.set(upload.id, upload);
           hasEntriesToShow = true;
         }
@@ -129,6 +135,8 @@ class UploadProgressStore {
 
     if (hasEntriesToShow) {
       this.notifyListeners();
+      // Persist the updated state to reflect failed uploads
+      this.persistState();
     }
 
     return hasEntriesToShow;

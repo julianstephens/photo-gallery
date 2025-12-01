@@ -69,6 +69,125 @@ describe("uploadProgressStore with persistence", () => {
       const hasUploads = uploadProgressStore.enablePersistence(mockUserId);
       expect(hasUploads).toBe(false);
     });
+
+    it("should fail queued uploads on restore with appropriate error message", () => {
+      const queuedUpload: PersistedUpload = {
+        id: "queued-1",
+        fileName: "queued.jpg",
+        galleryName: "gallery",
+        guildId: mockGuildId,
+        progress: 0,
+        status: "queued",
+        startTime: Date.now() - 1000,
+        seen: false,
+      };
+
+      localStorage.setItem(getStorageKey(mockUserId, mockGuildId), JSON.stringify([queuedUpload]));
+
+      const hasUploads = uploadProgressStore.enablePersistence(mockUserId);
+
+      expect(hasUploads).toBe(true);
+      const uploads = uploadProgressStore.getUploads();
+      expect(uploads).toHaveLength(1);
+      expect(uploads[0].status).toBe("failed");
+      expect(uploads[0].error).toBe("Upload was interrupted. Please try uploading again.");
+      expect(uploads[0].completedTime).toBeDefined();
+    });
+
+    it("should fail uploading uploads on restore with appropriate error message", () => {
+      const uploadingUpload: PersistedUpload = {
+        id: "uploading-1",
+        fileName: "uploading.jpg",
+        galleryName: "gallery",
+        guildId: mockGuildId,
+        progress: 50,
+        status: "uploading",
+        startTime: Date.now() - 1000,
+        seen: false,
+      };
+
+      localStorage.setItem(
+        getStorageKey(mockUserId, mockGuildId),
+        JSON.stringify([uploadingUpload]),
+      );
+
+      const hasUploads = uploadProgressStore.enablePersistence(mockUserId);
+
+      expect(hasUploads).toBe(true);
+      const uploads = uploadProgressStore.getUploads();
+      expect(uploads).toHaveLength(1);
+      expect(uploads[0].status).toBe("failed");
+      expect(uploads[0].error).toBe("Upload was interrupted. Please try uploading again.");
+      expect(uploads[0].completedTime).toBeDefined();
+    });
+
+    it("should persist the failed status to localStorage on restore", () => {
+      const queuedUpload: PersistedUpload = {
+        id: "queued-1",
+        fileName: "queued.jpg",
+        galleryName: "gallery",
+        guildId: mockGuildId,
+        progress: 0,
+        status: "queued",
+        startTime: Date.now() - 1000,
+        seen: false,
+      };
+
+      localStorage.setItem(getStorageKey(mockUserId, mockGuildId), JSON.stringify([queuedUpload]));
+
+      uploadProgressStore.enablePersistence(mockUserId);
+
+      // Check that localStorage was updated with the failed status
+      const key = getStorageKey(mockUserId, mockGuildId);
+      const stored = JSON.parse(localStorage.getItem(key)!) as PersistedUpload[];
+      expect(stored).toHaveLength(1);
+      expect(stored[0].status).toBe("failed");
+      expect(stored[0].error).toBe("Upload was interrupted. Please try uploading again.");
+    });
+
+    it("should not modify completed or failed uploads on restore", () => {
+      const completedUpload: PersistedUpload = {
+        id: "completed-1",
+        fileName: "completed.jpg",
+        galleryName: "gallery",
+        guildId: mockGuildId,
+        progress: 100,
+        status: "completed",
+        startTime: Date.now() - 1000,
+        completedTime: Date.now() - 500,
+        seen: false,
+      };
+      const failedUpload: PersistedUpload = {
+        id: "failed-1",
+        fileName: "failed.jpg",
+        galleryName: "gallery",
+        guildId: mockGuildId,
+        progress: 30,
+        status: "failed",
+        error: "Original error",
+        startTime: Date.now() - 1000,
+        completedTime: Date.now() - 500,
+        seen: false,
+      };
+
+      localStorage.setItem(
+        getStorageKey(mockUserId, mockGuildId),
+        JSON.stringify([completedUpload, failedUpload]),
+      );
+
+      uploadProgressStore.enablePersistence(mockUserId);
+
+      const uploads = uploadProgressStore.getUploads();
+      expect(uploads).toHaveLength(2);
+
+      const completed = uploads.find((u) => u.id === "completed-1");
+      expect(completed?.status).toBe("completed");
+      expect(completed?.error).toBeUndefined();
+
+      const failed = uploads.find((u) => u.id === "failed-1");
+      expect(failed?.status).toBe("failed");
+      expect(failed?.error).toBe("Original error");
+    });
   });
 
   describe("persistence on state changes", () => {
