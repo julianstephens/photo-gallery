@@ -113,11 +113,11 @@ export const createApp = () => {
     res.json({ token: generateToken(req) });
   });
 
-  // All routes registered after this middleware are protected by CSRF.
-  app.use(csrfSynchronisedProtection);
-
+  // Health endpoints are intentionally registered BEFORE CSRF protection to ensure they are always accessible to external systems.
   app.use("/api", routers.healthRouter);
 
+  // All routes registered after this middleware are protected by CSRF.
+  app.use(csrfSynchronisedProtection);
   // Loki log proxy (client-side logging - mounted FIRST before other /api routes to take precedence)
   app.use("/api/loki", lokiRateLimiter, lokiProxy);
 
