@@ -43,12 +43,21 @@ export const GalleryItem = ({
   if (selectMode) {
     return (
       <Box
+        role="button"
+        tabIndex={0}
         position="relative"
         cursor="pointer"
         onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggleSelect?.(item.name);
+          }
+        }}
         opacity={isSelected ? 1 : 0.8}
         _hover={{ opacity: 1 }}
         transition="opacity 0.2s"
+        w="full"
       >
         {content}
         <Box
@@ -66,13 +75,14 @@ export const GalleryItem = ({
           p="2"
           _hover={{ bg: "blackAlpha.300" }}
           transition="background 0.2s"
+          pointerEvents="none"
         >
           <Checkbox.Root
             checked={isSelected}
-            onCheckedChange={() => onToggleSelect?.(item.name)}
             size="lg"
             colorPalette="blue"
             variant="solid"
+            pointerEvents="none"
           >
             <Checkbox.HiddenInput />
             <Checkbox.Control

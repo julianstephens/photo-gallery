@@ -819,6 +819,8 @@ export class GalleryController {
     const validatedName = validateString(galleryName, GalleryNameError);
     const folderName = await this.getGalleryFolderName(validatedGuildId, validatedName);
 
+    // Note: itemNames is validated by removeGalleryItemsSchema to have max 100 items
+    // to prevent excessively long-running operations
     appLogger.info(
       { guildId: validatedGuildId, galleryName: validatedName, itemCount: itemNames.length },
       "[removeGalleryItems] Starting batch item deletion",
@@ -833,9 +835,21 @@ export class GalleryController {
         const objectPath = `uploads/${itemName}`;
         await this.#bucketService.deleteObjectFromBucket(folderName, objectPath);
 
-        // Also delete gradient metadata for this item
+        // Also delete gradient metadata for this item, but don't fail the whole operation if this fails
         const storageKey = `${folderName}/uploads/${itemName}`;
-        await this.#gradientMetaService.deleteGradient(storageKey);
+        try {
+          await this.#gradientMetaService.deleteGradient(storageKey);
+        } catch (gradientError) {
+          appLogger.error(
+            {
+              error: gradientError,
+              guildId: validatedGuildId,
+              galleryName: validatedName,
+              itemName,
+            },
+            "[removeGalleryItems] Failed to delete gradient metadata for item",
+          );
+        }
 
         deletedItems.push(itemName);
         appLogger.debug(

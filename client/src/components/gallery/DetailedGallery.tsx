@@ -112,7 +112,10 @@ export const DetailedGallery = ({
         title: "Deletion Error",
         description: "Failed to delete selected photos.",
       });
-      // Keep modal open on error so user can retry or cancel
+      // Close modal on error and let user re-initiate the selection process
+      setIsDeleteModalOpen(false);
+      setSelectMode(false);
+      setSelectedItems(new Set());
     } finally {
       setIsDeleting(false);
     }
@@ -239,7 +242,7 @@ export const DetailedGallery = ({
       />
       <ConfirmDeleteModal
         open={isDeleteModalOpen}
-        closeModal={() => setIsDeleteModalOpen(false)}
+        closeModal={isDeleting ? () => {} : () => setIsDeleteModalOpen(false)}
         actionButtonLoading={isDeleting}
         actionButtonOnClick={handleDeleteSelected}
       />

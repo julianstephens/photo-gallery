@@ -8,11 +8,13 @@ const controllerMocks = vi.hoisted(() => ({
   createGallery: vi.fn(),
   setDefaultGallery: vi.fn(),
   removeGallery: vi.fn(),
+  removeGalleryItems: vi.fn(),
 }));
 
 const schemaMocks = vi.hoisted(() => ({
   createGallerySchema: { parse: vi.fn((body) => body) },
   removeGallerySchema: { parse: vi.fn((body) => body) },
+  removeGalleryItemsSchema: { parse: vi.fn((body) => body) },
   setDefaultGallerySchema: { parse: vi.fn((body) => body) },
 }));
 
@@ -34,8 +36,14 @@ vi.mock("../middleware/logger.ts", () => ({
 vi.mock("utils", () => schemaMocks);
 
 const handlers = await import("./gallery.ts");
-const { listGalleries, listGalleryItems, createGallery, setDefaultGallery, removeGallery } =
-  handlers;
+const {
+  listGalleries,
+  listGalleryItems,
+  createGallery,
+  setDefaultGallery,
+  removeGallery,
+  removeGalleryItems,
+} = handlers;
 
 const createRes = () => {
   const res: Partial<Response> = {};
@@ -67,6 +75,7 @@ const resetMocks = () => {
   Object.values(controllerMocks).forEach((mockFn) => mockFn.mockReset());
   schemaMocks.createGallerySchema.parse.mockReset().mockImplementation((body) => body);
   schemaMocks.removeGallerySchema.parse.mockReset().mockImplementation((body) => body);
+  schemaMocks.removeGalleryItemsSchema.parse.mockReset().mockImplementation((body) => body);
   schemaMocks.setDefaultGallerySchema.parse.mockReset().mockImplementation((body) => body);
 };
 
@@ -240,6 +249,84 @@ describe("gallery handlers", () => {
       await removeGallery(req, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+  });
+
+  describe("removeGalleryItems", () => {
+    const body = { guildId: "g", galleryName: "n", itemNames: ["item1.jpg", "item2.jpg"] };
+
+    it("removes gallery items and returns result", async () => {
+      const req = createReq({ body });
+      const res = createRes();
+      const mockResult = {
+        deletedCount: 2,
+        failedCount: 0,
+        deletedItems: ["item1.jpg", "item2.jpg"],
+        failedItems: [],
+      };
+      controllerMocks.removeGalleryItems.mockResolvedValue(mockResult);
+
+      await removeGalleryItems(req, res);
+
+      expect(schemaMocks.removeGalleryItemsSchema.parse).toHaveBeenCalledWith(body);
+      expect(controllerMocks.removeGalleryItems).toHaveBeenCalledWith("g", "n", [
+        "item1.jpg",
+        "item2.jpg",
+      ]);
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+    });
+
+    it("handles partial failures", async () => {
+      const req = createReq({ body });
+      const res = createRes();
+      const mockResult = {
+        deletedCount: 1,
+        failedCount: 1,
+        deletedItems: ["item1.jpg"],
+        failedItems: ["item2.jpg"],
+      };
+      controllerMocks.removeGalleryItems.mockResolvedValue(mockResult);
+
+      await removeGalleryItems(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+    });
+
+    it("handles zod validation errors", async () => {
+      const req = createReq({ body: {} });
+      const res = createRes();
+      schemaMocks.removeGalleryItemsSchema.parse.mockImplementation(() => {
+        throw new ZodError([]);
+      });
+
+      await removeGalleryItems(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    it("handles invalid input errors", async () => {
+      const req = createReq({ body });
+      const res = createRes();
+      controllerMocks.removeGalleryItems.mockRejectedValue({
+        name: "InvalidInputError",
+        message: "Gallery not found",
+      });
+
+      await removeGalleryItems(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Gallery not found" });
+    });
+
+    it("handles unexpected errors with 500", async () => {
+      const req = createReq({ body });
+      const res = createRes();
+      controllerMocks.removeGalleryItems.mockRejectedValue(new Error("Unexpected error"));
+
+      await removeGalleryItems(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to remove gallery items" });
     });
   });
 });
