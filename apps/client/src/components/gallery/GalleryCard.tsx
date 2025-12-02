@@ -1,6 +1,7 @@
 import { DeleteGalleryButton, RenameGalleryButton, UploadPhotosButton } from "@/components/buttons";
-import { Box, Button, Card, DataList, HStack, Icon, Text, VStack } from "@chakra-ui/react";
-import { HiOutlineEye } from "react-icons/hi2";
+import { getExpirationStatus } from "@/lib/utils";
+import { Badge, Box, Button, Card, DataList, HStack, Icon, Text, VStack } from "@chakra-ui/react";
+import { HiClock, HiOutlineEye } from "react-icons/hi2";
 import type { Gallery } from "utils";
 
 export interface GalleryCardProps {
@@ -11,10 +12,27 @@ export interface GalleryCardProps {
 
 export const GalleryCard = ({ info, guildId, openDetailedGalleryView }: GalleryCardProps) => {
   const componentIdentifier = "gallery-card-" + info.name;
+  const expirationStatus = getExpirationStatus(info.meta.expiresAt);
+  const showExpirationWarning = expirationStatus.isExpired || expirationStatus.isExpiringSoon;
+
   return (
     <Card.Root id={`${componentIdentifier}-container`}>
       <Card.Header id={`${componentIdentifier}-header`}>
-        <Card.Title>{info.name}</Card.Title>
+        <HStack justify="space-between" align="center" w="full">
+          <Card.Title>{info.name}</Card.Title>
+          {showExpirationWarning && (
+            <Badge
+              colorPalette={expirationStatus.isExpired ? "red" : "orange"}
+              variant="solid"
+              aria-label={expirationStatus.message}
+            >
+              <Icon>
+                <HiClock />
+              </Icon>
+              {expirationStatus.message}
+            </Badge>
+          )}
+        </HStack>
       </Card.Header>
       <Card.Body id={`${componentIdentifier}-body`}>
         <VStack align="start" gap={2}>
