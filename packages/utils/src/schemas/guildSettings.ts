@@ -6,7 +6,7 @@ import { z } from "zod";
 export const galleryExpirationNotificationSchema = z.object({
   enabled: z.boolean(),
   webhookUrl: z.url().optional(),
-  daysBefore: z.number().int().min(1).max(30),
+  daysBefore: z.number().int().min(1).max(30).optional(),
   // Fields added by the notification worker when a webhook fails (optional)
   webhookInvalid: z.boolean().optional(),
   webhookErrorCode: z.number().optional(),
