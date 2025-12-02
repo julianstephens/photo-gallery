@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import { createMockRedis, type MockRedisClient } from "utils";
+import { createMockRedis, type MockRedisClient } from "utils/redis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "./env.js";
 import { NotificationWorker } from "./worker.js";

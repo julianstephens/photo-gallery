@@ -1,7 +1,7 @@
+import { disconnectRedis, initializeRedis, redisClient as redis } from "utils/redis";
 import { parseEnv } from "./env";
 import { createLogger } from "./logger";
 import { NotificationWorker } from "./worker";
-import { redisClient as redis, initializeRedis, disconnectRedis } from "utils";
 
 async function main(): Promise<void> {
   // Parse and validate environment variables

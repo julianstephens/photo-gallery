@@ -1,2 +1,2 @@
 export * from "./client.ts";
-export * from "./mock.js";
+export * from "./mock.ts";
