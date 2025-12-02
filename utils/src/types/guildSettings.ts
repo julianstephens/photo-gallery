@@ -24,7 +24,7 @@ export const DEFAULT_GUILD_SETTINGS: GuildSettings = {
   notifications: {
     galleryExpiration: {
       enabled: false,
-      channelId: null,
+      webhookUrl: undefined,
       daysBefore: 3,
     },
   },

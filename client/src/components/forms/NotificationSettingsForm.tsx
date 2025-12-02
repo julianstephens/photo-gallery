@@ -1,7 +1,8 @@
-import { Button, ButtonGroup, VStack } from "@chakra-ui/react";
+import { Button, ButtonGroup, Collapsible, Heading, List, VStack } from "@chakra-ui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { HiChevronDown } from "react-icons/hi2";
 import { type GuildSettings, guildSettingsSchema } from "utils";
 import { Input } from "./Fields";
 
@@ -27,7 +28,6 @@ export const NotificationSettingsForm = ({
         ...settings.notifications,
         galleryExpiration: {
           ...settings.notifications.galleryExpiration,
-          channelId: settings.notifications.galleryExpiration.channelId ?? "",
         },
       },
     },
@@ -39,21 +39,70 @@ export const NotificationSettingsForm = ({
   };
 
   useEffect(() => {
-    reset(settings);
+    reset(settings, { keepDirtyValues: true });
   }, [settings, reset]);
 
   return (
     <VStack id="notification-settings-form" onSubmit={handleSubmit(onSubmit)} as="form">
+      <Collapsible.Root alignSelf="center">
+        <Collapsible.Trigger
+          mx="auto"
+          mb="2"
+          display="flex"
+          alignItems="center"
+          gap="4"
+          cursor="pointer"
+        >
+          <Collapsible.Indicator
+            transition="transform 0.2s"
+            _open={{ transform: "rotate(180deg)" }}
+          >
+            <HiChevronDown />
+          </Collapsible.Indicator>
+          View Webhook Setup Instructions
+        </Collapsible.Trigger>
+        <Collapsible.Content border="1px solid" borderColor="gray.600" borderRadius="md">
+          <VStack px="10" py="2">
+            <Heading size="md">How to get a Discord Webhook URL</Heading>
+            <List.Root as="ol">
+              <List.Item>
+                In your Discord server, go to{" "}
+                <span style={{ fontWeight: "bold" }}>Server Settings</span> &gt;{" "}
+                <span style={{ fontWeight: "bold" }}>Integrations</span>. (
+                <span style={{ fontStyle: "italic" }}>
+                  You must have the &quot;Manage Webhooks&quot; permission to do this.
+                </span>
+                )
+              </List.Item>
+              <List.Item>
+                Click the &apos;<span style={{ fontWeight: "bold" }}>Create Webhook</span>&apos;
+                button
+              </List.Item>
+              <List.Item>Customize your new webhook:</List.Item>
+              <List.Root ps="5" as="ul">
+                <List.Item>
+                  Give it a descriptive name (e.g., &quot;Gallery Notifications&quot;).
+                </List.Item>
+                <List.Item>Choose the channel where you want notifications to be sent.</List.Item>
+              </List.Root>
+              <List.Item>
+                Click the &apos;<span style={{ fontWeight: "bold" }}>Copy Webhook URL</span>&apos;
+                button, then paste it here.
+              </List.Item>
+            </List.Root>
+          </VStack>
+        </Collapsible.Content>
+      </Collapsible.Root>
       <Controller
-        name="notifications.galleryExpiration.channelId"
+        name="notifications.galleryExpiration.webhookUrl"
         control={control}
         render={({ field }) => (
           <Input
-            label="Notification Channel ID"
+            label="Notification Webhook URL"
             type="text"
-            placeholder="Enter the channel ID for notifications"
-            invalid={!!errors.notifications?.galleryExpiration?.channelId}
-            detail="Discord channel ID where expiration notifications will be sent."
+            placeholder="Enter the webhook URL for notifications"
+            invalid={!!errors.notifications?.galleryExpiration?.webhookUrl}
+            detail="Discord webhook URL where expiration notifications will be sent."
             {...field}
             borderColor="gray.600"
           />

@@ -47,7 +47,7 @@ export const updateGuildSettings = async (req: Request, res: Response) => {
   if (!parseResult.success) {
     return res.status(400).json({
       error: "Invalid settings payload",
-      details: parseResult.error.errors,
+      details: parseResult.error.issues,
     });
   }
 

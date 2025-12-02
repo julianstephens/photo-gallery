@@ -5,11 +5,8 @@ import { toaster } from "@/components/ui/toaster";
 import { useAuth, useGalleryContext, useGuildSettings, useUpdateGuildSettings } from "@/hooks";
 import { Flex, HStack, Text, VStack } from "@chakra-ui/react";
 import { useCallback, useEffect, useState } from "react";
-import type { GuildSettings } from "utils";
+import { DEFAULT_GUILD_SETTINGS, type GuildSettings } from "utils";
 
-/**
- * Admin settings page with tabbed layout for guild-level settings.
- */
 const AdminSettingsPage = () => {
   const pageSlug = "admin-settings";
   const { currentUser } = useAuth();
@@ -23,17 +20,11 @@ const AdminSettingsPage = () => {
   const { data: serverSettings, isLoading, error } = useGuildSettings(guildId);
   const { updateSettings, isUpdating } = useUpdateGuildSettings(guildId);
 
-  // Initialize guild from default when available
   useEffect(() => {
     if (defaultGuildId && hasGuilds) {
       setGuildId(defaultGuildId);
     }
   }, [defaultGuildId, hasGuilds]);
-
-  // Sync local settings with server settings
-  useEffect(() => {
-    // Settings will be passed directly to the form component
-  }, []);
 
   const onGuildChange = (selectedGuild: string) => {
     if (!hasGuilds) return;
@@ -44,7 +35,6 @@ const AdminSettingsPage = () => {
     (newSettings: GuildSettings) => {
       if (!guildId) return;
 
-      // Save immediately when form is submitted
       updateSettings(newSettings)
         .then(() => {
           toaster.success({
@@ -72,7 +62,7 @@ const AdminSettingsPage = () => {
           settings={
             serverSettings ?? {
               notifications: {
-                galleryExpiration: { enabled: false, channelId: null, daysBefore: 3 },
+                galleryExpiration: DEFAULT_GUILD_SETTINGS.notifications.galleryExpiration,
               },
             }
           }
@@ -108,17 +98,14 @@ const AdminSettingsPage = () => {
         <GuildSelect w="50%" value={guildId ?? ""} onChange={onGuildChange} invalid={false} />
       </HStack>
 
-      {/* Loading state */}
       {isLoading && <Loader text="Loading settings..." />}
 
-      {/* Error state */}
       {error && !isLoading && (
         <Flex w="full" p="4" bg="red.900" borderRadius="md">
           <Text color="red.200">Failed to load settings: {error.message}</Text>
         </Flex>
       )}
 
-      {/* Settings layout */}
       {!isLoading && !error && guildId && serverSettings && (
         <SettingsLayout
           title="Guild Settings"

@@ -6,8 +6,9 @@ import { GuildSettingsController } from "./guildSettings.ts";
 // Mock redis
 vi.mock("../redis.ts", () => mockRedisModule());
 
-// Valid Discord snowflake ID for testing (17-19 digits)
-const VALID_CHANNEL_ID = "123456789012345678";
+// Valid Discord webhook URL for testing
+const VALID_WEBHOOK_URL =
+  "https://discord.com/api/webhooks/123456789012345678/AbCdEfGhIjKlMnOpQrStUvWxYz";
 
 describe("GuildSettingsController", () => {
   let controller: GuildSettingsController;
@@ -46,7 +47,7 @@ describe("GuildSettingsController", () => {
         notifications: {
           galleryExpiration: {
             enabled: true,
-            channelId: VALID_CHANNEL_ID,
+            webhookUrl: VALID_WEBHOOK_URL,
             daysBefore: 3,
           },
         },
@@ -79,7 +80,7 @@ describe("GuildSettingsController", () => {
         notifications: {
           galleryExpiration: {
             enabled: "not-a-boolean", // Invalid type
-            channelId: 123, // Invalid type
+            webhookUrl: "not-a-url", // Invalid URL format
             daysBefore: 100, // Out of range
           },
         },
@@ -116,7 +117,7 @@ describe("GuildSettingsController", () => {
         notifications: {
           galleryExpiration: {
             enabled: true,
-            channelId: VALID_CHANNEL_ID,
+            webhookUrl: VALID_WEBHOOK_URL,
             daysBefore: 5,
           },
         },
@@ -138,7 +139,6 @@ describe("GuildSettingsController", () => {
         notifications: {
           galleryExpiration: {
             enabled: false,
-            channelId: null,
             daysBefore: 7,
           },
         },
@@ -168,7 +168,6 @@ describe("GuildSettingsController", () => {
         notifications: {
           galleryExpiration: {
             enabled: false,
-            channelId: null,
             daysBefore: 7,
           },
         },
