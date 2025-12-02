@@ -1,0 +1,31 @@
+{
+  "name": "worker-notifications",
+  "version": "1.0.0",
+  "description": "Gallery expiration notification worker for photo-gallery",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsup",
+    "clean": "rm -rf dist node_modules",
+    "lint": "eslint src/"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.3",
+  "dependencies": {
+    "ioredis": "^5.6.1",
+    "pino": "^10.1.0",
+    "utils": "workspace:*",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tsconfig/node-ts": "^23.6.1",
+    "@tsconfig/node24": "^24.0.1",
+    "@types/node": "^24.10.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.3"
+  }
+}
