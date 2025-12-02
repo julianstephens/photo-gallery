@@ -27,14 +27,14 @@ jobs:
         with:
           filters: |
             server:
-              - 'server/**'
-              - 'utils/**'
+              - 'apps/server/**'
+              - 'packages/utils/**'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
             client:
-              - 'client/**'
-              - 'utils/**'
+              - 'apps/client/**'
+              - 'packages/utils/**'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
@@ -65,7 +65,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: server/Dockerfile
+          file: apps/server/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-server:latest
           cache-from: type=gha
@@ -97,7 +97,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: client/Dockerfile
+          file: apps/client/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-client:latest
           cache-from: type=gha

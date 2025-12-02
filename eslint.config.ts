@@ -33,21 +33,21 @@ export default [
       "**/dist",
       "**/coverage",
       "**/data",
-      "client/src/components/ui",
+      "apps/client/src/components/ui",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
     ],
   },
   {
-    files: ["client/**/*.{ts,tsx}"],
+    files: ["apps/client/**/*.{ts,tsx}"],
     settings: {
       react: { version: "19.1" },
       "import/resolver": {
         typescript: {
           project: [
-            "client/tsconfig.node.json",
-            "client/tsconfig.app.json",
-            "server/tsconfig.json",
+            "apps/client/tsconfig.node.json",
+            "apps/client/tsconfig.app.json",
+            "apps/server/tsconfig.json",
           ],
         },
       },
@@ -55,7 +55,7 @@ export default [
     languageOptions: {
       parserOptions: {
         project: ["./tsconfig.node.json", "./tsconfig.app.json"],
-        tsconfigRootDir: resolve(__dirname, "./client"),
+        tsconfigRootDir: resolve(__dirname, "./apps/client"),
       },
     },
     plugins: {

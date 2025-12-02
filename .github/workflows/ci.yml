@@ -47,6 +47,6 @@ jobs:
       - name: Upload coverage (server)
         if: always()
         run: |
-          cd server
+          cd apps/server
           pnpm test:coverage || true
         continue-on-error: true
