@@ -199,7 +199,7 @@ export class NotificationWorker {
 
     for (let i = 0; i < expiringGalleries.length; i++) {
       const gallery = expiringGalleries[i];
-      const alreadyNotified = existsResults?.[i];
+      const alreadyNotified = existsResults[i];
 
       if (alreadyNotified) {
         this.stats.notificationsSkipped++;
