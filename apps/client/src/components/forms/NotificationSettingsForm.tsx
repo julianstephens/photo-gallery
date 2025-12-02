@@ -3,8 +3,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { HiChevronDown } from "react-icons/hi2";
-import { type GuildSettings, guildSettingsSchema } from "utils";
-import { Input } from "./Fields";
+import { guildSettingsSchema, type GuildSettings } from "utils";
+import { Input, type FormErrors } from "./Fields";
 
 interface NotificationSettingsFormProps {
   settings: GuildSettings;
@@ -102,6 +102,7 @@ export const NotificationSettingsForm = ({
             type="text"
             placeholder="Enter the webhook URL for notifications"
             invalid={!!errors.notifications?.galleryExpiration?.webhookUrl}
+            errors={errors as unknown as FormErrors}
             detail="Discord webhook URL where expiration notifications will be sent."
             {...field}
             borderColor="gray.600"
@@ -116,6 +117,7 @@ export const NotificationSettingsForm = ({
             label="Days Before Expiration"
             type="number"
             invalid={!!errors.notifications?.galleryExpiration?.daysBefore}
+            errors={errors as unknown as FormErrors}
             detail="Number of days before a gallery expires to send a notification."
             {...field}
             borderColor="gray.600"

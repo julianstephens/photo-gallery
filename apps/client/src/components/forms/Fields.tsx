@@ -16,24 +16,26 @@ import type { FieldError, FieldValues } from "react-hook-form";
 import { HiStar } from "react-icons/hi2";
 import { Navigate } from "react-router";
 
-interface FormProps extends ChakraProps {
+export type FormErrors = Record<string, FieldError> | undefined;
+
+interface FieldProps extends ChakraProps {
   label: string;
   name: string;
   invalid: boolean;
   placeholder?: string;
   defaultValue?: string;
-  errors?: Record<string, FieldError>;
+  errors?: FormErrors;
   disabled?: boolean;
 }
 
-export interface InputProps extends FormProps, FieldValues {
+export interface InputProps extends FieldProps, FieldValues {
   type: string;
   minValue?: number;
   maxValue?: number;
   detail?: string;
 }
 
-export interface SelectProps extends FormProps, FieldValues {
+export interface SelectProps extends FieldProps, FieldValues {
   options: { value: string; label: string; icon?: React.ReactNode }[];
   usePortal?: boolean;
   useLabel?: boolean;
