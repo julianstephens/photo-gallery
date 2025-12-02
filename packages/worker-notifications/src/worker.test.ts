@@ -141,9 +141,11 @@ describe("Idempotency", () => {
     // Verifies that the multi/exec API works correctly with node-redis
     mockRedis._setGuildSettings("test-guild", {
       notifications: {
-        enabled: true,
-        webhookUrl: "https://discord.com/api/webhooks/123456789/abc-xyz",
-        daysBefore: 7,
+        galleryExpiration: {
+          enabled: true,
+          webhookUrl: "https://discord.com/api/webhooks/123456789/abc-xyz",
+          daysBefore: 7,
+        },
       },
     });
 
