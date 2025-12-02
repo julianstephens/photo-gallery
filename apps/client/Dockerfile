@@ -8,16 +8,16 @@ RUN corepack enable
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY client/package.json client/package.json
-COPY utils/package.json utils/package.json
+COPY apps/client/package.json apps/client/package.json
+COPY packages/utils/package.json packages/utils/package.json
 RUN pnpm install --filter utils --frozen-lockfile
-COPY utils utils
+COPY packages/utils packages/utils
 RUN pnpm --filter utils build
 RUN pnpm install --filter client... --frozen-lockfile
 
 FROM deps AS build
-COPY client client
-COPY --from=deps /app/utils ./utils
+COPY apps/client apps/client
+COPY --from=deps /app/packages/utils ./packages/utils
 
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
@@ -27,7 +27,7 @@ ENV VITE_LOG_LEVEL=${VITE_LOG_LEVEL}
 RUN pnpm --filter client build
 
 FROM nginx:1.27-alpine AS runner
-COPY client/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/client/dist /usr/share/nginx/html
+COPY apps/client/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/apps/client/dist /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
