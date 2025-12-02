@@ -24,7 +24,6 @@ export const GalleryCard = ({ info, guildId, openDetailedGalleryView }: GalleryC
             <Badge
               colorPalette={expirationStatus.isExpired ? "red" : "orange"}
               variant="solid"
-              aria-label={expirationStatus.message}
             >
               <Icon>
                 <HiClock />
