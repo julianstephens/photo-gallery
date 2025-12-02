@@ -464,9 +464,12 @@ export class NotificationWorker {
           ...settings,
           notifications: {
             ...settings.notifications,
-            webhookInvalid: true,
-            webhookErrorCode: errorCode,
-            webhookErrorAt: Date.now(),
+            galleryExpiration: {
+              ...settings.notifications.galleryExpiration,
+              webhookInvalid: true,
+              webhookErrorCode: errorCode,
+              webhookErrorAt: Date.now(),
+            },
           },
         };
 
