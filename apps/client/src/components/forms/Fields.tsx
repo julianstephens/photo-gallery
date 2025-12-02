@@ -1,5 +1,5 @@
-import { useAuth, useListGalleries } from "@/hooks";
-import { useGalleryContext } from "@/hooks";
+import { useAuth, useGalleryContext, useListGalleries } from "@/hooks";
+import { get } from "@/lib/utils";
 import {
   createListCollection,
   Field,
@@ -9,31 +9,33 @@ import {
   Icon,
   Portal,
   Text,
+  type JsxStyleProps as ChakraProps,
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import type { FieldError, FieldValues } from "react-hook-form";
 import { HiStar } from "react-icons/hi2";
 import { Navigate } from "react-router";
 
-interface FormProps {
+export type FormErrors = Record<string, FieldError> | undefined;
+
+interface FieldProps extends ChakraProps {
   label: string;
   name: string;
   invalid: boolean;
   placeholder?: string;
   defaultValue?: string;
-  errors?: Record<string, FieldError>;
-  width?: string;
-  maxW?: string;
+  errors?: FormErrors;
   disabled?: boolean;
 }
 
-export interface InputProps extends FormProps, FieldValues {
+export interface InputProps extends FieldProps, FieldValues {
   type: string;
   minValue?: number;
   maxValue?: number;
+  detail?: string;
 }
 
-export interface SelectProps extends FormProps, FieldValues {
+export interface SelectProps extends FieldProps, FieldValues {
   options: { value: string; label: string; icon?: React.ReactNode }[];
   usePortal?: boolean;
   useLabel?: boolean;
@@ -51,6 +53,8 @@ export const Input = ({
   maxValue,
   errors,
   invalid,
+  detail,
+  borderColor,
 }: InputProps) => {
   return (
     <Field.Root my="2" invalid={invalid}>
@@ -63,8 +67,16 @@ export const Input = ({
         {...(type === "number" && { min: minValue ?? 0, max: maxValue ?? Infinity })}
         {...(placeholder && { placeholder })}
         {...(defaultValue && { defaultValue })}
+        {...(borderColor && { borderColor })}
       />
-      <Field.ErrorText>{errors?.[name]?.message}</Field.ErrorText>
+      <Field.ErrorText>
+        {(get(errors, `${name}.message`) as string | undefined) ?? "Invalid input"}
+      </Field.ErrorText>
+      {detail && (
+        <Text fontSize="xs" color="gray.500" mt="1">
+          {detail}
+        </Text>
+      )}
     </Field.Root>
   );
 };
@@ -142,7 +154,9 @@ export const Select = ({
           <Positioner />
         )}
       </FieldSelect.Root>
-      <Field.ErrorText>{errors?.[name]?.message}</Field.ErrorText>
+      <Field.ErrorText>
+        {(get(errors, `${name}.message`) as string | undefined) ?? "Invalid input"}
+      </Field.ErrorText>
     </Field.Root>
   );
 };
