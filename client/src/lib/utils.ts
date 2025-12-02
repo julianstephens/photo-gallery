@@ -16,3 +16,26 @@ export const toErrorMessage = (err: unknown): string => {
 };
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+/**
+ * Safely get a nested property from an object using a dot-separated string.
+ * @param obj The object to get the property from.
+ * @param prop The dot-separated string representing the property path.
+ * @returns The value at the specified property path, or undefined if not found.
+ */
+export const get = (obj: unknown, prop: string) => {
+  const parsedFields = prop
+    .split(".")
+    .map((part) => part.trim())
+    .filter((part) => part);
+
+  for (const field of parsedFields) {
+    if (obj && Object.prototype.hasOwnProperty.call(obj, field)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      obj = (obj as any)[field];
+    } else {
+      return undefined;
+    }
+  }
+  return obj;
+};

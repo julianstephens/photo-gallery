@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { guildSettingsSchema } from "utils";
+import { appLogger } from "../middleware/logger.ts";
 
 const guildSettingsController = await import("../controllers/index.ts").then(
   (m) => new m.GuildSettingsController(),
@@ -25,6 +26,7 @@ export const getGuildSettings = async (req: Request, res: Response) => {
     if ((err as Error)?.name === "InvalidInputError") {
       return res.status(400).json({ error: (err as Error).message });
     }
+    appLogger.error({ err, guildId }, "[getGuildSettings] error");
     res.status(500).json({ error: "Failed to get guild settings" });
   }
 };
@@ -58,6 +60,7 @@ export const updateGuildSettings = async (req: Request, res: Response) => {
     if ((err as Error)?.name === "InvalidInputError") {
       return res.status(400).json({ error: (err as Error).message });
     }
+    appLogger.error({ err, guildId }, "[updateGuildSettings] error");
     res.status(500).json({ error: "Failed to update guild settings" });
   }
 };

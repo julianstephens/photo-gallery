@@ -1,4 +1,5 @@
 import { useAuth, useGalleryContext, useListGalleries } from "@/hooks";
+import { get } from "@/lib/utils";
 import {
   createListCollection,
   Field,
@@ -66,7 +67,9 @@ export const Input = ({
         {...(defaultValue && { defaultValue })}
         {...(borderColor && { borderColor })}
       />
-      <Field.ErrorText>{errors?.[name]?.message}</Field.ErrorText>
+      <Field.ErrorText>
+        {(get(errors, `${name}.message`) as string | undefined) ?? "Invalid input"}
+      </Field.ErrorText>
       {detail && (
         <Text fontSize="xs" color="gray.500" mt="1">
           {detail}
@@ -149,7 +152,9 @@ export const Select = ({
           <Positioner />
         )}
       </FieldSelect.Root>
-      <Field.ErrorText>{errors?.[name]?.message}</Field.ErrorText>
+      <Field.ErrorText>
+        {(get(errors, `${name}.message`) as string | undefined) ?? "Invalid input"}
+      </Field.ErrorText>
     </Field.Root>
   );
 };
