@@ -1,5 +1,5 @@
 import type { RedisClientType } from "redis";
-import { guildSettingsSchema, type GalleryMeta, type GuildSettings } from "utils";
+import { galleryMetaSchema, guildSettingsSchema, type GuildSettings } from "utils";
 import type { Env } from "./env";
 import type { Logger } from "./logger";
 
@@ -274,6 +274,8 @@ export class NotificationWorker {
     const galleriesKey = GUILD_GALLERIES_KEY(guildId);
     const galleryNames = await this.redis.sMembers(galleriesKey);
 
+    this.logger.debug({ guildId, galleryNames }, "Processing galleries for guild");
+
     if (galleryNames.length === 0) {
       return [];
     }
@@ -295,6 +297,16 @@ export class NotificationWorker {
 
     const results = await multi.exec();
 
+    this.logger.debug({ results }, "Got gallery metadata from Redis");
+
+    if (results === null) {
+      this.logger.error(
+        { err: new Error("Redis multi exec returned null"), guildId },
+        "Failed to execute Redis pipeline for guild",
+      );
+      return [];
+    }
+
     for (let i = 0; i < galleryNames.length; i++) {
       const galleryName = galleryNames[i];
       const result = results?.[i];
@@ -306,16 +318,27 @@ export class NotificationWorker {
       }
 
       try {
-        const meta = JSON.parse(result as unknown as string) as GalleryMeta;
-        const expiresAt = meta.expiresAt;
+        const metadata = JSON.parse(results[i] as unknown as string);
+        this.logger.debug({ metadata }, "Parsed gallery metadata");
+        const gallery = galleryMetaSchema.safeParse(metadata);
+
+        if (!gallery.success) {
+          this.logger.warn(
+            { guildId, galleryName, errors: gallery.error.flatten() },
+            "Invalid gallery metadata schema",
+          );
+          continue;
+        }
+
+        const expiresAt = metadata.expiresAt;
 
         // Check if gallery expires on the target day
         if (expiresAt >= dayStart.getTime() && expiresAt <= dayEnd.getTime()) {
           expiringGalleries.push({
             name: galleryName,
             expiresAt,
-            createdBy: meta.createdBy,
-            totalItems: meta.totalItems ?? 0,
+            createdBy: metadata.createdBy,
+            totalItems: metadata.totalItems ?? 0,
           });
         }
       } catch {

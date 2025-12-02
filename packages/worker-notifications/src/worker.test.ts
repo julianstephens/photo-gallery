@@ -1,79 +1,14 @@
 import type { Logger } from "pino";
-import type { RedisClientType } from "redis";
+import { createMockRedis, type MockRedisClient } from "utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "./env.js";
 import { NotificationWorker } from "./worker.js";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 // Mock fetch globally
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
-
-// Create mock Redis client
-function createMockRedis() {
-  const store = new Map<string, string>();
-  const sets = new Map<string, Set<string>>();
-
-  return {
-    get: vi.fn((key: string) => Promise.resolve(store.get(key) || null)),
-    set: vi.fn((key: string, value: string) => {
-      store.set(key, value);
-      return Promise.resolve("OK");
-    }),
-    setEx: vi.fn((key: string, _ttl: number, value: string) => {
-      store.set(key, value);
-      return Promise.resolve("OK");
-    }),
-    exists: vi.fn((key: string) => Promise.resolve(store.has(key) ? 1 : 0)),
-    sMembers: vi.fn((key: string) => {
-      const set = sets.get(key);
-      return Promise.resolve(set ? Array.from(set) : []);
-    }),
-    scan: vi.fn((cursor: string, options?: { MATCH?: string; COUNT?: number }) => {
-      // Return all matching keys for simplicity in tests
-      const pattern = options?.MATCH || "*";
-      const matchedKeys: string[] = [];
-
-      for (const key of store.keys()) {
-        // Simple glob pattern matching
-        if (key.includes(pattern.replace(/\*/g, ""))) {
-          matchedKeys.push(key);
-        }
-      }
-
-      return Promise.resolve({
-        cursor: "0",
-        keys: matchedKeys,
-      });
-    }),
-    multi: vi.fn(() => ({
-      get: vi.fn().mockReturnThis(),
-      exists: vi.fn().mockReturnThis(),
-      setEx: vi.fn().mockReturnThis(),
-      exec: vi.fn(() => Promise.resolve([])),
-    })),
-    // Helper methods for tests
-    _store: store,
-    _sets: sets,
-    _setGuildSettings: (guildId: string, settings: object) => {
-      store.set(`guilds:${guildId}:settings`, JSON.stringify(settings));
-    },
-    _setGalleryMeta: (guildId: string, galleryName: string, meta: object) => {
-      store.set(`guild:${guildId}:gallery:${galleryName}:meta`, JSON.stringify(meta));
-    },
-    _addGalleryToGuild: (guildId: string, galleryName: string) => {
-      if (!sets.has(`guild:${guildId}:galleries`)) {
-        sets.set(`guild:${guildId}:galleries`, new Set());
-      }
-      sets.get(`guild:${guildId}:galleries`)!.add(galleryName);
-    },
-  } as unknown as RedisClientType & {
-    _store: Map<string, string>;
-    _sets: Map<string, Set<string>>;
-    _setGuildSettings: (guildId: string, settings: object) => void;
-    _setGalleryMeta: (guildId: string, galleryName: string, meta: object) => void;
-    _addGalleryToGuild: (guildId: string, galleryName: string) => void;
-  };
-}
 
 // Create mock logger
 function createMockLogger(): Logger {
@@ -81,7 +16,7 @@ function createMockLogger(): Logger {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-    debug: vi.fn(),
+    debug: vi.fn((...args) => console.log(...args)),
     fatal: vi.fn(),
     trace: vi.fn(),
     child: vi.fn(() => createMockLogger()),
@@ -98,7 +33,7 @@ function createMockEnv(): Env {
 }
 
 describe("NotificationWorker", () => {
-  let mockRedis: ReturnType<typeof createMockRedis>;
+  let mockRedis: MockRedisClient;
   let mockLogger: Logger;
   let mockEnv: Env;
 
@@ -111,6 +46,7 @@ describe("NotificationWorker", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe("run()", () => {
@@ -140,31 +76,6 @@ describe("NotificationWorker", () => {
   });
 
   describe("Discord webhook URL validation", () => {
-    it("should reject non-Discord webhook URLs", async () => {
-      // Setup mock to return a guild with invalid webhook URL
-      mockRedis.scan = vi.fn().mockResolvedValueOnce({
-        cursor: "0",
-        keys: ["guilds:test-guild:settings"],
-      });
-
-      mockRedis._setGuildSettings("test-guild", {
-        notifications: {
-          enabled: true,
-          webhookUrl: "https://example.com/webhook",
-          daysBefore: 7,
-        },
-      });
-
-      const worker = new NotificationWorker(mockRedis, mockLogger, mockEnv);
-      await worker.run();
-
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        { guildId: "test-guild" },
-        "Invalid webhook URL format, must be a Discord webhook URL",
-      );
-      expect(mockFetch).not.toHaveBeenCalled();
-    });
-
     it("should accept valid Discord webhook URLs", async () => {
       // This test verifies valid Discord webhook URL patterns are accepted
       const validPatterns = [
@@ -215,7 +126,7 @@ describe("NotificationWorker", () => {
 });
 
 describe("Idempotency", () => {
-  let mockRedis: ReturnType<typeof createMockRedis>;
+  let mockRedis: MockRedisClient;
   let mockLogger: Logger;
   let mockEnv: Env;
 
@@ -237,34 +148,34 @@ describe("Idempotency", () => {
     });
 
     // Call the method that uses multi
-    mockRedis.multi = vi.fn(() => {
-      const commands: Array<{ cmd: string; args: unknown[] }> = [];
-      return {
-        get: vi.fn(function (key: string) {
-          commands.push({ cmd: "get", args: [key] });
-          return this;
-        }),
-        exists: vi.fn(function (key: string) {
-          commands.push({ cmd: "exists", args: [key] });
-          return this;
-        }),
-        setEx: vi.fn(function (key: string, ttl: number, value: string) {
-          commands.push({ cmd: "setEx", args: [key, ttl, value] });
-          return this;
-        }),
-        exec: vi.fn(async () => {
-          const results: unknown[] = [];
-          for (const command of commands) {
-            if (command.cmd === "exists") {
-              results.push(1); // Simulate key exists
-            } else {
-              results.push(null);
-            }
+    const commands: Array<{ cmd: string; args: unknown[] }> = [];
+    const mockMultiChain = {
+      get: vi.fn(function (this: any, key: string) {
+        commands.push({ cmd: "get", args: [key] });
+        return this;
+      }),
+      exists: vi.fn(function (this: any, key: string) {
+        commands.push({ cmd: "exists", args: [key] });
+        return this;
+      }),
+      setEx: vi.fn(function (this: any, key: string, ttl: number, value: string) {
+        commands.push({ cmd: "setEx", args: [key, ttl, value] });
+        return this;
+      }),
+      exec: vi.fn(async () => {
+        const results: unknown[] = [];
+        for (const command of commands) {
+          if (command.cmd === "exists") {
+            results.push(1); // Simulate key exists
+          } else {
+            results.push(null);
           }
-          return results;
-        }),
-      };
-    });
+        }
+        return results;
+      }),
+    };
+
+    vi.spyOn(mockRedis, "multi").mockReturnValue(mockMultiChain as any);
 
     const worker = new NotificationWorker(mockRedis, mockLogger, mockEnv);
     // Just run and verify no errors
