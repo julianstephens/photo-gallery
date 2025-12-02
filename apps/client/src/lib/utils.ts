@@ -85,12 +85,14 @@ export const getExpirationStatus = (
   now: number = Date.now(),
 ): ExpirationStatus => {
   const daysUntilExpiry = getDaysUntilExpiry(expiresAt, now);
-  const isExpired = daysUntilExpiry <= 0;
+  const isExpired = daysUntilExpiry < 0;
   const isExpiringSoon = !isExpired && daysUntilExpiry <= thresholdDays;
 
   let message: string;
   if (isExpired) {
     message = "Expired";
+  } else if (daysUntilExpiry === 0) {
+    message = "Expires today";
   } else if (daysUntilExpiry === 1) {
     message = "Expires tomorrow";
   } else {

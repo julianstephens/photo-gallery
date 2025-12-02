@@ -21,10 +21,7 @@ export const GalleryCard = ({ info, guildId, openDetailedGalleryView }: GalleryC
         <HStack justify="space-between" align="center" w="full">
           <Card.Title>{info.name}</Card.Title>
           {showExpirationWarning && (
-            <Badge
-              colorPalette={expirationStatus.isExpired ? "red" : "orange"}
-              variant="solid"
-            >
+            <Badge colorPalette={expirationStatus.isExpired ? "red" : "orange"} variant="solid">
               <Icon>
                 <HiClock />
               </Icon>

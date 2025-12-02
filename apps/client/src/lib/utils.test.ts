@@ -53,12 +53,14 @@ describe("getExpirationStatus", () => {
     expect(status.message).toBe("Expired");
   });
 
-  it("should return isExpired=true when expiration is exactly now", () => {
+  it("should return isExpiringSoon=true when expiration is exactly now (expires today)", () => {
     const now = Date.now();
     const status = getExpirationStatus(now, 7, now);
 
-    expect(status.isExpired).toBe(true);
-    expect(status.isExpiringSoon).toBe(false);
+    expect(status.isExpired).toBe(false);
+    expect(status.isExpiringSoon).toBe(true);
+    expect(status.daysUntilExpiry).toBe(0);
+    expect(status.message).toBe("Expires today");
   });
 
   it("should return isExpiringSoon=true for dates within threshold", () => {
