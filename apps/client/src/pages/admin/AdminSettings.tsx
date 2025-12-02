@@ -1,6 +1,6 @@
-import { GuildSelect, NotificationSettings } from "@/components/forms";
+import { GuildSelect } from "@/components/forms";
 import { Loader } from "@/components/Loader";
-import { SettingsLayout, type SettingsTab } from "@/components/settings";
+import { NotificationSettings, SettingsLayout, type SettingsTab } from "@/components/settings";
 import { toaster } from "@/components/ui/toaster";
 import { useAuth, useGalleryContext, useGuildSettings, useUpdateGuildSettings } from "@/hooks";
 import { Flex, HStack, Text, VStack } from "@chakra-ui/react";

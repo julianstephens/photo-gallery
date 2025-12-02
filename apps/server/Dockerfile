@@ -14,22 +14,23 @@ RUN pnpm fetch
 
 # Copy package files
 COPY package.json pnpm-workspace.yaml ./
-COPY server/package.json server/package.json
-COPY utils/package.json utils/package.json
+RUN mkdir -p apps/server packages/utils
+COPY apps/server/package.json apps/server/package.json
+COPY packages/utils/package.json packages/utils/package.json
 
 # Install dependencies (offline)
 # This step is cached unless lockfile or package.jsons change
 RUN pnpm install --filter server... --frozen-lockfile --offline
 
 # Copy utils source and build
-COPY utils utils
+COPY packages/utils packages/utils
 RUN pnpm --filter utils build
 
 FROM deps AS build
-COPY server server
+COPY apps/server apps/server
 RUN pnpm --filter server build
 RUN pnpm deploy --filter=server --prod /prod/server --legacy
-RUN cp -r server/dist /prod/server/dist
+RUN cp -r apps/server/dist /prod/server/dist
 
 FROM base AS runner
 ENV NODE_ENV=production

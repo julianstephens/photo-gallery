@@ -8,7 +8,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { updateGalleryNameSchema, type UpdateGalleryNameRequest } from "utils";
-import { toaster } from "../ui/toaster";
+import { toaster } from "@/components/ui/toaster";
 import { Input } from "./Fields";
 
 export const RenameGalleryForm = ({
