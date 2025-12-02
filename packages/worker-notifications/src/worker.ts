@@ -1,7 +1,7 @@
-import Redis from "ioredis";
+import type { RedisClientType } from "redis";
 import { guildSettingsSchema, type GalleryMeta, type GuildSettings } from "utils";
-import type { Env } from "./env.js";
-import type { Logger } from "./logger.js";
+import type { Env } from "./env";
+import type { Logger } from "./logger";
 
 // Redis key patterns
 const GUILD_SETTINGS_KEY = (guildId: string) => `guilds:${guildId}:settings`;
@@ -60,12 +60,12 @@ interface DiscordWebhookPayload {
  * container triggered by an external scheduler.
  */
 export class NotificationWorker {
-  private redis: Redis;
+  private redis: RedisClientType;
   private logger: Logger;
   private env: Env;
   private stats: WorkerStats;
 
-  constructor(redis: Redis, logger: Logger, env: Env) {
+  constructor(redis: RedisClientType, logger: Logger, env: Env) {
     this.redis = redis;
     this.logger = logger;
     this.env = env;
@@ -129,8 +129,9 @@ export class NotificationWorker {
 
     let cursor = "0";
     do {
-      const [nextCursor, keys] = await this.redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
-      cursor = nextCursor;
+      const scanResult = await this.redis.scan(cursor, { MATCH: pattern, COUNT: 100 });
+      cursor = scanResult.cursor.toString();
+      const keys = scanResult.keys;
 
       for (const key of keys) {
         // Extract guildId from key: guilds:{guildId}:settings
@@ -163,7 +164,7 @@ export class NotificationWorker {
       return;
     }
 
-    const effectiveDaysBefore = daysBefore ?? 7; // Schema defaults to 7, fallback for type safety
+    const effectiveDaysBefore = daysBefore ?? this.env.DEFAULT_DAYS_BEFORE;
 
     // Validate webhook URL is a Discord webhook
     if (!DISCORD_WEBHOOK_PATTERN.test(webhookUrl)) {
@@ -184,16 +185,16 @@ export class NotificationWorker {
 
     // Filter out already notified galleries (idempotency) using batched pipeline
     const toNotify: ExpiringGallery[] = [];
-    const existsPipeline = this.redis.pipeline();
+    const existsMulti = this.redis.multi();
     for (const gallery of expiringGalleries) {
       const notifiedKey = NOTIFIED_KEY(guildId, gallery.name, effectiveDaysBefore);
-      existsPipeline.exists(notifiedKey);
+      existsMulti.exists(notifiedKey);
     }
-    const existsResults = await existsPipeline.exec();
+    const existsResults = await existsMulti.exec();
 
     for (let i = 0; i < expiringGalleries.length; i++) {
       const gallery = expiringGalleries[i];
-      const alreadyNotified = existsResults?.[i]?.[1];
+      const alreadyNotified = existsResults?.[i];
 
       if (alreadyNotified) {
         this.stats.notificationsSkipped++;
@@ -220,12 +221,12 @@ export class NotificationWorker {
 
     if (success) {
       // Mark galleries as notified (batched)
-      const setexPipeline = this.redis.pipeline();
+      const setexMulti = this.redis.multi();
       for (const gallery of toNotify) {
         const notifiedKey = NOTIFIED_KEY(guildId, gallery.name, effectiveDaysBefore);
-        setexPipeline.setex(notifiedKey, NOTIFIED_TTL_SECONDS, Date.now().toString());
+        setexMulti.setEx(notifiedKey, NOTIFIED_TTL_SECONDS, Date.now().toString());
       }
-      await setexPipeline.exec();
+      await setexMulti.exec();
       this.stats.notificationsSent += toNotify.length;
     }
   }
@@ -271,7 +272,7 @@ export class NotificationWorker {
     daysBefore: number,
   ): Promise<ExpiringGallery[]> {
     const galleriesKey = GUILD_GALLERIES_KEY(guildId);
-    const galleryNames = await this.redis.smembers(galleriesKey);
+    const galleryNames = await this.redis.sMembers(galleriesKey);
 
     if (galleryNames.length === 0) {
       return [];
@@ -287,12 +288,12 @@ export class NotificationWorker {
     const expiringGalleries: ExpiringGallery[] = [];
 
     // Batch fetch gallery metadata
-    const pipeline = this.redis.pipeline();
+    const multi = this.redis.multi();
     for (const name of galleryNames) {
-      pipeline.get(GALLERY_META_KEY(guildId, name));
+      multi.get(GALLERY_META_KEY(guildId, name));
     }
 
-    const results = await pipeline.exec();
+    const results = await multi.exec();
 
     for (let i = 0; i < galleryNames.length; i++) {
       const galleryName = galleryNames[i];
@@ -300,26 +301,12 @@ export class NotificationWorker {
       this.stats.galleriesChecked++;
 
       if (!result) {
-        this.logger.warn(
-          { guildId, galleryName },
-          "Missing pipeline result for gallery metadata fetch",
-        );
-        continue;
-      }
-      if (result[0]) {
-        this.logger.warn(
-          { guildId, galleryName, error: result[0] },
-          "Failed to fetch gallery metadata from Redis pipeline",
-        );
-        continue;
-      }
-      if (!result[1]) {
         this.logger.warn({ guildId, galleryName }, "Gallery metadata is null");
         continue;
       }
 
       try {
-        const meta = JSON.parse(result[1] as string) as GalleryMeta;
+        const meta = JSON.parse(result as unknown as string) as GalleryMeta;
         const expiresAt = meta.expiresAt;
 
         // Check if gallery expires on the target day

@@ -3,16 +3,13 @@ import { z } from "zod";
 export const envSchema = z.object({
   // Redis connection URL (required)
   REDIS_URL: z
-    .string()
     .url()
     .refine(
       (url) => url.startsWith("redis://") || url.startsWith("rediss://"),
       "REDIS_URL must start with redis:// or rediss://",
     ),
-
   // Log level for pino logger
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
-
   // Default number of days before expiration to notify
   DEFAULT_DAYS_BEFORE: z
     .string()
@@ -27,7 +24,7 @@ export function parseEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
 
   if (!parsed.success) {
-    const errors = parsed.error.flatten().fieldErrors;
+    const errors = z.treeifyError(parsed.error).errors;
     // Output JSON for consistency with the rest of the worker logs
     console.error(
       JSON.stringify({

@@ -16,8 +16,8 @@
   "license": "ISC",
   "packageManager": "pnpm@10.18.3",
   "dependencies": {
-    "ioredis": "^5.6.1",
     "pino": "^10.1.0",
+    "redis": "^5.9.0",
     "utils": "workspace:*",
     "zod": "^4.1.12"
   },

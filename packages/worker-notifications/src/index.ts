@@ -1,7 +1,7 @@
-import Redis from "ioredis";
-import { parseEnv } from "./env.js";
-import { createLogger } from "./logger.js";
-import { NotificationWorker } from "./worker.js";
+import { parseEnv } from "./env";
+import { createLogger } from "./logger";
+import { NotificationWorker } from "./worker";
+import { redisClient as redis, initializeRedis, disconnectRedis } from "utils";
 
 async function main(): Promise<void> {
   // Parse and validate environment variables
@@ -12,26 +12,9 @@ async function main(): Promise<void> {
 
   logger.info("Initializing notification worker");
 
-  // Create Redis connection with fail-fast strategy for ephemeral container
-  const redis = new Redis(env.REDIS_URL, {
-    maxRetriesPerRequest: 1,
-    retryStrategy(times) {
-      logger.error({ attempts: times }, "Redis connection failed, not retrying (fail-fast)");
-      return null; // Stop retrying after first failure
-    },
-  });
-
-  redis.on("error", (err) => {
-    logger.error({ error: err.message }, "Redis connection error");
-  });
-
-  redis.on("connect", () => {
-    logger.info("Connected to Redis");
-  });
-
   try {
-    // Wait for Redis connection
-    await redis.ping();
+    await initializeRedis();
+    logger.info("Redis client initialized successfully.");
 
     // Create and run the worker
     const worker = new NotificationWorker(redis, logger, env);
@@ -41,15 +24,16 @@ async function main(): Promise<void> {
     const stats = worker.getStats();
     logger.info({ stats, success }, "Worker execution completed");
 
-    // Cleanup
-    await redis.quit();
-
     // Exit with appropriate code
     process.exit(success ? 0 : 1);
   } catch (error) {
     logger.fatal({ error: error instanceof Error ? error.message : String(error) }, "Fatal error");
     await redis.quit().catch(() => {});
     process.exit(1);
+  } finally {
+    logger.info("Shutting down worker and disconnecting Redis client.");
+    await disconnectRedis();
+    logger.info("Shutdown complete.");
   }
 }
 

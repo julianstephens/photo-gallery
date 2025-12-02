@@ -1,3 +1,4 @@
+import { disconnectRedis, initializeRedis } from "utils";
 import { appLogger } from "./middleware/logger.ts";
 import env from "./schemas/env.ts";
 import { createApp, printRegisteredRoutes } from "./server.ts";
@@ -16,6 +17,11 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     },
     "Logger initialized",
   );
+
+  initializeRedis().catch((err) => {
+    appLogger.fatal({ err }, "Failed to initialize Redis client");
+    process.exit(1);
+  });
 
   // Start the gradient generation worker if enabled
   startGradientWorker();
@@ -39,11 +45,12 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
       appLogger.error({ err }, "Error stopping gradient worker");
     }
 
-    server.close((err?: Error) => {
+    server.close(async (err?: Error) => {
       if (err) {
         appLogger.error({ err }, "Error during server close");
         process.exit(1);
       }
+      await disconnectRedis();
       process.exit(0);
     });
     setTimeout(() => process.exit(1), 10_000).unref();

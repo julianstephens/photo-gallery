@@ -317,9 +317,15 @@ importers:
 
   packages/utils:
     dependencies:
+      pino:
+        specifier: ^10.1.0
+        version: 10.1.0
       quantize:
         specifier: ^1.0.2
         version: 1.0.2
+      redis:
+        specifier: ^5.9.0
+        version: 5.9.0
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -348,12 +354,12 @@ importers:
 
   packages/worker-notifications:
     dependencies:
-      ioredis:
-        specifier: ^5.6.1
-        version: 5.8.2
       pino:
         specifier: ^10.1.0
         version: 10.1.0
+      redis:
+        specifier: ^5.9.0
+        version: 5.9.0
       utils:
         specifier: workspace:*
         version: link:../utils
