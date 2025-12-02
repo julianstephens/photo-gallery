@@ -12,17 +12,12 @@ async function main(): Promise<void> {
 
   logger.info("Initializing notification worker");
 
-  // Create Redis connection
+  // Create Redis connection with fail-fast strategy for ephemeral container
   const redis = new Redis(env.REDIS_URL, {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: 1,
     retryStrategy(times) {
-      if (times > 3) {
-        logger.error({ attempts: times }, "Redis connection failed after max retries");
-        return null; // Stop retrying
-      }
-      const delay = Math.min(times * 200, 2000);
-      logger.warn({ attempt: times, delayMs: delay }, "Retrying Redis connection");
-      return delay;
+      logger.error({ attempts: times }, "Redis connection failed, not retrying (fail-fast)");
+      return null; // Stop retrying after first failure
     },
   });
 
@@ -59,6 +54,13 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("Unhandled error:", error);
+  console.error(
+    JSON.stringify({
+      level: "fatal",
+      service: "photo-gallery-notification-worker",
+      msg: "Unhandled error in main",
+      error: error instanceof Error ? error.message : String(error),
+    }),
+  );
   process.exit(1);
 });

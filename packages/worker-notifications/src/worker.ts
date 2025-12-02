@@ -17,6 +17,13 @@ const NOTIFIED_TTL_SECONDS = 30 * 24 * 60 * 60;
 // Permanent webhook error codes that should mark webhook as invalid
 const PERMANENT_WEBHOOK_ERRORS = [404, 410];
 
+// Discord webhook URL pattern for validation
+const DISCORD_WEBHOOK_PATTERN =
+  /^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\/\d+\/[\w-]+$/;
+
+// Webhook request timeout in milliseconds
+const WEBHOOK_TIMEOUT_MS = 10000;
+
 interface WorkerStats {
   guildsProcessed: number;
   galleriesChecked: number;
@@ -156,7 +163,13 @@ export class NotificationWorker {
       return;
     }
 
-    const effectiveDaysBefore = daysBefore ?? this.env.DEFAULT_DAYS_BEFORE;
+    const effectiveDaysBefore = daysBefore;
+
+    // Validate webhook URL is a Discord webhook
+    if (!DISCORD_WEBHOOK_PATTERN.test(webhookUrl)) {
+      this.logger.warn({ guildId }, "Invalid webhook URL format, must be a Discord webhook URL");
+      return;
+    }
 
     // Find galleries expiring in exactly daysBefore days
     const expiringGalleries = await this.findExpiringGalleries(guildId, effectiveDaysBefore);
@@ -169,11 +182,18 @@ export class NotificationWorker {
       return;
     }
 
-    // Filter out already notified galleries (idempotency)
+    // Filter out already notified galleries (idempotency) using batched pipeline
     const toNotify: ExpiringGallery[] = [];
+    const existsPipeline = this.redis.pipeline();
     for (const gallery of expiringGalleries) {
       const notifiedKey = NOTIFIED_KEY(guildId, gallery.name, effectiveDaysBefore);
-      const alreadyNotified = await this.redis.exists(notifiedKey);
+      existsPipeline.exists(notifiedKey);
+    }
+    const existsResults = await existsPipeline.exec();
+
+    for (let i = 0; i < expiringGalleries.length; i++) {
+      const gallery = expiringGalleries[i];
+      const alreadyNotified = existsResults?.[i]?.[1];
 
       if (alreadyNotified) {
         this.stats.notificationsSkipped++;
@@ -199,12 +219,14 @@ export class NotificationWorker {
     );
 
     if (success) {
-      // Mark galleries as notified
+      // Mark galleries as notified (batched)
+      const setexPipeline = this.redis.pipeline();
       for (const gallery of toNotify) {
         const notifiedKey = NOTIFIED_KEY(guildId, gallery.name, effectiveDaysBefore);
-        await this.redis.setex(notifiedKey, NOTIFIED_TTL_SECONDS, Date.now().toString());
-        this.stats.notificationsSent++;
+        setexPipeline.setex(notifiedKey, NOTIFIED_TTL_SECONDS, Date.now().toString());
       }
+      await setexPipeline.exec();
+      this.stats.notificationsSent += toNotify.length;
     }
   }
 
@@ -258,9 +280,9 @@ export class NotificationWorker {
     const now = Date.now();
     const targetDay = now + daysBefore * 24 * 60 * 60 * 1000;
     const dayStart = new Date(targetDay);
-    dayStart.setHours(0, 0, 0, 0);
+    dayStart.setUTCHours(0, 0, 0, 0);
     const dayEnd = new Date(targetDay);
-    dayEnd.setHours(23, 59, 59, 999);
+    dayEnd.setUTCHours(23, 59, 59, 999);
 
     const expiringGalleries: ExpiringGallery[] = [];
 
@@ -277,7 +299,22 @@ export class NotificationWorker {
       const result = results?.[i];
       this.stats.galleriesChecked++;
 
-      if (!result || result[0] || !result[1]) {
+      if (!result) {
+        this.logger.warn(
+          { guildId, galleryName },
+          "Missing pipeline result for gallery metadata fetch",
+        );
+        continue;
+      }
+      if (result[0]) {
+        this.logger.warn(
+          { guildId, galleryName, error: result[0] },
+          "Failed to fetch gallery metadata from Redis pipeline",
+        );
+        continue;
+      }
+      if (!result[1]) {
+        this.logger.warn({ guildId, galleryName }, "Gallery metadata is null");
         continue;
       }
 
@@ -331,13 +368,19 @@ export class NotificationWorker {
     };
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const status = response.status;

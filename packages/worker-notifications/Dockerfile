@@ -28,7 +28,7 @@ RUN pnpm --filter utils build
 FROM deps AS build
 COPY packages/worker-notifications packages/worker-notifications
 RUN pnpm --filter worker-notifications build
-RUN pnpm deploy --filter=worker-notifications --prod /prod/worker-notifications --legacy
+RUN pnpm deploy --filter=worker-notifications --prod /prod/worker-notifications
 RUN cp -r packages/worker-notifications/dist /prod/worker-notifications/dist
 
 FROM node:20-alpine AS runner
@@ -36,5 +36,9 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=build /prod/worker-notifications ./
+
+# Create non-root user and set ownership
+RUN adduser -D app && chown -R app /app
+USER app
 
 CMD ["node", "dist/index.js"]

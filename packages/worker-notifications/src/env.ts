@@ -28,7 +28,15 @@ export function parseEnv(): Env {
 
   if (!parsed.success) {
     const errors = parsed.error.flatten().fieldErrors;
-    console.error("Invalid environment variables:", JSON.stringify(errors, null, 2));
+    // Output JSON for consistency with the rest of the worker logs
+    console.error(
+      JSON.stringify({
+        level: "fatal",
+        service: "photo-gallery-notification-worker",
+        msg: "Invalid environment variables",
+        errors,
+      }),
+    );
     process.exit(1);
   }
 
