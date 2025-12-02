@@ -8,6 +8,7 @@ RUN corepack enable
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN mkdir -p apps/client packages/utils
 COPY apps/client/package.json apps/client/package.json
 COPY packages/utils/package.json packages/utils/package.json
 RUN pnpm install --filter utils --frozen-lockfile

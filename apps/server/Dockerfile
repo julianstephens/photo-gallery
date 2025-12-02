@@ -14,6 +14,7 @@ RUN pnpm fetch
 
 # Copy package files
 COPY package.json pnpm-workspace.yaml ./
+RUN mkdir -p apps/server packages/utils
 COPY apps/server/package.json apps/server/package.json
 COPY packages/utils/package.json packages/utils/package.json
 
