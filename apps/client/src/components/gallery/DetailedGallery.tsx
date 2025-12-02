@@ -161,16 +161,18 @@ export const DetailedGallery = ({
               <HiClock />
             </Icon>
           </Alert.Indicator>
-          <Alert.Title>
-            {expirationStatus.isExpired
-              ? "This gallery has expired"
-              : `This gallery ${expirationStatus.message.toLowerCase()}`}
-          </Alert.Title>
-          <Alert.Description>
-            {expirationStatus.isExpired
-              ? "The gallery content may no longer be accessible."
-              : "Consider downloading your photos or extending the gallery before it expires."}
-          </Alert.Description>
+          <Alert.Content>
+            <Alert.Title>
+              {expirationStatus.isExpired
+                ? "This gallery has expired"
+                : `This gallery ${expirationStatus.message.toLowerCase()}`}
+            </Alert.Title>
+            <Alert.Description>
+              {expirationStatus.isExpired
+                ? "The gallery content may no longer be accessible."
+                : "Consider downloading your photos or requesting an extension before it expires."}
+            </Alert.Description>
+          </Alert.Content>
         </Alert.Root>
       )}
       <HStack
