@@ -39,13 +39,15 @@ Guild settings must be stored at `guilds:{guildId}:settings` with the following 
 ```json
 {
   "notifications": {
-    "enabled": true,
-    "webhookUrl": "https://discord.com/api/webhooks/...",
-    "daysBefore": 7,
-    // The following fields are added by the worker when a webhook fails (optional)
-    "webhookInvalid": true,
-    "webhookErrorCode": 404,
-    "webhookErrorAt": 1704067200000
+    "galleryExpiration": {
+      "enabled": true,
+      "webhookUrl": "https://discord.com/api/webhooks/...",
+      "daysBefore": 7,
+      // The following fields are added by the worker when a webhook fails (optional)
+      "webhookInvalid": true,
+      "webhookErrorCode": 404,
+      "webhookErrorAt": 1704067200000
+    }
   }
 }
 ```
