@@ -14,6 +14,15 @@ vi.mock("../controllers/index.ts", () => ({
   }),
 }));
 
+vi.mock("../middleware/logger.ts", () => ({
+  appLogger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
 const handlers = await import("./guildSettings.ts");
 const { getGuildSettings, updateGuildSettings } = handlers;
 
