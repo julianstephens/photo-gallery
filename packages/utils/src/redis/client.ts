@@ -38,7 +38,7 @@ redisClient.on("connect", () => log.info("Client connecting..."));
 redisClient.on("ready", () => log.info("Client connected successfully and is ready to use."));
 redisClient.on("reconnecting", () => log.warn("Client is attempting to reconnect..."));
 redisClient.on("error", (err) => log.error({ err }, "Redis Client Error"));
-redisClient.on("end", () => log.info("Connection closed. No more reconnections will be made.")); // --- Event Listeners for Observability ---
+redisClient.on("end", () => log.info("Connection closed. No more reconnections will be made."));
 
 // --- Connection Management Functions ---
 let isInitialized = false;
