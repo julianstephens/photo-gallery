@@ -153,12 +153,12 @@ export class NotificationWorker {
 
     // Get guild settings
     const settings = await this.getGuildSettings(guildId);
-    if (!settings?.notifications?.enabled) {
+    if (!settings?.notifications?.galleryExpiration?.enabled) {
       this.logger.debug({ guildId }, "Notifications not enabled for guild");
       return;
     }
 
-    const { webhookUrl, daysBefore } = settings.notifications;
+    const { webhookUrl, daysBefore } = settings.notifications.galleryExpiration;
     if (!webhookUrl) {
       this.logger.debug({ guildId }, "No webhook URL configured for guild");
       return;

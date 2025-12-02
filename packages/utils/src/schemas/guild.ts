@@ -13,10 +13,3 @@ export const guildNotificationSettingsSchema = z.object({
   webhookErrorCode: z.number().optional(),
   webhookErrorAt: z.number().optional(),
 });
-
-/**
- * Full guild settings schema including notification configuration.
- */
-export const guildSettingsSchema = z.object({
-  notifications: guildNotificationSettingsSchema.optional(),
-});
