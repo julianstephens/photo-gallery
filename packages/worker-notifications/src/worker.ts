@@ -163,7 +163,7 @@ export class NotificationWorker {
       return;
     }
 
-    const effectiveDaysBefore = daysBefore;
+    const effectiveDaysBefore = daysBefore ?? 7; // Schema defaults to 7, fallback for type safety
 
     // Validate webhook URL is a Discord webhook
     if (!DISCORD_WEBHOOK_PATTERN.test(webhookUrl)) {
