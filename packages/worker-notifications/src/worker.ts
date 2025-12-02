@@ -192,6 +192,11 @@ export class NotificationWorker {
     }
     const existsResults = await existsMulti.exec();
 
+    if (!existsResults) {
+      this.logger.error({ guildId }, "Idempotency check pipeline returned null");
+      return;
+    }
+
     for (let i = 0; i < expiringGalleries.length; i++) {
       const gallery = expiringGalleries[i];
       const alreadyNotified = existsResults?.[i];
@@ -226,7 +231,20 @@ export class NotificationWorker {
         const notifiedKey = NOTIFIED_KEY(guildId, gallery.name, effectiveDaysBefore);
         setexMulti.setEx(notifiedKey, NOTIFIED_TTL_SECONDS, Date.now().toString());
       }
-      await setexMulti.exec();
+      try {
+        const setexResults = await setexMulti.exec();
+        if (!setexResults) {
+          this.logger.error(
+            { guildId, galleryCount: toNotify.length },
+            "Failed to save notification records - may cause duplicate notifications",
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          { guildId, galleryCount: toNotify.length, error: err },
+          "Exception while saving notification records - may cause duplicate notifications",
+        );
+      }
       this.stats.notificationsSent += toNotify.length;
     }
   }
