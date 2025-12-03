@@ -103,6 +103,8 @@ sequenceDiagram
 
 This repository uses a declarative, Infrastructure as Code (IaC) approach to deployments. Coolify does not yet have a mature Terraform provider, so a custom reconciliation tool was created and published to npm as `coolify-deploy`. When a new version tag is pushed, a GitHub Actions workflow builds and pushes Docker images for any changed applications. It then runs the `coolify-deploy` CLI, which reads `coolify.manifest.json`, compares it against the live environment in Coolify, and makes API calls to create, update, and deploy resources as needed.
 
+> **Note:** The implementation for this workflow was originally part of this monorepo but has been moved to its own repository, [`julianstephens/coolify-deploy`](https://github.com/julianstephens/coolify-deploy), to promote reusability.
+
 ```mermaid
 graph TD
     A[Git Push to Version Tag] --> B{GitHub Actions Workflow};
