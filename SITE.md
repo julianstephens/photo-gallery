@@ -7,24 +7,24 @@ Photo Gallery 5000 is a full-stack gallery management tool optimized for Discord
 ### Highlights
 
 - **Chunked Upload Service**: `ChunkedUploadService` assembles large uploads from clients, applies server-side checksums, and writes to S3-compatible storage. Upload job state is stored in Redis, allowing clients to resume interrupted uploads seamlessly.
-- **Declarative Deployments**: A custom `worker-resource-reconciler` provides lightweight Infrastructure as Code (IaC). It reads a `coolify.manifest.json` to create, update, and deploy all applications to Coolify, ensuring consistent environments.
+- **Declarative Deployments**: The [`coolify-deploy` CLI](https://www.npmjs.com/package/coolify-deploy) provides lightweight Infrastructure as Code (IaC). It reads a `coolify.manifest.json` to create, update, and deploy all applications to Coolify, ensuring consistent environments.
 - **Background Worker Pipelines**: Redis queues drive multiple background workers, including a `gradient-worker` for generating image placeholders and an `expiration-worker` for cleaning up temporary galleries, ensuring the API remains responsive.
 - **Redis-Centric State**: Redis serves as the high-performance backbone for Express sessions, guild/gallery metadata caching, upload job tracking, and worker queues, minimizing database dependency for core operations.
 - **End-to-End Type Safety**: A shared `packages/utils` workspace provides Zod schemas that generate TypeScript types. This ensures that data contracts between the React client, Express API, and background workers are always synchronized.
-- **Automated CI/CD**: The GitHub Actions workflow in `deploy.yml` automatically builds and pushes images only for changed applications, then runs the resource reconciler to deploy them, streamlining the release process.
+- **Automated CI/CD**: The GitHub Actions workflow in `deploy.yml` automatically builds and pushes images only for changed applications, then runs `coolify-deploy` to deploy them, streamlining the release process.
 
 This repository favors clear separation between validation, controller logic, and infrastructure concerns, enabling confident iteration on either side of the stack while keeping cross-cutting concerns (uploads, gradients, Redis) testable end-to-end.
 
 ### Services
 
-| Service                 | Description                                                                                                        | Package Path                          |
-| :---------------------- | :----------------------------------------------------------------------------------------------------------------- | :------------------------------------ |
-| **Client**              | The React/Vite front-end application that provides the user interface for browsing galleries and uploading photos. | `apps/client`                         |
-| **Server**              | The core Express API that handles authentication, gallery management, and orchestrates upload/worker jobs.         | `apps/server`                         |
-| **Gradient Worker**     | A background worker that processes images to generate placeholder gradients for a smoother loading experience.     | `apps/server`                         |
-| **Expiration Worker**   | A background worker that periodically cleans up expired or temporary galleries to manage storage.                  | `apps/server`                         |
-| **Resource Reconciler** | A CLI tool that provides declarative, manifest-based deployments to the Coolify hosting platform.                  | `packages/worker-resource-reconciler` |
-| **Shared Utilities**    | A shared library containing Zod schemas and TypeScript types to ensure consistency across the monorepo.            | `packages/utils`                      |
+| Service               | Description                                                                                                        | Package Path           |
+| :-------------------- | :----------------------------------------------------------------------------------------------------------------- | :--------------------- |
+| **Client**            | The React/Vite front-end application that provides the user interface for browsing galleries and uploading photos. | `apps/client`          |
+| **Server**            | The core Express API that handles authentication, gallery management, and orchestrates upload/worker jobs.         | `apps/server`          |
+| **Gradient Worker**   | A background worker that processes images to generate placeholder gradients for a smoother loading experience.     | `apps/server`          |
+| **Expiration Worker** | A background worker that periodically cleans up expired or temporary galleries to manage storage.                  | `apps/server`          |
+| **Deployment CLI**    | A CLI tool that provides declarative, manifest-based deployments to the Coolify hosting platform.                  | `coolify-deploy` (npm) |
+| **Shared Utilities**  | A shared library containing Zod schemas and TypeScript types to ensure consistency across the monorepo.            | `packages/utils`       |
 
 ## Workflows
 
@@ -101,7 +101,7 @@ sequenceDiagram
 
 ### Deployment and Resource Reconciliation
 
-This repository uses a declarative, Infrastructure as Code (IaC) approach to deployments. Coolify does not yet have a mature Terraform provider, so a custom reconciliation tool had to be created. When a new version tag is pushed, a GitHub Actions workflow builds and pushes Docker images for any changed applications. It then runs the `worker-resource-reconciler` CLI, which reads `coolify.manifest.json`, compares it against the live environment in Coolify, and makes API calls to create, update, and deploy resources as needed.
+This repository uses a declarative, Infrastructure as Code (IaC) approach to deployments. Coolify does not yet have a mature Terraform provider, so a custom reconciliation tool was created and published to npm as `coolify-deploy`. When a new version tag is pushed, a GitHub Actions workflow builds and pushes Docker images for any changed applications. It then runs the `coolify-deploy` CLI, which reads `coolify.manifest.json`, compares it against the live environment in Coolify, and makes API calls to create, update, and deploy resources as needed.
 
 ```mermaid
 graph TD
@@ -110,7 +110,7 @@ graph TD
     C -- App A Changed --> D[Build & Push Docker Image A];
     C -- App B Changed --> E[Build & Push Docker Image B];
     subgraph Reconciler Step
-        F[Run Resource Reconciler CLI];
+        F[Run coolify-deploy CLI];
     end
     D --> F;
     E --> F;
