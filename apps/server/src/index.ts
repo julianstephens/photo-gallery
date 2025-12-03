@@ -6,6 +6,10 @@ import { startGradientWorker, stopGradientWorker } from "./workers/index.ts";
 
 // Start server if run directly
 if (process.argv[1] === new URL(import.meta.url).pathname) {
+  // Construct REDIS_URL from individual env vars for the shared Redis client
+  // This must be done before createApp() is called since modules load the Redis client at import time
+  process.env.REDIS_URL = `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`;
+
   (async () => {
     const app = createApp();
 
@@ -18,9 +22,6 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
       },
       "Logger initialized",
     );
-
-    // Construct REDIS_URL from individual env vars for the shared Redis client
-    process.env.REDIS_URL = `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`;
 
     try {
       await initializeRedis();
