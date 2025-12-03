@@ -1,5 +1,6 @@
 import type { RedisClientType } from "redis";
 import { galleryMetaSchema, guildSettingsSchema, type GuildSettings } from "utils";
+import z from "zod";
 import type { Env } from "./env";
 import type { Logger } from "./logger";
 
@@ -266,7 +267,7 @@ export class NotificationWorker {
 
       if (!result.success) {
         this.logger.warn(
-          { guildId, errors: result.error.flatten() },
+          { guildId, errors: z.treeifyError(result.error).errors },
           "Invalid guild settings schema",
         );
         return null;
@@ -342,7 +343,7 @@ export class NotificationWorker {
 
         if (!gallery.success) {
           this.logger.warn(
-            { guildId, galleryName, errors: gallery.error.flatten() },
+            { guildId, galleryName, errors: z.treeifyError(gallery.error).errors },
             "Invalid gallery metadata schema",
           );
           continue;

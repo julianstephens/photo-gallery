@@ -29,7 +29,7 @@ export interface ReconcileResult {
 export interface ReconcilerOptions {
   manifest: Manifest;
   dockerTag: string;
-  envFileContent?: string;
+  envSecrets: Record<string, string>;
   serverUuid?: string;
 }
 
@@ -116,7 +116,7 @@ export class Reconciler {
    * Reconciles all resources in the manifest.
    */
   async reconcile(): Promise<ReconcileResult> {
-    const { manifest, dockerTag, envFileContent } = this.options;
+    const { manifest, dockerTag, envSecrets } = this.options;
     const results: ReconcileResourceResult[] = [];
     let totalCreated = 0;
     let totalUpdated = 0;
@@ -131,17 +131,6 @@ export class Reconciler {
       },
       "Starting reconciliation",
     );
-
-    // Parse environment variables if provided
-    let envVars: CoolifyEnvVar[] = [];
-    if (envFileContent) {
-      const parsed = parseEnvFile(envFileContent);
-      envVars = envVarsToCoolifyFormat(parsed);
-      this.logger.info(
-        { envVarCount: envVars.length },
-        "Parsed environment variables from .env content",
-      );
-    }
 
     // Determine server UUID
     const serverUuid = this.options.serverUuid ?? manifest.serverUuid;
@@ -159,6 +148,23 @@ export class Reconciler {
     // Process each resource
     for (const resource of manifest.resources) {
       try {
+        // Get env vars for this specific resource
+        const envFileContent = envSecrets[resource.envSecretName];
+        let envVars: CoolifyEnvVar[] = [];
+        if (envFileContent) {
+          const parsed = parseEnvFile(envFileContent);
+          envVars = envVarsToCoolifyFormat(parsed);
+          this.logger.info(
+            { resource: resource.name, envVarCount: envVars.length },
+            "Parsed environment variables for resource",
+          );
+        } else {
+          this.logger.warn(
+            { resource: resource.name, secretName: resource.envSecretName },
+            "No environment variable content found for resource",
+          );
+        }
+
         const result = await this.reconcileResource(resource, serverUuid, envVars);
         results.push(result);
 

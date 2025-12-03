@@ -30,30 +30,30 @@ node packages/worker-resource-reconciler/dist/cli.js --help
 
 ```bash
 # Basic usage
-resource-reconciler --manifest ./coolify.manifest.json --tag v1.0.0
+resource-reconciler apply --manifest ./coolify.manifest.json --tag v1.0.0
 
 # With dry run
-resource-reconciler -m ./coolify.manifest.json -t latest --dry-run
+resource-reconciler apply -m ./coolify.manifest.json -t latest --dry-run
 
 # Using environment variables
-COOLIFY_API_URL=https://coolify.example.com \
+COOLIFY_ENDPOINT_URL=https://coolify.example.com \
 COOLIFY_TOKEN=your-api-token \
 MANIFEST_PATH=./coolify.manifest.json \
 DOCKER_IMAGE_TAG=v1.0.0 \
-resource-reconciler
+resource-reconciler apply
 ```
 
 ### Environment Variables
 
-| Variable           | Required | Description                                                       |
-| ------------------ | -------- | ----------------------------------------------------------------- |
-| `COOLIFY_API_URL`  | Yes      | Coolify API base URL                                              |
-| `COOLIFY_TOKEN`    | Yes      | Coolify API token                                                 |
-| `MANIFEST_PATH`    | No       | Path to manifest file (can use CLI arg)                           |
-| `DOCKER_IMAGE_TAG` | No       | Docker image tag to deploy (can use CLI arg)                      |
-| `ENV_FILE_CONTENT` | No       | `.env` formatted content for application environment variables    |
-| `LOG_LEVEL`        | No       | Log level: trace, debug, info, warn, error, fatal (default: info) |
-| `DRY_RUN`          | No       | Set to "true" for dry run mode                                    |
+| Variable               | Required | Description                                                              |
+| ---------------------- | -------- | ------------------------------------------------------------------------ |
+| `COOLIFY_ENDPOINT_URL` | Yes      | Coolify server base URL                                                  |
+| `COOLIFY_TOKEN`        | Yes      | Coolify API token                                                        |
+| `MANIFEST_PATH`        | No       | Path to manifest file (can use CLI arg)                                  |
+| `DOCKER_IMAGE_TAG`     | No       | Docker image tag to deploy (can use CLI arg)                             |
+| `COOLIFY_ENV_*`        | No       | `.env` formatted content for an application (e.g., `COOLIFY_ENV_SERVER`) |
+| `LOG_LEVEL`            | No       | Log level: trace, debug, info, warn, error, fatal (default: info)        |
+| `DRY_RUN`              | No       | Set to "true" for dry run mode                                           |
 
 ### Manifest Format
 
@@ -65,12 +65,12 @@ Create a `coolify.manifest.json` file in your repository root:
   "destinationId": "your-coolify-destination-uuid",
   "serverUuid": "your-coolify-server-uuid",
   "environmentName": "production",
-  "envFileSecretName": "PRODUCTION_ENV_FILE",
   "resources": [
     {
       "name": "photo-gallery-server",
       "description": "The server service.",
       "dockerImageName": "ghcr.io/owner/photo-gallery-server",
+      "envSecretName": "COOLIFY_ENV_SERVER",
       "domains": "api.example.com",
       "portsExposes": "4000",
       "healthCheck": {
@@ -131,7 +131,10 @@ const client = new CoolifyClient(apiUrl, token, logger, dryRun);
 const reconciler = new Reconciler(client, logger, {
   manifest,
   dockerTag: "v1.0.0",
-  envFileContent: envContent,
+  envSecrets: {
+    COOLIFY_ENV_SERVER: "...",
+    COOLIFY_ENV_CLIENT: "...",
+  },
 });
 
 const result = await reconciler.reconcile();
@@ -158,21 +161,22 @@ The reconciler integrates with GitHub Actions in the `deploy.yml` workflow:
 ```yaml
 - name: Run resource reconciler
   env:
-    COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL }}
+    COOLIFY_ENDPOINT_URL: ${{ secrets.COOLIFY_ENDPOINT_URL }}
     COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-    ENV_FILE_CONTENT: ${{ secrets.PRODUCTION_ENV_FILE }}
+    COOLIFY_ENV_SERVER: ${{ secrets.COOLIFY_ENV_SERVER }}
+    COOLIFY_ENV_CLIENT: ${{ secrets.COOLIFY_ENV_CLIENT }}
     MANIFEST_PATH: ./coolify.manifest.json
     DOCKER_IMAGE_TAG: latest
   run: |
-    node packages/worker-resource-reconciler/dist/cli.js \
+    node packages/worker-resource-reconciler/dist/cli.js apply \
       --manifest "$MANIFEST_PATH" \
       --tag "$DOCKER_IMAGE_TAG"
 ```
 
 ## Required GitHub Secrets
 
-| Secret                | Description                                                   |
-| --------------------- | ------------------------------------------------------------- |
-| `COOLIFY_API_URL`     | Coolify API base URL (e.g., `https://coolify.example.com`)    |
-| `COOLIFY_TOKEN`       | Coolify API token (from Keys & Tokens in Coolify dashboard)   |
-| `PRODUCTION_ENV_FILE` | `.env` formatted content for production environment variables |
+| Secret                 | Description                                                   |
+| ---------------------- | ------------------------------------------------------------- |
+| `COOLIFY_ENDPOINT_URL` | Coolify server base URL (e.g., `https://coolify.example.com`) |
+| `COOLIFY_TOKEN`        | Coolify API token (from Keys & Tokens in Coolify dashboard)   |
+| `PRODUCTION_ENV_FILE`  | `.env` formatted content for production environment variables |

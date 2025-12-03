@@ -8,12 +8,11 @@
  *   pnpm tsx ./scripts/generate-manifest.ts
  */
 
+import { execSync } from "child_process";
 import fs from "fs/promises";
 import path from "path";
-import { execSync } from "child_process";
 
 // --- Types ---
-
 type PnpmWorkspace = {
   name: string;
   path: string;
@@ -23,6 +22,7 @@ type CoolifyResource = {
   name: string;
   description: string;
   dockerImageName: string;
+  envSecretName: string;
   domains: string;
   portsExposes: string;
   healthCheck: {
@@ -36,12 +36,10 @@ type CoolifyManifest = {
   destinationId: string;
   serverUuid: string;
   environmentName: string;
-  envFileSecretName: string;
   resources: CoolifyResource[];
 };
 
 // --- Helper Functions ---
-
 const log = {
   info: (msg: string) => console.log(`[INFO] ${msg}`),
   warn: (msg: string) => console.warn(`[WARN] ${msg}`),
@@ -94,7 +92,6 @@ function getPnpmWorkspaces(): PnpmWorkspace[] {
 }
 
 // --- Main Script Logic ---
-
 /**
  * Creates a resource definition object for a single workspace if it's eligible.
  * @returns A CoolifyResource object or null if the workspace is not eligible.
@@ -107,7 +104,7 @@ async function createResourceForWorkspace(
   const dockerfilePath = path.join(absolutePath, "Dockerfile");
 
   if (!(await pathExists(dockerfilePath))) {
-    return null; // Not an eligible resource
+    return null;
   }
 
   log.info(`Processing "${pkgName}"...`);
@@ -133,7 +130,8 @@ async function createResourceForWorkspace(
     name: `${repoInfo.name}-${resourceNameSuffix}`,
     description: pkg.description || `The ${resourceNameSuffix} service.`,
     dockerImageName: `ghcr.io/${repoInfo.owner}/${repoInfo.name}-${resourceNameSuffix}`,
-    domains: "app.example.com", // <-- USER MUST REPLACE
+    envSecretName: `COOLIFY_ENV_${resourceNameSuffix.toUpperCase().replace(/-/g, "_")}`,
+    domains: "app.example.com",
     portsExposes: exposedPort || "8080",
     healthCheck: {
       path: "/health",
@@ -177,7 +175,6 @@ async function main() {
     destinationId: "clt1234ab0000g21b5c1a1b1b", // <-- USER MUST REPLACE
     serverUuid: "clx9876ef0000g21b5c1a1c1c", // <-- USER MUST REPLACE
     environmentName: "production",
-    envFileSecretName: "PRODUCTION_ENV_FILE",
     resources: allResources,
   };
 

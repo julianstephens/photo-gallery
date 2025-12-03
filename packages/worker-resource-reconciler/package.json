@@ -19,6 +19,8 @@
   "license": "ISC",
   "packageManager": "pnpm@10.18.3",
   "dependencies": {
+    "@commander-js/extra-typings": "^14.0.0",
+    "commander": "^14.0.2",
     "pino": "^10.1.0",
     "zod": "^4.1.12"
   },

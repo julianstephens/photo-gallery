@@ -54,7 +54,16 @@ export interface CreateDockerImageAppOptions {
   ports_exposes?: string;
   health_check_enabled?: boolean;
   health_check_path?: string;
-  health_check_port?: number;
+  health_check_port?: string;
+  health_check_host?: string;
+  health_check_method?: string;
+  health_check_return_code?: number;
+  health_check_scheme?: string;
+  health_check_response_text?: string;
+  health_check_interval?: number;
+  health_check_timeout?: number;
+  health_check_retries?: number;
+  health_check_start_period?: number;
   instant_deploy?: boolean;
   destination_uuid?: string;
 }
@@ -71,7 +80,16 @@ export interface UpdateAppOptions {
   ports_exposes?: string;
   health_check_enabled?: boolean;
   health_check_path?: string;
-  health_check_port?: number;
+  health_check_port?: string;
+  health_check_host?: string;
+  health_check_method?: string;
+  health_check_return_code?: number;
+  health_check_scheme?: string;
+  health_check_response_text?: string;
+  health_check_interval?: number;
+  health_check_timeout?: number;
+  health_check_retries?: number;
+  health_check_start_period?: number;
 }
 
 /**
@@ -174,7 +192,7 @@ export class CoolifyClient {
         ports_exposes: options.ports_exposes ?? null,
         health_check_enabled: options.health_check_enabled ?? false,
         health_check_path: options.health_check_path ?? null,
-        health_check_port: options.health_check_port ?? null,
+        health_check_port: options.health_check_port ? Number(options.health_check_port) : null,
         repository_project_id: null,
         environment_id: null,
       };
@@ -255,7 +273,16 @@ export class CoolifyClient {
     if (resource.healthCheck) {
       options.health_check_enabled = true;
       options.health_check_path = resource.healthCheck.path;
-      options.health_check_port = parseInt(resource.healthCheck.port, 10);
+      options.health_check_port = resource.healthCheck.port;
+      options.health_check_host = resource.healthCheck.host;
+      options.health_check_method = resource.healthCheck.method;
+      options.health_check_return_code = resource.healthCheck.returnCode;
+      options.health_check_scheme = resource.healthCheck.scheme;
+      options.health_check_response_text = resource.healthCheck.responseText;
+      options.health_check_interval = resource.healthCheck.interval;
+      options.health_check_timeout = resource.healthCheck.timeout;
+      options.health_check_retries = resource.healthCheck.retries;
+      options.health_check_start_period = resource.healthCheck.startPeriod;
     }
 
     return options;
@@ -277,7 +304,16 @@ export class CoolifyClient {
     if (resource.healthCheck) {
       options.health_check_enabled = true;
       options.health_check_path = resource.healthCheck.path;
-      options.health_check_port = parseInt(resource.healthCheck.port, 10);
+      options.health_check_port = resource.healthCheck.port;
+      options.health_check_host = resource.healthCheck.host;
+      options.health_check_method = resource.healthCheck.method;
+      options.health_check_return_code = resource.healthCheck.returnCode;
+      options.health_check_scheme = resource.healthCheck.scheme;
+      options.health_check_response_text = resource.healthCheck.responseText;
+      options.health_check_interval = resource.healthCheck.interval;
+      options.health_check_timeout = resource.healthCheck.timeout;
+      options.health_check_retries = resource.healthCheck.retries;
+      options.health_check_start_period = resource.healthCheck.startPeriod;
     }
 
     return options;

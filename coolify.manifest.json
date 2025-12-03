@@ -1,0 +1,46 @@
+{
+  "projectId": "lwk8osg84o0okw0844wgkc4o",
+  "destinationId": "ugsk8w0w0c0oc08wc4488s4w",
+  "serverUuid": "jk8w8scsg0gkw804ockg8g80",
+  "environmentName": "production",
+  "resources": [
+    {
+      "name": "photo-gallery-server",
+      "description": "Photo Gallery API Server",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-server",
+      "envSecretName": "COOLIFY_ENV_SERVER",
+      "domains": "http://gallery-api.cyborgdev.cloud",
+      "portsExposes": "4000",
+      "healthCheck": {
+        "path": "/api/healthz",
+        "port": "4000",
+        "host": "localhost",
+        "method": "GET",
+        "scheme": "http",
+        "returnCode": 200
+      }
+    },
+    {
+      "name": "photo-gallery-client",
+      "description": "Photo Gallery Web Client",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-client",
+      "envSecretName": "COOLIFY_ENV_CLIENT",
+      "domains": "http://gallery.cyborgdev.cloud",
+      "portsExposes": "80"
+    },
+    {
+      "name": "photo-gallery-gradient-worker",
+      "description": "Photo Gallery Gradient Worker",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-gradient-worker",
+      "envSecretName": "COOLIFY_ENV_GRADIENT_WORKER",
+      "portsExposes": "8080"
+    },
+    {
+      "name": "photo-gallery-expiration-worker",
+      "description": "Photo Gallery Expiration Worker",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-expiration-worker",
+      "envSecretName": "COOLIFY_ENV_EXPIRATION_WORKER",
+      "portsExposes": "8080"
+    }
+  ]
+}
