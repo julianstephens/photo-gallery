@@ -129,15 +129,15 @@ export const invalidateGalleriesCache = async (guildId: string, userId?: string)
     const pattern = `${CACHE_PREFIX}galleries:list:guild:${guildId}:*`;
 
     // Use SCAN to avoid blocking Redis (unlike KEYS which blocks)
-    let cursor = 0;
+    let cursor = "0";
     const keys: string[] = [];
     do {
       const result = await redis.client.scan(cursor, { MATCH: pattern, COUNT: 100 });
-      cursor = result.cursor;
+      cursor = result.cursor.toString();
       if (result.keys.length > 0) {
         keys.push(...result.keys);
       }
-    } while (cursor !== 0);
+    } while (cursor !== "0");
 
     if (keys.length > 0) {
       await redis.client.del(keys);
