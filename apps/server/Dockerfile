@@ -14,9 +14,11 @@ RUN pnpm fetch
 
 # Copy package files
 COPY package.json pnpm-workspace.yaml ./
-RUN mkdir -p apps/server packages/utils
+RUN mkdir -p apps/server packages/utils packages/worker-gradient packages/worker-notifications
 COPY apps/server/package.json apps/server/package.json
 COPY packages/utils/package.json packages/utils/package.json
+COPY packages/worker-gradient/package.json packages/worker-gradient/package.json
+COPY packages/worker-notifications/package.json packages/worker-notifications/package.json
 
 # Install dependencies (offline)
 # This step is cached unless lockfile or package.jsons change
