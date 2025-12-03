@@ -1,0 +1,56 @@
+{
+  "projectId": "lwk8osg84o0okw0844wgkc4o",
+  "destinationId": "clt1234ab0000g21b5c1a1b1b",
+  "serverUuid": "clx9876ef0000g21b5c1a1c1c",
+  "environmentName": "production",
+  "resources": [
+    {
+      "name": "photo-gallery-client",
+      "description": "The client service.",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-client",
+      "envSecretName": "COOLIFY_ENV_CLIENT",
+      "domains": "http://gallery.cyborgdev.cloud",
+      "portsExposes": "80",
+      "healthCheck": {
+        "path": "/",
+        "port": "80"
+      }
+    },
+    {
+      "name": "photo-gallery-server",
+      "description": "The server service.",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-server",
+      "envSecretName": "COOLIFY_ENV_SERVER",
+      "domains": "http://gallery-api.cyborgdev.cloud",
+      "portsExposes": "4000",
+      "healthCheck": {
+        "path": "/api/healthz",
+        "port": "4000"
+      }
+    },
+    {
+      "name": "photo-gallery-worker-gradient",
+      "description": "Gradient generation worker for photo-gallery",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-gradient",
+      "envSecretName": "COOLIFY_ENV_WORKER_GRADIENT",
+      "domains": "app.example.com",
+      "portsExposes": "8080",
+      "healthCheck": {
+        "path": "/health",
+        "port": "8080"
+      }
+    },
+    {
+      "name": "photo-gallery-worker-notifications",
+      "description": "Gallery expiration notification worker for photo-gallery",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-notifications",
+      "envSecretName": "COOLIFY_ENV_WORKER_NOTIFICATIONS",
+      "domains": "app.example.com",
+      "portsExposes": "8080",
+      "healthCheck": {
+        "path": "/health",
+        "port": "8080"
+      }
+    }
+  ]
+}
