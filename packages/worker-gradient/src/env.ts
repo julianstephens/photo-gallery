@@ -39,7 +39,7 @@ export function parseEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
 
   if (!parsed.success) {
-    const errors = parsed.error.flatten();
+    const errors = z.treeifyError(parsed.error).errors;
     // Output JSON for consistency with the rest of the worker logs
     console.error(
       JSON.stringify({
