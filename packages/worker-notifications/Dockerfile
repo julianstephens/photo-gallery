@@ -28,7 +28,7 @@ RUN pnpm --filter utils build
 FROM deps AS build
 COPY packages/worker-notifications packages/worker-notifications
 RUN pnpm --filter worker-notifications build
-RUN pnpm deploy --filter=worker-notifications --prod /prod/worker-notifications
+RUN pnpm deploy --filter=worker-notifications --prod /prod/worker-notifications --legacy
 RUN cp -r packages/worker-notifications/dist /prod/worker-notifications/dist
 
 FROM node:20-alpine AS runner

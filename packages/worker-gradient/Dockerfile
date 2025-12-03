@@ -28,7 +28,7 @@ RUN pnpm --filter utils build
 FROM deps AS build
 COPY packages/worker-gradient packages/worker-gradient
 RUN pnpm --filter worker-gradient build
-RUN pnpm deploy --filter=worker-gradient --prod /prod/worker-gradient
+RUN pnpm deploy --filter=worker-gradient --prod /prod/worker-gradient --legacy
 RUN cp -r packages/worker-gradient/dist /prod/worker-gradient/dist
 
 FROM node:20-alpine AS runner
