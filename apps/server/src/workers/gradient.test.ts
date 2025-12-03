@@ -116,7 +116,7 @@ describe("GradientWorker Facade", () => {
       const { getGradientWorkerMetrics, startGradientWorker } = await import("./index.ts");
 
       // Start worker to initialize instance
-      startGradientWorker();
+      await startGradientWorker();
 
       const metrics = getGradientWorkerMetrics();
 
@@ -150,7 +150,7 @@ describe("GradientWorker Facade", () => {
 
       const { startGradientWorker } = await import("./index.ts");
 
-      startGradientWorker();
+      await startGradientWorker();
 
       expect(mockStart).not.toHaveBeenCalled();
     });
@@ -160,7 +160,7 @@ describe("GradientWorker Facade", () => {
 
       const { startGradientWorker } = await import("./index.ts");
 
-      startGradientWorker();
+      await startGradientWorker();
 
       expect(mockStart).toHaveBeenCalled();
     });
@@ -172,14 +172,14 @@ describe("GradientWorker Facade", () => {
       const { startGradientWorker } = await import("./index.ts");
 
       // First call to initialize and start
-      startGradientWorker();
+      await startGradientWorker();
 
       // Reset mock to check second call
       mockStart.mockClear();
       mockIsRunning.mockReturnValue(true);
 
       // Second call should not start again
-      startGradientWorker();
+      await startGradientWorker();
 
       // Worker.start should have been called only during first call (or not at all if already running check works)
       // The facade checks isRunning before starting
@@ -194,7 +194,7 @@ describe("GradientWorker Facade", () => {
 
       const { startGradientWorker, stopGradientWorker } = await import("./index.ts");
 
-      startGradientWorker();
+      await startGradientWorker();
       await stopGradientWorker();
 
       expect(mockStop).toHaveBeenCalled();
@@ -221,7 +221,7 @@ describe("GradientWorker Facade", () => {
       const { startGradientWorker, getQueueLength, getProcessingCount, getDelayedCount } =
         await import("./index.ts");
 
-      startGradientWorker();
+      await startGradientWorker();
 
       expect(await getQueueLength()).toBe(5);
       expect(await getProcessingCount()).toBe(2);
@@ -245,7 +245,7 @@ describe("GradientWorker Facade", () => {
 
       const { processJob, startGradientWorker } = await import("./index.ts");
 
-      startGradientWorker();
+      await startGradientWorker();
       await processJob("gradient-test-image.jpg");
 
       expect(mockProcessJob).toHaveBeenCalledWith("gradient-test-image.jpg");

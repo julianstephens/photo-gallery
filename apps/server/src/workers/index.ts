@@ -119,21 +119,20 @@ export async function processJob(jobId: string): Promise<void> {
 /**
  * Start the gradient generation worker.
  */
-export function startGradientWorker(): void {
+export async function startGradientWorker(): Promise<void> {
   if (!env.GRADIENT_WORKER_ENABLED) {
     appLogger.info("[GradientWorker] Worker disabled by configuration");
     return;
   }
 
-  if (workerInstance?.isRunning()) {
+  const instance = await getOrCreateWorkerInstance();
+
+  if (instance.isRunning()) {
     appLogger.warn("[GradientWorker] Worker already running");
     return;
   }
 
-  const workerEnv = createWorkerEnv();
-  const logger = createLogger(workerEnv);
-  workerInstance = new GradientWorker(redis.client, logger, workerEnv);
-  workerInstance.start();
+  instance.start();
 
   appLogger.info(
     { concurrency: env.GRADIENT_WORKER_CONCURRENCY },
