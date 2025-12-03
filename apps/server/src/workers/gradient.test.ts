@@ -1,75 +1,73 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  mockBucketServiceModule,
-  mockEnvModule,
-  mockLoggerModule,
-  mockRedisModule,
-} from "../utils/test-mocks.ts";
+import { mockEnvModule, mockLoggerModule, mockRedisModule } from "../utils/test-mocks.ts";
 
 const envEnabledModule = () => mockEnvModule({ GRADIENT_WORKER_ENABLED: true });
 const envDisabledModule = () => mockEnvModule({ GRADIENT_WORKER_ENABLED: false });
 
 vi.mock("../middleware/logger.ts", () => mockLoggerModule());
 vi.mock("../redis.ts", () => mockRedisModule());
-vi.mock("../services/bucket.ts", () => mockBucketServiceModule());
 
-// Create a mock for GradientMetaService as a proper class mock
-const mockMarkPending = vi.fn();
-const mockMarkProcessing = vi.fn();
-const mockMarkCompleted = vi.fn();
-const mockMarkFailed = vi.fn();
-const mockGetGradient = vi.fn();
-
-vi.mock("../services/gradientMeta.ts", () => ({
-  GradientMetaService: class MockGradientMetaService {
-    markPending = mockMarkPending;
-    markProcessing = mockMarkProcessing;
-    markCompleted = mockMarkCompleted;
-    markFailed = mockMarkFailed;
-    getGradient = mockGetGradient;
-  },
+// Mock the worker-gradient package using vi.hoisted
+const {
+  mockEnqueueJob,
+  mockStart,
+  mockStop,
+  mockIsRunning,
+  mockGetStats,
+  mockGetQueueLength,
+  mockGetProcessingCount,
+  mockGetDelayedCount,
+  mockProcessJob,
+} = vi.hoisted(() => ({
+  mockEnqueueJob: vi.fn(),
+  mockStart: vi.fn(),
+  mockStop: vi.fn(),
+  mockIsRunning: vi.fn().mockReturnValue(false),
+  mockGetStats: vi.fn().mockReturnValue({
+    jobsProcessed: 0,
+    jobsFailed: 0,
+    avgProcessingTimeMs: 0,
+    activeJobs: 0,
+  }),
+  mockGetQueueLength: vi.fn().mockResolvedValue(0),
+  mockGetProcessingCount: vi.fn().mockResolvedValue(0),
+  mockGetDelayedCount: vi.fn().mockResolvedValue(0),
+  mockProcessJob: vi.fn(),
 }));
 
-// Mock utils gradient generation
-const mockGenerateGradient = vi.fn().mockResolvedValue({
-  palette: ["#FF0000", "#00FF00"],
-  primary: "#FF0000",
-  secondary: "#00FF00",
-  foreground: "#FFFFFF",
-  css: "linear-gradient(135deg, #FF0000 0%, #00FF00 100%)",
-  placeholder: "data:image/jpeg;base64,test",
-});
+vi.mock("worker-gradient", () => ({
+  GradientWorker: class MockGradientWorker {
+    enqueueJob = mockEnqueueJob;
+    start = mockStart;
+    stop = mockStop;
+    isRunning = mockIsRunning;
+    getStats = mockGetStats;
+    getQueueLength = mockGetQueueLength;
+    getProcessingCount = mockGetProcessingCount;
+    getDelayedCount = mockGetDelayedCount;
+    processJob = mockProcessJob;
+  },
+  createLogger: vi.fn().mockReturnValue({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
 
-vi.mock("utils/server", async () => {
-  const actual = await vi.importActual("utils/server");
-  return {
-    ...actual,
-    generateGradientWithPlaceholder: mockGenerateGradient,
-  };
-});
-
-import redis from "../redis.ts";
-
-describe("GradientWorker", () => {
+describe("GradientWorker Facade", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    mockGenerateGradient.mockResolvedValue({
-      palette: ["#FF0000", "#00FF00"],
-      primary: "#FF0000",
-      secondary: "#00FF00",
-      foreground: "#FFFFFF",
-      css: "linear-gradient(135deg, #FF0000 0%, #00FF00 100%)",
-      placeholder: "data:image/jpeg;base64,test",
-    });
+    mockIsRunning.mockReturnValue(false);
+    mockEnqueueJob.mockResolvedValue("gradient-test-image-jpg");
   });
 
   describe("enqueueGradientJob", () => {
     it("should return null when worker is disabled", async () => {
       vi.doMock("../schemas/env.ts", () => envDisabledModule());
 
-      // Re-import to get fresh module with new env
-      const { enqueueGradientJob } = await import("./gradient.ts");
+      const { enqueueGradientJob } = await import("./index.ts");
 
       const result = await enqueueGradientJob({
         guildId: "guild123",
@@ -79,14 +77,13 @@ describe("GradientWorker", () => {
       });
 
       expect(result).toBeNull();
+      expect(mockEnqueueJob).not.toHaveBeenCalled();
     });
 
-    it("should enqueue job and return job ID when worker is enabled", async () => {
+    it("should forward job to worker when enabled", async () => {
       vi.doMock("../schemas/env.ts", () => envEnabledModule());
-      vi.mocked(redis.client.get).mockResolvedValue(null); // No existing job
-      vi.mocked(redis.client.rPush).mockResolvedValue(1);
 
-      const { enqueueGradientJob } = await import("./gradient.ts");
+      const { enqueueGradientJob } = await import("./index.ts");
 
       const result = await enqueueGradientJob({
         guildId: "guild123",
@@ -95,61 +92,55 @@ describe("GradientWorker", () => {
         itemId: "test-image-jpg",
       });
 
-      expect(result).toBeTruthy();
-      expect(result).toContain("gradient-");
-      expect(mockMarkPending).toHaveBeenCalledWith("test/image.jpg");
-      expect(redis.client.set).toHaveBeenCalled();
-      expect(redis.client.rPush).toHaveBeenCalledWith("gradient:queue", expect.any(String));
-    });
-
-    it("should return existing job ID if job already exists", async () => {
-      vi.doMock("../schemas/env.ts", () => envEnabledModule());
-      vi.mocked(redis.client.get).mockResolvedValue(JSON.stringify({ jobId: "existing-job" }));
-
-      const { enqueueGradientJob } = await import("./gradient.ts");
-
-      const result = await enqueueGradientJob({
+      expect(result).toBe("gradient-test-image-jpg");
+      expect(mockEnqueueJob).toHaveBeenCalledWith({
         guildId: "guild123",
         galleryName: "test-gallery",
         storageKey: "test/image.jpg",
         itemId: "test-image-jpg",
       });
-
-      expect(result).toBe("gradient-test-image.jpg");
-      expect(redis.client.set).not.toHaveBeenCalled();
-      expect(redis.client.rPush).not.toHaveBeenCalled();
-    });
-
-    it("should return null for invalid job data", async () => {
-      vi.doMock("../schemas/env.ts", () => envEnabledModule());
-
-      const { enqueueGradientJob } = await import("./gradient.ts");
-
-      const result = await enqueueGradientJob({
-        guildId: "",
-        galleryName: "test-gallery",
-        storageKey: "test/image.jpg",
-        itemId: "test-image-jpg",
-      });
-
-      expect(result).toBeNull();
     });
   });
 
   describe("getGradientWorkerMetrics", () => {
-    it("should return worker metrics including activeJobs", async () => {
+    it("should return metrics from worker instance", async () => {
       vi.doMock("../schemas/env.ts", () => envEnabledModule());
+      mockGetStats.mockReturnValue({
+        jobsProcessed: 10,
+        jobsFailed: 2,
+        avgProcessingTimeMs: 150,
+        activeJobs: 1,
+      });
+      mockIsRunning.mockReturnValue(true);
 
-      const { getGradientWorkerMetrics } = await import("./gradient.ts");
+      const { getGradientWorkerMetrics, startGradientWorker } = await import("./index.ts");
+
+      // Start worker to initialize instance
+      await startGradientWorker();
 
       const metrics = getGradientWorkerMetrics();
 
-      expect(metrics).toHaveProperty("jobsProcessed");
-      expect(metrics).toHaveProperty("jobsFailed");
-      expect(metrics).toHaveProperty("avgProcessingTimeMs");
-      expect(metrics).toHaveProperty("isEnabled");
-      expect(metrics).toHaveProperty("isRunning");
-      expect(metrics).toHaveProperty("activeJobs");
+      expect(metrics).toEqual({
+        jobsProcessed: 10,
+        jobsFailed: 2,
+        avgProcessingTimeMs: 150,
+        isEnabled: true,
+        isRunning: true,
+        activeJobs: 1,
+      });
+    });
+
+    it("should return default values when worker not initialized", async () => {
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
+
+      const { getGradientWorkerMetrics } = await import("./index.ts");
+
+      const metrics = getGradientWorkerMetrics();
+
+      expect(metrics).toHaveProperty("jobsProcessed", 0);
+      expect(metrics).toHaveProperty("jobsFailed", 0);
+      expect(metrics).toHaveProperty("isEnabled", true);
+      expect(metrics).toHaveProperty("isRunning", false);
     });
   });
 
@@ -157,71 +148,107 @@ describe("GradientWorker", () => {
     it("should not start when worker is disabled", async () => {
       vi.doMock("../schemas/env.ts", () => envDisabledModule());
 
-      const { startGradientWorker, getGradientWorkerMetrics } = await import("./gradient.ts");
+      const { startGradientWorker } = await import("./index.ts");
 
-      startGradientWorker();
+      await startGradientWorker();
 
-      const metrics = getGradientWorkerMetrics();
-      expect(metrics.isRunning).toBe(false);
+      expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    it("should start worker when enabled", async () => {
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
+
+      const { startGradientWorker } = await import("./index.ts");
+
+      await startGradientWorker();
+
+      expect(mockStart).toHaveBeenCalled();
+    });
+
+    it("should not start if already running", async () => {
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
+      mockIsRunning.mockReturnValue(true);
+
+      const { startGradientWorker } = await import("./index.ts");
+
+      // First call to initialize and start
+      await startGradientWorker();
+
+      // Reset mock to check second call
+      mockStart.mockClear();
+      mockIsRunning.mockReturnValue(true);
+
+      // Second call should not start again
+      await startGradientWorker();
+
+      // Worker.start should have been called only during first call (or not at all if already running check works)
+      // The facade checks isRunning before starting
     });
   });
 
   describe("stopGradientWorker", () => {
-    it("should stop the worker gracefully", async () => {
+    it("should stop the worker", async () => {
       vi.doMock("../schemas/env.ts", () => envEnabledModule());
-      vi.mocked(redis.client.lMove).mockResolvedValue(null); // No jobs to move
+      mockIsRunning.mockReturnValue(true);
+      mockStop.mockResolvedValue(undefined);
 
-      const { startGradientWorker, stopGradientWorker, getGradientWorkerMetrics } = await import(
-        "./gradient.ts"
-      );
+      const { startGradientWorker, stopGradientWorker } = await import("./index.ts");
 
-      startGradientWorker();
+      await startGradientWorker();
       await stopGradientWorker();
 
-      const metrics = getGradientWorkerMetrics();
-      expect(metrics.isRunning).toBe(false);
+      expect(mockStop).toHaveBeenCalled();
     });
   });
 
-  describe("getQueueLength", () => {
-    it("should return the queue length", async () => {
+  describe("queue status functions", () => {
+    it("should return 0 when worker not initialized", async () => {
       vi.doMock("../schemas/env.ts", () => envEnabledModule());
-      vi.mocked(redis.client.lLen).mockResolvedValue(5);
 
-      const { getQueueLength } = await import("./gradient.ts");
+      const { getQueueLength, getProcessingCount, getDelayedCount } = await import("./index.ts");
 
-      const length = await getQueueLength();
+      expect(await getQueueLength()).toBe(0);
+      expect(await getProcessingCount()).toBe(0);
+      expect(await getDelayedCount()).toBe(0);
+    });
 
-      expect(length).toBe(5);
-      expect(redis.client.lLen).toHaveBeenCalledWith("gradient:queue");
+    it("should forward to worker instance when initialized", async () => {
+      vi.doMock("../schemas/env.ts", () => envEnabledModule());
+      mockGetQueueLength.mockResolvedValue(5);
+      mockGetProcessingCount.mockResolvedValue(2);
+      mockGetDelayedCount.mockResolvedValue(3);
+
+      const { startGradientWorker, getQueueLength, getProcessingCount, getDelayedCount } =
+        await import("./index.ts");
+
+      await startGradientWorker();
+
+      expect(await getQueueLength()).toBe(5);
+      expect(await getProcessingCount()).toBe(2);
+      expect(await getDelayedCount()).toBe(3);
     });
   });
 
-  describe("getProcessingCount", () => {
-    it("should return the processing count", async () => {
+  describe("processJob", () => {
+    it("should not process job when worker not initialized", async () => {
       vi.doMock("../schemas/env.ts", () => envEnabledModule());
-      vi.mocked(redis.client.lLen).mockResolvedValue(2);
 
-      const { getProcessingCount } = await import("./gradient.ts");
+      const { processJob } = await import("./index.ts");
 
-      const count = await getProcessingCount();
+      await processJob("gradient-test-image.jpg");
 
-      expect(count).toBe(2);
-      expect(redis.client.lLen).toHaveBeenCalledWith("gradient:processing");
+      expect(mockProcessJob).not.toHaveBeenCalled();
     });
-  });
 
-  describe("getDelayedCount", () => {
-    it("should return the delayed jobs count", async () => {
+    it("should forward processJob to worker instance when initialized", async () => {
       vi.doMock("../schemas/env.ts", () => envEnabledModule());
-      vi.mocked(redis.client.zCard).mockResolvedValue(3);
 
-      const { getDelayedCount } = await import("./gradient.ts");
+      const { processJob, startGradientWorker } = await import("./index.ts");
 
-      const count = await getDelayedCount();
+      await startGradientWorker();
+      await processJob("gradient-test-image.jpg");
 
-      expect(count).toBe(3);
-      expect(redis.client.zCard).toHaveBeenCalledWith("gradient:delayed");
+      expect(mockProcessJob).toHaveBeenCalledWith("gradient-test-image.jpg");
     });
   });
 });

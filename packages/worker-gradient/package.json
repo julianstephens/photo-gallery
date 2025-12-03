@@ -1,0 +1,37 @@
+{
+  "name": "worker-gradient",
+  "version": "1.0.0",
+  "description": "Gradient generation worker for photo-gallery",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "gradient-worker": "dist/run.js"
+  },
+  "scripts": {
+    "start": "tsx src/run.ts",
+    "build": "tsup",
+    "clean": "rm -rf dist node_modules",
+    "lint": "eslint src/",
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.3",
+  "dependencies": {
+    "pino": "^10.1.0",
+    "redis": "^5.9.0",
+    "utils": "workspace:*",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@tsconfig/node-ts": "^23.6.1",
+    "@tsconfig/node24": "^24.0.1",
+    "@types/node": "^24.10.0",
+    "ioredis-mock": "^8.9.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.7"
+  }
+}
