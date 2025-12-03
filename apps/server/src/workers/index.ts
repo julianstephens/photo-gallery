@@ -132,7 +132,7 @@ export async function stopGradientWorker(): Promise<void> {
  * Get the current queue length.
  */
 export async function getQueueLength(): Promise<number> {
-  return workerInstance?.getQueueLength() ?? 0;
+  return workerInstance ? await workerInstance.getQueueLength() : 0;
 }
 
 /**
