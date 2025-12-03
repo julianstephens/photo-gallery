@@ -131,16 +131,13 @@ jobs:
         with:
           node-version: 20
 
-      # --- MODIFIED STEP ---
-      # Use npx to download and run the command in a single step.
       - name: Run coolify-deploy
         env:
           COOLIFY_ENDPOINT_URL: ${{ secrets.COOLIFY_ENDPOINT_URL }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           COOLIFY_ENV_SERVER: ${{ secrets.COOLIFY_ENV_SERVER }}
-          COOLIFY_ENV_CLIENT: ${{ secrets.COOLIFY_ENV_CLIENT }}
-          COOLIFY_ENV_GRADIENT_WORKER: ${{ secrets.COOLIFY_ENV_GRADIENT_WORKER }}
-          COOLIFY_ENV_EXPIRATION_WORKER: ${{ secrets.COOLIFY_ENV_EXPIRATION_WORKER }}
+          COOLIFY_ENV_WORKER_GRADIENT: ${{ secrets.COOLIFY_ENV_WORKER_GRADIENT }}
+          COOLIFY_ENV_WORKER_NOTIFICATIONS: ${{ secrets.COOLIFY_ENV_WORKER_NOTIFICATIONS }}
           MANIFEST_PATH: ./coolify.manifest.json
           LOG_LEVEL: info
         run: |
