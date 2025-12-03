@@ -149,5 +149,5 @@ export async function getProcessingCount(): Promise<number> {
  * Get the count of delayed jobs waiting for retry.
  */
 export async function getDelayedCount(): Promise<number> {
-  return workerInstance?.getDelayedCount() ?? 0;
+  return (await workerInstance?.getDelayedCount()) ?? 0;
 }
