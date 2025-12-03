@@ -3,11 +3,12 @@ import { ConfirmDeleteModal } from "@/components/modals";
 import { toaster } from "@/components/ui/toaster";
 import { useListGalleryItems } from "@/hooks";
 import { logger } from "@/lib/logger";
+import { getExpirationStatus } from "@/lib/utils";
 import { getGallery, removeGalleryItems } from "@/queries";
-import { Button, Heading, HStack, Icon, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Alert, Button, Heading, HStack, Icon, Spinner, Text, VStack } from "@chakra-ui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { HiArrowLongLeft, HiTrash, HiXMark } from "react-icons/hi2";
+import { HiArrowLongLeft, HiClock, HiTrash, HiXMark } from "react-icons/hi2";
 import { TbCheckbox, TbSquare, TbSquareCheck } from "react-icons/tb";
 import { Gallery as GalleryDisplay } from "./Gallery";
 
@@ -144,8 +145,36 @@ export const DetailedGallery = ({
     );
   }
 
+  const expirationStatus = getExpirationStatus(gallery.meta.expiresAt);
+  const showExpirationWarning = expirationStatus.isExpired || expirationStatus.isExpiringSoon;
+
   return (
     <>
+      {showExpirationWarning && (
+        <Alert.Root
+          status={expirationStatus.isExpired ? "error" : "warning"}
+          mb="4"
+          aria-live="polite"
+        >
+          <Alert.Indicator>
+            <Icon>
+              <HiClock />
+            </Icon>
+          </Alert.Indicator>
+          <Alert.Content>
+            <Alert.Title>
+              {expirationStatus.isExpired
+                ? "This gallery has expired"
+                : `This gallery ${expirationStatus.message.toLowerCase()}`}
+            </Alert.Title>
+            <Alert.Description>
+              {expirationStatus.isExpired
+                ? "The gallery content may no longer be accessible."
+                : "Consider downloading your photos or requesting an extension before it expires."}
+            </Alert.Description>
+          </Alert.Content>
+        </Alert.Root>
+      )}
       <HStack
         id={`${componentIdentifier}-detailed-gallery-header`}
         w="full"

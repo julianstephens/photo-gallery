@@ -39,3 +39,70 @@ export const get = (obj: unknown, prop: string) => {
   }
   return obj;
 };
+
+/**
+ * Default threshold in days for "expiring soon" warnings.
+ * Galleries expiring within this many days will show a warning indicator.
+ */
+export const DEFAULT_EXPIRY_WARNING_THRESHOLD_DAYS = 7;
+
+/**
+ * Calculates the number of days until a given expiration timestamp.
+ * Returns a negative number if the expiration date has passed.
+ * @param expiresAt Expiration timestamp in milliseconds
+ * @param now Optional current time in milliseconds (defaults to Date.now())
+ * @returns Number of days until expiration (can be negative if expired)
+ */
+export const getDaysUntilExpiry = (expiresAt: number, now: number = Date.now()): number => {
+  const diffMs = expiresAt - now;
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+};
+
+/**
+ * Result of checking gallery expiration status.
+ */
+export interface ExpirationStatus {
+  /** Whether the gallery has expired */
+  isExpired: boolean;
+  /** Whether the gallery is expiring soon (within threshold) */
+  isExpiringSoon: boolean;
+  /** Number of days until expiration (negative if expired) */
+  daysUntilExpiry: number;
+  /** Human-readable expiration message */
+  message: string;
+}
+
+/**
+ * Gets the expiration status for a gallery.
+ * @param expiresAt Expiration timestamp in milliseconds
+ * @param thresholdDays Number of days within which to show a warning (default: 7)
+ * @param now Optional current time in milliseconds (defaults to Date.now())
+ * @returns ExpirationStatus object with expiration details
+ */
+export const getExpirationStatus = (
+  expiresAt: number,
+  thresholdDays: number = DEFAULT_EXPIRY_WARNING_THRESHOLD_DAYS,
+  now: number = Date.now(),
+): ExpirationStatus => {
+  const daysUntilExpiry = getDaysUntilExpiry(expiresAt, now);
+  const isExpired = daysUntilExpiry < 0;
+  const isExpiringSoon = !isExpired && daysUntilExpiry <= thresholdDays;
+
+  let message: string;
+  if (isExpired) {
+    message = "Expired";
+  } else if (daysUntilExpiry === 0) {
+    message = "Expires today";
+  } else if (daysUntilExpiry === 1) {
+    message = "Expires tomorrow";
+  } else {
+    message = `Expires in ${daysUntilExpiry} days`;
+  }
+
+  return {
+    isExpired,
+    isExpiringSoon,
+    daysUntilExpiry,
+    message,
+  };
+};
