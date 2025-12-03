@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import type pino from "pino";
-import { parseEnvFile, envVarsToCoolifyFormat, Reconciler } from "./reconciler.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CoolifyClient } from "./coolify.js";
 import type { Manifest } from "./manifest.js";
+import { envVarsToCoolifyFormat, parseEnvFile, Reconciler } from "./reconciler.js";
 
 describe("parseEnvFile", () => {
   it("should parse simple key=value pairs", () => {
@@ -175,6 +175,7 @@ describe("Reconciler", () => {
     updateApplication: vi.fn(),
     updateEnvironmentVariables: vi.fn(),
     deployApplication: vi.fn(),
+    findEnvironmentByName: vi.fn(),
   });
 
   const createTestManifest = (): Manifest => ({
@@ -188,6 +189,7 @@ describe("Reconciler", () => {
         name: "test-app",
         description: "Test application",
         dockerImageName: "ghcr.io/owner/repo-app",
+        envSecretName: "TEST_APP_ENV",
         domains: "app.example.com",
         portsExposes: "3000",
         healthCheck: {
@@ -205,6 +207,10 @@ describe("Reconciler", () => {
   describe("reconcile()", () => {
     it("should create a new application when it does not exist", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       mockClient.findApplicationByName.mockResolvedValue(null);
       mockClient.createDockerImageApplication.mockResolvedValue({
         uuid: "new-app-uuid",
@@ -215,6 +221,9 @@ describe("Reconciler", () => {
       const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
         manifest,
         dockerTag: "v1.0.0",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
       });
 
       const result = await reconciler.reconcile();
@@ -240,6 +249,10 @@ describe("Reconciler", () => {
 
     it("should update an existing application", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       mockClient.findApplicationByName.mockResolvedValue({
         uuid: "existing-app-uuid",
         name: "test-app",
@@ -249,6 +262,9 @@ describe("Reconciler", () => {
       const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
         manifest,
         dockerTag: "v2.0.0",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
       });
 
       const result = await reconciler.reconcile();
@@ -271,8 +287,79 @@ describe("Reconciler", () => {
       expect(mockClient.deployApplication).toHaveBeenCalledWith("existing-app-uuid");
     });
 
+    it("should fail if the target environment does not exist", async () => {
+      const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue(null);
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(false);
+      expect(result.totalFailed).toBe(manifest.resources.length);
+      expect(mockClient.findEnvironmentByName).toHaveBeenCalledWith(
+        "test-project-uuid",
+        "production",
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        {
+          projectId: "test-project-uuid",
+          environmentName: "production",
+        },
+        "Target environment does not exist in Coolify project",
+      );
+      expect(mockClient.findApplicationByName).not.toHaveBeenCalled();
+    });
+
+    it("should proceed if the target environment exists", async () => {
+      const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
+      mockClient.findApplicationByName.mockResolvedValue(null);
+      mockClient.createDockerImageApplication.mockResolvedValue({
+        uuid: "new-app-uuid",
+        name: "test-app",
+      });
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(true);
+      expect(result.totalCreated).toBe(1);
+      expect(mockClient.findEnvironmentByName).toHaveBeenCalledWith(
+        "test-project-uuid",
+        "production",
+      );
+      expect(mockLogger.error).not.toHaveBeenCalledWith(
+        expect.any(Object), // The first argument is an object with metadata
+        "Target environment does not exist in Coolify project",
+      );
+      expect(mockClient.createDockerImageApplication).toHaveBeenCalled();
+    });
+
     it("should handle multiple resources", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       mockClient.findApplicationByName
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ uuid: "existing-uuid", name: "app-2" });
@@ -288,6 +375,7 @@ describe("Reconciler", () => {
             name: "app-1",
             description: "First app",
             dockerImageName: "ghcr.io/owner/repo-app1",
+            envSecretName: "APP1_ENV",
             domains: "app1.example.com",
             portsExposes: "3000",
           },
@@ -295,6 +383,7 @@ describe("Reconciler", () => {
             name: "app-2",
             description: "Second app",
             dockerImageName: "ghcr.io/owner/repo-app2",
+            envSecretName: "APP2_ENV",
             domains: "app2.example.com",
             portsExposes: "4000",
           },
@@ -304,6 +393,10 @@ describe("Reconciler", () => {
       const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
         manifest,
         dockerTag: "latest",
+        envSecrets: {
+          APP1_ENV: "",
+          APP2_ENV: "",
+        },
       });
 
       const result = await reconciler.reconcile();
@@ -316,6 +409,10 @@ describe("Reconciler", () => {
 
     it("should fail when server UUID is not provided", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       const manifest: Manifest = {
         projectId: "test-project-uuid",
         destinationId: "test-destination-uuid",
@@ -326,6 +423,7 @@ describe("Reconciler", () => {
             name: "test-app",
             description: "",
             dockerImageName: "ghcr.io/owner/repo-app",
+            envSecretName: "TEST_APP_ENV",
             domains: "",
             portsExposes: "3000",
           },
@@ -335,6 +433,9 @@ describe("Reconciler", () => {
       const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
         manifest,
         dockerTag: "v1.0.0",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
       });
 
       const result = await reconciler.reconcile();
@@ -349,12 +450,19 @@ describe("Reconciler", () => {
 
     it("should handle resource reconciliation errors gracefully", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       mockClient.findApplicationByName.mockRejectedValue(new Error("API Error"));
 
       const manifest = createTestManifest();
       const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
         manifest,
         dockerTag: "v1.0.0",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
       });
 
       const result = await reconciler.reconcile();
@@ -370,6 +478,10 @@ describe("Reconciler", () => {
 
     it("should parse and apply environment variables", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       mockClient.findApplicationByName.mockResolvedValue(null);
       mockClient.createDockerImageApplication.mockResolvedValue({
         uuid: "new-app-uuid",
@@ -380,7 +492,9 @@ describe("Reconciler", () => {
       const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
         manifest,
         dockerTag: "v1.0.0",
-        envFileContent: "DATABASE_URL=postgres://localhost\nAPI_KEY=secret123",
+        envSecrets: {
+          TEST_APP_ENV: "DATABASE_URL=postgres://localhost\nAPI_KEY=secret123",
+        },
       });
 
       const result = await reconciler.reconcile();
@@ -397,6 +511,10 @@ describe("Reconciler", () => {
 
     it("should skip environment variable update when no env content provided", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       mockClient.findApplicationByName.mockResolvedValue(null);
       mockClient.createDockerImageApplication.mockResolvedValue({
         uuid: "new-app-uuid",
@@ -407,6 +525,9 @@ describe("Reconciler", () => {
       const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
         manifest,
         dockerTag: "v1.0.0",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
       });
 
       await reconciler.reconcile();
@@ -416,6 +537,10 @@ describe("Reconciler", () => {
 
     it("should use serverUuid from options over manifest", async () => {
       const mockClient = createMockClient();
+      mockClient.findEnvironmentByName.mockResolvedValue({
+        name: "production",
+        project_uuid: "test-project-uuid",
+      });
       mockClient.findApplicationByName.mockResolvedValue(null);
       mockClient.createDockerImageApplication.mockResolvedValue({
         uuid: "new-app-uuid",
@@ -427,6 +552,9 @@ describe("Reconciler", () => {
         manifest,
         dockerTag: "v1.0.0",
         serverUuid: "override-server-uuid",
+        envSecrets: {
+          TEST_APP_ENV: "",
+        },
       });
 
       await reconciler.reconcile();

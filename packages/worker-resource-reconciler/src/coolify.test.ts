@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
 import type pino from "pino";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CoolifyClient } from "./coolify.js";
 import type { Resource } from "./manifest.js";
 
@@ -105,6 +105,99 @@ describe("CoolifyClient", () => {
     });
   });
 
+  describe("listEnvironments", () => {
+    it("should list environments for a project", async () => {
+      const mockEnvs = [
+        { name: "production", project_uuid: "project-1" },
+        { name: "staging", project_uuid: "project-1" },
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: createMockHeaders({ "content-type": "application/json" }),
+        json: () => Promise.resolve({ data: mockEnvs }),
+      });
+
+      const client = new CoolifyClient("https://coolify.example.com", "test-token", mockLogger);
+      const envs = await client.listEnvironments("project-1");
+
+      expect(envs).toEqual(mockEnvs);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://coolify.example.com/api/v1/projects/project-1/environments",
+        expect.objectContaining({
+          method: "GET",
+          headers: expect.objectContaining({
+            Authorization: "Bearer test-token",
+          }),
+        }),
+      );
+    });
+
+    it("should handle API errors when listing environments", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: "Server Error",
+        headers: createMockHeaders({ "content-type": "application/json" }),
+        json: () => Promise.resolve({ message: "Internal Server Error" }),
+      });
+
+      const client = new CoolifyClient("https://coolify.example.com", "test-token", mockLogger);
+
+      await expect(client.listEnvironments("project-1")).rejects.toThrow("Internal Server Error");
+    });
+  });
+
+  describe("findEnvironmentByName", () => {
+    it("should find an environment by name", async () => {
+      const mockEnvs = [
+        { name: "production", project_uuid: "project-1" },
+        { name: "staging", project_uuid: "project-1" },
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: createMockHeaders({ "content-type": "application/json" }),
+        json: () => Promise.resolve({ data: mockEnvs }),
+      });
+
+      const client = new CoolifyClient("https://coolify.example.com", "test-token", mockLogger);
+      const env = await client.findEnvironmentByName("project-1", "staging");
+
+      expect(env).toEqual({ name: "staging", project_uuid: "project-1" });
+    });
+
+    it("should return null if environment is not found", async () => {
+      const mockEnvs = [{ name: "production", project_uuid: "project-1" }];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: createMockHeaders({ "content-type": "application/json" }),
+        json: () => Promise.resolve({ data: mockEnvs }),
+      });
+
+      const client = new CoolifyClient("https://coolify.example.com", "test-token", mockLogger);
+      const env = await client.findEnvironmentByName("project-1", "non-existent");
+
+      expect(env).toBeNull();
+    });
+
+    it("should throw if the API call fails", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: "Server Error",
+        headers: createMockHeaders({ "content-type": "application/json" }),
+        json: () => Promise.resolve({ message: "Internal Server Error" }),
+      });
+
+      const client = new CoolifyClient("https://coolify.example.com", "test-token", mockLogger);
+      await expect(client.findEnvironmentByName("project-1", "any-env")).rejects.toThrow(
+        "Internal Server Error",
+      );
+    });
+  });
+
   describe("dry run mode", () => {
     it("should not make API calls in dry run mode for create", async () => {
       const client = new CoolifyClient(
@@ -178,7 +271,7 @@ describe("CoolifyClient", () => {
           path: "/health",
           port: "3000",
         },
-      };
+      } as Resource;
 
       const options = CoolifyClient.buildCreateOptions(
         resource,
@@ -203,7 +296,16 @@ describe("CoolifyClient", () => {
         instant_deploy: false,
         health_check_enabled: true,
         health_check_path: "/health",
-        health_check_port: 3000,
+        health_check_port: "3000",
+        health_check_host: undefined,
+        health_check_interval: undefined,
+        health_check_method: undefined,
+        health_check_response_text: undefined,
+        health_check_retries: undefined,
+        health_check_return_code: undefined,
+        health_check_scheme: undefined,
+        health_check_start_period: undefined,
+        health_check_timeout: undefined,
       });
     });
 
@@ -214,7 +316,7 @@ describe("CoolifyClient", () => {
         dockerImageName: "ghcr.io/owner/repo/app",
         domains: "",
         portsExposes: "3000",
-      };
+      } as Resource;
 
       const options = CoolifyClient.buildCreateOptions(
         resource,
@@ -243,7 +345,7 @@ describe("CoolifyClient", () => {
           path: "/healthz",
           port: "4000",
         },
-      };
+      } as Resource;
 
       const options = CoolifyClient.buildUpdateOptions(resource, "v2.0.0");
 
@@ -256,7 +358,16 @@ describe("CoolifyClient", () => {
         ports_exposes: "4000",
         health_check_enabled: true,
         health_check_path: "/healthz",
-        health_check_port: 4000,
+        health_check_port: "4000",
+        health_check_host: undefined,
+        health_check_interval: undefined,
+        health_check_method: undefined,
+        health_check_response_text: undefined,
+        health_check_retries: undefined,
+        health_check_return_code: undefined,
+        health_check_scheme: undefined,
+        health_check_start_period: undefined,
+        health_check_timeout: undefined,
       });
     });
   });

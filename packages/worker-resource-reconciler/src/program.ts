@@ -133,11 +133,118 @@ export function createApplyCommand() {
 }
 
 /**
+ * Creates the 'state' subcommand.
+ */
+export function createStateCommand() {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  const command = new Command<[], {}, ProgramOptions>("state")
+    .description("Get the current state of resources from the manifest")
+    .action(async (_options, command) => {
+      const globalOptions = command.optsWithGlobals();
+
+      const env = parseEnv();
+      // Mute logger for state command to only output JSON
+      // @ts-expect-error TS2322 - createLogger infers LOG_LEVEL as string literal
+      const logger = createLogger({ ...env, LOG_LEVEL: "silent" });
+
+      const manifestPath = globalOptions.manifest;
+      if (!manifestPath) {
+        logger.fatal({}, "Manifest path is required. Use --manifest or MANIFEST_PATH env var.");
+        process.exit(1);
+      }
+
+      try {
+        const absolutePath = resolve(process.cwd(), manifestPath);
+        const manifestContent = await readFile(absolutePath, "utf-8");
+        const manifestData = JSON.parse(manifestContent);
+        const manifest = parseManifest(manifestData);
+
+        if (globalOptions.dryRun) {
+          const resourceNames = manifest.resources.map((r) => r.name).join(", ");
+          console.log(
+            `[DRY RUN] Would introspect environment '${manifest.environmentName}' in project '${manifest.projectId}' for the following resources: ${resourceNames}`,
+          );
+          process.exit(0);
+        }
+
+        const client = new CoolifyClient(
+          env.COOLIFY_ENDPOINT_URL,
+          env.COOLIFY_TOKEN,
+          logger,
+          globalOptions.dryRun,
+        );
+
+        const allowedKeys = new Set([
+          "exists",
+          "uuid",
+          "name",
+          "docker_registry_image_name",
+          "docker_registry_image_tag",
+          "fqdn",
+          "health_check_enabled",
+          "health_check_host",
+          "health_check_interval",
+          "health_check_method",
+          "health_check_path",
+          "health_check_port",
+          "health_check_response_text",
+          "health_check_retries",
+          "health_check_return_code",
+          "health_check_scheme",
+          "health_check_start_period",
+          "health_check_timeout",
+          "last_online_at",
+          "last_restart_at",
+          "last_restart_type",
+          "ports_exposes",
+          "restart_count",
+          "status",
+          "created_at",
+          "updated_at",
+        ]);
+
+        const resourceStates = [];
+        for (const resource of manifest.resources) {
+          const app = await client.findApplicationByName(resource.name);
+          if (app) {
+            const filtered: Record<string, unknown> = { exists: true };
+            for (const key of allowedKeys) {
+              if (key !== "exists" && key in app) {
+                filtered[key] = (app as unknown as Record<string, unknown>)[key];
+              }
+            }
+            resourceStates.push(filtered);
+          } else {
+            resourceStates.push({
+              name: resource.name,
+              exists: false,
+            });
+          }
+        }
+
+        // Output the state as JSON
+        console.log(JSON.stringify(resourceStates, null, 2));
+        process.exit(0);
+      } catch (error) {
+        logger.fatal(
+          { error: error instanceof Error ? error.message : String(error) },
+          "Fatal error during state retrieval",
+        );
+        process.exit(1);
+      }
+    });
+
+  return command;
+}
+
+/**
  * Assembles the final program with all subcommands.
  */
 export async function assembleProgram() {
   const program = await createProgram();
   const applyCommand = createApplyCommand();
+  const stateCommand = createStateCommand();
   program.addCommand(applyCommand);
+  program.addCommand(stateCommand);
   return program;
 }

@@ -20,6 +20,15 @@ export interface CoolifyApplication {
 }
 
 /**
+ * Coolify Environment response structure.
+ */
+export interface CoolifyEnvironment {
+  name: string;
+  project_id: number;
+  is_production: boolean;
+}
+
+/**
  * Coolify environment variable structure.
  */
 export interface CoolifyEnvVar {
@@ -159,6 +168,37 @@ export class CoolifyClient {
    */
   async listApplications(): Promise<CoolifyApplication[]> {
     return this.request<CoolifyApplication[]>("GET", "/api/v1/applications");
+  }
+
+  /**
+   * Lists all environments for a given project.
+   */
+  async listEnvironments(projectId: string): Promise<CoolifyEnvironment[]> {
+    if (this.dryRun) {
+      this.logger.debug({ projectId }, "[DRY RUN] Would list environments for project");
+      return [];
+    }
+    const result = await this.request<{ data: CoolifyEnvironment[] }>(
+      "GET",
+      `/api/v1/projects/${projectId}/environments`,
+    );
+    return result.data;
+  }
+
+  /**
+   * Finds an environment by name within a project.
+   */
+  async findEnvironmentByName(projectId: string, name: string): Promise<CoolifyEnvironment | null> {
+    if (this.dryRun) {
+      this.logger.debug({ name, projectId }, "[DRY RUN] Assuming environment exists for dry run");
+      return { name, project_id: 0, is_production: true };
+    }
+    const environments = await this.listEnvironments(projectId);
+    const found = environments.find((env) => env.name === name);
+    if (found) {
+      this.logger.debug({ name, projectId }, "Found existing environment");
+    }
+    return found ?? null;
   }
 
   /**

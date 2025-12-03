@@ -1,13 +1,21 @@
-import { describe, it, expect } from "vitest";
-import { parseManifest, safeParseManifest, manifestSchema, resourceSchema } from "./manifest.js";
+import { describe, expect, it } from "vitest";
+import {
+  manifestSchema,
+  parseManifest,
+  resourceSchema,
+  safeParseManifest,
+  type Manifest,
+  type Resource,
+} from "./manifest.js";
 
 describe("Manifest Schema", () => {
   describe("resourceSchema", () => {
     it("should validate a valid resource", () => {
-      const resource = {
+      const resource: Resource = {
         name: "my-app",
-        description: "My application",
+        description: "My Application",
         dockerImageName: "ghcr.io/owner/repo/app",
+        envSecretName: "MY_APP_ENV",
         domains: "app.example.com",
         portsExposes: "3000",
         healthCheck: {
@@ -21,9 +29,10 @@ describe("Manifest Schema", () => {
     });
 
     it("should validate resource without optional fields", () => {
-      const resource = {
+      const resource: Partial<Resource> = {
         name: "my-app",
         dockerImageName: "ghcr.io/owner/repo/app",
+        envSecretName: "MY_APP_ENV",
         portsExposes: "3000",
       };
 
@@ -32,9 +41,10 @@ describe("Manifest Schema", () => {
     });
 
     it("should reject resource with empty name", () => {
-      const resource = {
+      const resource: Partial<Resource> = {
         name: "",
         dockerImageName: "ghcr.io/owner/repo/app",
+        envSecretName: "MY_APP_ENV",
         portsExposes: "3000",
       };
 
@@ -43,10 +53,11 @@ describe("Manifest Schema", () => {
     });
 
     it("should reject resource with invalid ports", () => {
-      const resource = {
+      const resource: Partial<Resource> = {
         name: "my-app",
         dockerImageName: "ghcr.io/owner/repo/app",
-        portsExposes: "invalid",
+        envSecretName: "MY_APP_ENV",
+        portsExposes: "invalid-port",
       };
 
       const result = resourceSchema.safeParse(resource);
@@ -54,10 +65,13 @@ describe("Manifest Schema", () => {
     });
 
     it("should accept multiple ports", () => {
-      const resource = {
+      const resource: Resource = {
         name: "my-app",
         dockerImageName: "ghcr.io/owner/repo/app",
-        portsExposes: "3000,4000,5000",
+        envSecretName: "MY_APP_ENV",
+        portsExposes: "3000, 8080,443",
+        description: "",
+        domains: "",
       };
 
       const result = resourceSchema.safeParse(resource);
@@ -67,16 +81,24 @@ describe("Manifest Schema", () => {
 
   describe("manifestSchema", () => {
     it("should validate a complete manifest", () => {
-      const manifest = {
+      const manifest: Manifest = {
         projectId: "project-uuid",
         destinationId: "destination-uuid",
+        serverUuid: "server-uuid",
         environmentName: "production",
-        envFileSecretName: "PRODUCTION_ENV_FILE",
+        envFileSecretName: "GLOBAL_ENV",
         resources: [
           {
             name: "my-app",
+            description: "My Application",
             dockerImageName: "ghcr.io/owner/repo/app",
+            envSecretName: "MY_APP_ENV",
+            domains: "app.example.com",
             portsExposes: "3000",
+            healthCheck: {
+              path: "/health",
+              port: "3000",
+            },
           },
         ],
       };
@@ -86,15 +108,16 @@ describe("Manifest Schema", () => {
     });
 
     it("should use defaults for optional fields", () => {
-      const manifest = {
+      const manifest: Partial<Manifest> = {
         projectId: "project-uuid",
         destinationId: "destination-uuid",
         resources: [
           {
             name: "my-app",
             dockerImageName: "ghcr.io/owner/repo/app",
+            envSecretName: "MY_APP_ENV",
             portsExposes: "3000",
-          },
+          } as Resource,
         ],
       };
 
@@ -124,6 +147,7 @@ describe("Manifest Schema", () => {
           {
             name: "my-app",
             dockerImageName: "ghcr.io/owner/repo/app",
+            envSecretName: "MY_APP_ENV",
             portsExposes: "3000",
           },
         ],
@@ -143,14 +167,15 @@ describe("Manifest Schema", () => {
           {
             name: "my-app",
             dockerImageName: "ghcr.io/owner/repo/app",
+            envSecretName: "MY_APP_ENV",
             portsExposes: "3000",
           },
         ],
       };
 
-      const result = parseManifest(manifest);
-      expect(result.projectId).toBe("project-uuid");
-      expect(result.resources).toHaveLength(1);
+      const parsed = parseManifest(manifest);
+      expect(parsed.projectId).toBe("project-uuid");
+      expect(parsed.resources[0].name).toBe("my-app");
     });
 
     it("should throw for invalid manifest", () => {
@@ -173,6 +198,7 @@ describe("Manifest Schema", () => {
           {
             name: "my-app",
             dockerImageName: "ghcr.io/owner/repo/app",
+            envSecretName: "MY_APP_ENV",
             portsExposes: "3000",
           },
         ],

@@ -29,7 +29,7 @@ export interface ReconcileResult {
 export interface ReconcilerOptions {
   manifest: Manifest;
   dockerTag: string;
-  envSecrets: Record<string, string>;
+  envSecrets?: Record<string, string>;
   serverUuid?: string;
 }
 
@@ -116,7 +116,7 @@ export class Reconciler {
    * Reconciles all resources in the manifest.
    */
   async reconcile(): Promise<ReconcileResult> {
-    const { manifest, dockerTag, envSecrets } = this.options;
+    const { manifest, dockerTag, envSecrets = {} } = this.options;
     const results: ReconcileResourceResult[] = [];
     let totalCreated = 0;
     let totalUpdated = 0;
@@ -130,6 +130,38 @@ export class Reconciler {
         dockerTag,
       },
       "Starting reconciliation",
+    );
+
+    // Check if the environment exists
+    const environment = await this.client.findEnvironmentByName(
+      manifest.projectId,
+      manifest.environmentName,
+    );
+
+    if (!environment) {
+      this.logger.error(
+        {
+          projectId: manifest.projectId,
+          environmentName: manifest.environmentName,
+        },
+        "Target environment does not exist in Coolify project",
+      );
+      return {
+        success: false,
+        resources: manifest.resources.map((r) => ({
+          name: r.name,
+          action: "failed",
+          error: "Target environment does not exist",
+        })),
+        totalCreated: 0,
+        totalUpdated: 0,
+        totalFailed: manifest.resources.length,
+      };
+    }
+
+    this.logger.info(
+      { environmentName: manifest.environmentName },
+      "Environment exists, will update resources as needed",
     );
 
     // Determine server UUID
