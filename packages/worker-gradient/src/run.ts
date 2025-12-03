@@ -1,3 +1,4 @@
+import http from "node:http";
 import { disconnectRedis, initializeRedis, redisClient as redis } from "utils/redis";
 import { parseEnv } from "./env.js";
 import { createLogger } from "./logger.js";
@@ -20,12 +21,40 @@ async function main(): Promise<void> {
     const worker = new GradientWorker(redis, logger, env);
     worker.start();
 
+    // Create health check server
+    const healthCheckServer = http.createServer(async (req, res) => {
+      if (req.method === "GET" && req.url === "/health") {
+        try {
+          await redis.ping();
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "ok" }));
+        } catch (e) {
+          logger.error({ error: e }, "Health check failed: Redis ping failed");
+          res.writeHead(503, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ status: "error", reason: "Redis connection failed" }));
+        }
+      } else {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ status: "error", reason: "Not found" }));
+      }
+    });
+
+    const healthCheckPort = 9876;
+    healthCheckServer.listen(healthCheckPort, () => {
+      logger.info(`Health check server listening on port ${healthCheckPort}`);
+    });
+
     // Graceful shutdown handlers
     const shutdown = async (signal: string) => {
       logger.info({ signal }, `${signal} received, shutting down...`);
       await worker.stop();
       const stats = worker.getStats();
       logger.info({ stats }, "Worker final stats");
+
+      healthCheckServer.close(() => {
+        logger.info("Health check server closed.");
+      });
+
       await disconnectRedis();
       logger.info("Shutdown complete.");
       process.exit(0);

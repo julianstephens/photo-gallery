@@ -25,7 +25,8 @@
       "portsExposes": "4000",
       "healthCheck": {
         "path": "/api/healthz",
-        "port": "4000"
+        "port": "4000",
+        "protocol": "http"
       }
     },
     {
@@ -33,24 +34,19 @@
       "description": "Gradient generation worker for photo-gallery",
       "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-gradient",
       "envSecretName": "COOLIFY_ENV_WORKER_GRADIENT",
-      "domains": "app.example.com",
-      "portsExposes": "8080",
+      "domains": "http://gradient-worker.cyborgdev.cloud",
+      "portsExposes": "9876",
       "healthCheck": {
         "path": "/health",
-        "port": "8080"
+        "port": "9876",
+        "protocol": "http"
       }
     },
     {
       "name": "photo-gallery-worker-notifications",
       "description": "Gallery expiration notification worker for photo-gallery",
       "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-notifications",
-      "envSecretName": "COOLIFY_ENV_WORKER_NOTIFICATIONS",
-      "domains": "app.example.com",
-      "portsExposes": "8080",
-      "healthCheck": {
-        "path": "/health",
-        "port": "8080"
-      }
+      "envSecretName": "COOLIFY_ENV_WORKER_NOTIFICATIONS"
     }
   ]
 }

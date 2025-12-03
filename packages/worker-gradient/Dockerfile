@@ -41,4 +41,6 @@ COPY --from=build /prod/worker-gradient ./
 RUN adduser -D app && chown -R app /app
 USER app
 
+EXPOSE 9876
+
 CMD ["node", "dist/run.js"]
