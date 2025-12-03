@@ -71,7 +71,7 @@ async function getExposedPort(dockerfilePath: string): Promise<string | null> {
 function getRepoInfo(): { owner: string; name: string } | null {
   try {
     const remoteUrl = execSync("git config --get remote.origin.url").toString().trim();
-    const match = remoteUrl.match(/github\.com[/:]([\w-]+)\/([\w-]+)(\.git)?/);
+    const match = remoteUrl.match(/github\.com[/:]([\w.-]+)\/([\w.-]+)(\.git)?/);
     if (match && match[1] && match[2]) {
       return { owner: match[1], name: match[2] };
     }
