@@ -13,11 +13,12 @@ export const envSchema = z.object({
   ENV_FILE_CONTENT: z.string().optional(),
   // Log level for pino logger
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).default("info"),
-  // Dry run mode - only log actions without making changes
+  // Dry run mode - only log actions without making changes. If not set, defaults to false.
   DRY_RUN: z
     .string()
     .optional()
-    .transform((val) => val === "true" || val === "1"),
+    .transform((val) => val === "true" || val === "1" ? true : false)
+    .describe("Dry run mode - only log actions without making changes. If not set, defaults to false."),
 });
 
 export type Env = z.infer<typeof envSchema>;
