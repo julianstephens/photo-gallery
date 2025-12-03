@@ -1,3 +1,17 @@
+## v0.2.1
+
+### Added
+
+- Added endpoints for super admins to manage user requests.
+
+### Improved
+
+- Updated and improved project documentation in `README.md`.
+
+### Technical Improvements
+
+- Added `coolify.manifest.json` to support declarative deployments with `coolify-deploy`.
+
 ## v0.2.0
 
 ### Added
