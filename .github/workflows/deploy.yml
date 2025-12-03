@@ -131,9 +131,8 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install coolify-deploy
-        run: npm i -g coolify-deploy
-
+      # --- MODIFIED STEP ---
+      # Use npx to download and run the command in a single step.
       - name: Run coolify-deploy
         env:
           COOLIFY_ENDPOINT_URL: ${{ secrets.COOLIFY_ENDPOINT_URL }}
@@ -153,4 +152,4 @@ jobs:
             echo "Warning: Manifest file not found at $MANIFEST_PATH, skipping deployment"
             exit 0
           fi
-          coolify-deploy --manifest "$MANIFEST_PATH" apply --tag "${{ steps.sha.outputs.sha }}"
+          npx coolify-deploy --manifest "$MANIFEST_PATH" apply --tag "${{ steps.sha.outputs.sha }}"
