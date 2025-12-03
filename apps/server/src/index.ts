@@ -2,7 +2,6 @@ import { disconnectRedis, initializeRedis } from "utils";
 import { appLogger } from "./middleware/logger.ts";
 import env from "./schemas/env.ts";
 import { createApp, printRegisteredRoutes } from "./server.ts";
-import { startGradientWorker, stopGradientWorker } from "./workers/index.ts";
 
 // Start server if run directly
 if (process.argv[1] === new URL(import.meta.url).pathname) {
@@ -30,9 +29,6 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
       process.exit(1);
     }
 
-    // Start the gradient generation worker if enabled
-    startGradientWorker();
-
     if (env.NODE_ENV !== "production") {
       appLogger.info("Registered Routes:");
       printRegisteredRoutes(app.router.stack);
@@ -45,22 +41,16 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
     const shutdown = async (signal: string) => {
       appLogger.info({ signal }, `${signal} received, shutting down...`);
 
-      // Stop the gradient worker first
-      try {
-        await stopGradientWorker();
-      } catch (err) {
-        appLogger.error({ err }, "Error stopping gradient worker");
-      }
-
-      server.close(async (err?: Error) => {
+      server.close(async (err) => {
         if (err) {
-          appLogger.error({ err }, "Error during server close");
+          appLogger.error({ err }, "Error during server shutdown");
           process.exit(1);
         }
+        appLogger.info("Server closed");
+
         await disconnectRedis();
         process.exit(0);
       });
-      setTimeout(() => process.exit(1), 10_000).unref();
     };
 
     process.on("SIGINT", () => shutdown("SIGINT"));

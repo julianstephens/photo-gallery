@@ -15,8 +15,8 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      server: ${{ steps.filter.outputs.server }}
-      client: ${{ steps.filter.outputs.client }}
+      has-changes: ${{ steps.filter.outputs.has-changes }}
+      matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,31 +25,72 @@ jobs:
         uses: dorny/paths-filter@v3
         id: filter
         with:
+          list-files: "json"
           filters: |
-            server:
+            server: &server-paths
               - 'apps/server/**'
               - 'packages/utils/**'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
-            client:
+            client: &client-paths
               - 'apps/client/**'
               - 'packages/utils/**'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
+            gradient-worker: &gradient-worker-paths
+              - 'packages/worker-gradient/**'
+              - 'packages/utils/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - '.github/workflows/deploy.yml'
+            notifications-worker: &notifications-worker-paths
+              - 'packages/worker-notifications/**'
+              - 'packages/utils/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - '.github/workflows/deploy.yml'
 
-  build-server:
-    name: Build and Push Server Image
+      - name: Create build matrix
+        id: create-matrix
+        run: |
+          MATRIX='['
+          if ${{ steps.filter.outputs.server == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"server\",\"dockerfile\":\"apps/server/Dockerfile\"},"
+          fi
+          if ${{ steps.filter.outputs.client == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"client\",\"dockerfile\":\"apps/client/Dockerfile\"},"
+          fi
+          if ${{ steps.filter.outputs.gradient-worker == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"gradient-worker\",\"dockerfile\":\"packages/worker-gradient/Dockerfile\"},"
+          fi
+          if ${{ steps.filter.outputs.notifications-worker == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"notifications-worker\",\"dockerfile\":\"packages/worker-notifications/Dockerfile\"},"
+          fi
+          MATRIX=$(echo "$MATRIX" | sed 's/,$//')
+          MATRIX="$MATRIX]"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build ${{ matrix.service.name }}
     runs-on: ubuntu-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.server == 'true'
+    if: needs.detect-changes.outputs.has-changes == 'true'
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Get short SHA
+        id: sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -61,67 +102,38 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Server image
+      - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/server/Dockerfile
+          file: ${{ matrix.service.dockerfile }}
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-server:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  build-client:
-    name: Build and Push Client Image
-    runs-on: ubuntu-latest
-    needs: detect-changes
-    if: needs.detect-changes.outputs.client == 'true'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push Client image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/client/Dockerfile
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-client:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service.name }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service.name }}:${{ steps.sha.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL }}
-            VITE_LOG_LEVEL=${{ secrets.VITE_LOG_LEVEL }}
+            ${{ matrix.service.name == 'client' && format('VITE_API_URL={0}', secrets.VITE_API_URL) || '' }}
+            ${{ matrix.service.name == 'client' && format('VITE_LOG_LEVEL={0}', secrets.VITE_LOG_LEVEL) || '' }}
 
   deploy:
     name: Deploy to Coolify
     runs-on: ubuntu-latest
-    needs:
-      - detect-changes
-      - build-server
-      - build-client
+    needs: [detect-changes, build]
     if: |
       always() &&
-      (needs.build-server.result == 'success' || needs.build-client.result == 'success') &&
-      (needs.detect-changes.outputs.server == 'true' || needs.detect-changes.outputs.client == 'true')
+      needs.detect-changes.outputs.has-changes == 'true' &&
+      needs.build.result == 'success'
     permissions:
       contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Get short SHA
+        id: sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -136,11 +148,9 @@ jobs:
           COOLIFY_ENDPOINT_URL: ${{ secrets.COOLIFY_ENDPOINT_URL }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
           COOLIFY_ENV_SERVER: ${{ secrets.COOLIFY_ENV_SERVER }}
-          COOLIFY_ENV_CLIENT: ${{ secrets.COOLIFY_ENV_CLIENT }}
-          COOLIFY_ENV_GRADIENT_WORKER: ${{ secrets.COOLIFY_ENV_GRADIENT_WORKER }}
-          COOLIFY_ENV_EXPIRATION_WORKER: ${{ secrets.COOLIFY_ENV_EXPIRATION_WORKER }}
+          COOLIFY_ENV_WORKER_GRADIENT: ${{ secrets.COOLIFY_ENV_WORKER_GRADIENT }}
+          COOLIFY_ENV_WORKER_NOTIFICATIONS: ${{ secrets.COOLIFY_ENV_WORKER_NOTIFICATIONS }}
           MANIFEST_PATH: ./coolify.manifest.json
-          DOCKER_IMAGE_TAG: latest
           LOG_LEVEL: info
         run: |
           if [ -z "$COOLIFY_ENDPOINT_URL" ] || [ -z "$COOLIFY_TOKEN" ]; then
@@ -151,4 +161,4 @@ jobs:
             echo "Warning: Manifest file not found at $MANIFEST_PATH, skipping deployment"
             exit 0
           fi
-          coolify-deploy --manifest "$MANIFEST_PATH" apply --tag "$DOCKER_IMAGE_TAG"
+          coolify-deploy --manifest "$MANIFEST_PATH" apply --tag "${{ steps.sha.outputs.sha }}"

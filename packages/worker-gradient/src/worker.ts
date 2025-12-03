@@ -6,7 +6,7 @@ import type { Env } from "./env.js";
 import { GradientMetaService } from "./gradientMeta.js";
 import type { Logger } from "./logger.js";
 
-const QUEUE_KEY = "gradient:queue";
+export const GRADIENT_JOB_QUEUE = "gradient:queue";
 const PROCESSING_KEY = "gradient:processing";
 const DELAYED_KEY = "gradient:delayed"; // Sorted set for delayed retry jobs
 const JOB_PREFIX = "gradient:job:";
@@ -92,7 +92,7 @@ export class GradientWorker {
     await this.#redis.expire(jobKey, 86400); // 24 hour TTL
 
     // Add to queue
-    await this.#redis.rPush(QUEUE_KEY, jobId);
+    await this.#redis.rPush(GRADIENT_JOB_QUEUE, jobId);
 
     this.#logger.info({ jobId, storageKey: data.storageKey }, "Job enqueued");
 
@@ -234,7 +234,7 @@ export class GradientWorker {
         // Remove from delayed set and add to main queue
         const removed = await this.#redis.zRem(DELAYED_KEY, jobId);
         if (removed > 0) {
-          await this.#redis.rPush(QUEUE_KEY, jobId);
+          await this.#redis.rPush(GRADIENT_JOB_QUEUE, jobId);
           this.#logger.debug({ jobId }, "Moved delayed job to queue");
         }
       }
@@ -256,7 +256,7 @@ export class GradientWorker {
 
     try {
       // Move job from queue to processing list atomically
-      const jobId = await this.#redis.lMove(QUEUE_KEY, PROCESSING_KEY, "LEFT", "RIGHT");
+      const jobId = await this.#redis.lMove(GRADIENT_JOB_QUEUE, PROCESSING_KEY, "LEFT", "RIGHT");
 
       if (jobId) {
         this.#activeJobCount++;
@@ -325,7 +325,8 @@ export class GradientWorker {
     try {
       let jobId: string | null;
       while (
-        (jobId = await this.#redis.lMove(PROCESSING_KEY, QUEUE_KEY, "LEFT", "RIGHT")) !== null
+        (jobId = await this.#redis.lMove(PROCESSING_KEY, GRADIENT_JOB_QUEUE, "LEFT", "RIGHT")) !==
+        null
       ) {
         this.#logger.debug({ jobId }, "Moved job from processing back to queue");
       }
@@ -340,7 +341,7 @@ export class GradientWorker {
    * Get the current queue length.
    */
   async getQueueLength(): Promise<number> {
-    return await this.#redis.lLen(QUEUE_KEY);
+    return await this.#redis.lLen(GRADIENT_JOB_QUEUE);
   }
 
   /**

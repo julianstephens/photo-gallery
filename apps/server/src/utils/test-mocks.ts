@@ -118,6 +118,7 @@ export const mockRedisClient = {
   expire: vi.fn(),
   keys: vi.fn(),
   scan: vi.fn(),
+  lPush: vi.fn(),
   rPush: vi.fn(),
   lRem: vi.fn(),
   lLen: vi.fn(),
@@ -140,7 +141,7 @@ export const mockRedisClient = {
  * Mock for the Redis module.
  * Use with: vi.mock("../redis.ts", () => mockRedisModule);
  */
-export const mockRedisModule = () => ({
+export const mockRedisModule = (_p0: unknown) => ({
   default: {
     client: mockRedisClient,
   },
