@@ -226,7 +226,7 @@ export const addComment = async (req: Request, res: Response) => {
 };
 
 /**
- * GET /api/guilds/:guildId/requests (super admin only, no requestor param)
+ * GET /api/admin/guilds/:guildId/requests (super admin only, no requestor param)
  * List all requests in a guild.
  * Only super admins can access this endpoint.
  */
@@ -262,7 +262,7 @@ export const listGuildRequests = async (req: Request, res: Response) => {
 };
 
 /**
- * GET /api/requests/:requestId (super admin only)
+ * GET /api/admin/requests/:requestId (super admin only)
  * Get a single request by ID.
  * Only super admins can access this endpoint.
  */
@@ -305,7 +305,7 @@ export const getRequestById = async (req: Request, res: Response) => {
 };
 
 /**
- * POST /api/requests/:requestId/status (super admin only)
+ * POST /api/admin/requests/:requestId/status (super admin only)
  * Change the status of a request.
  * Valid transitions: open -> approved/denied/cancelled, approved/denied/cancelled -> closed, closed -> open
  */
@@ -363,7 +363,7 @@ export const changeRequestStatus = async (req: Request, res: Response) => {
 };
 
 /**
- * DELETE /api/requests/:requestId (super admin only)
+ * DELETE /api/admin/requests/:requestId (super admin only)
  * Delete a request.
  * Only super admins can delete requests.
  */
