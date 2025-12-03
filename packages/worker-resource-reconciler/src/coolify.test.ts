@@ -7,6 +7,15 @@ import type { Resource } from "./manifest.js";
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+/**
+ * Creates a mock headers object that implements the Headers.get method
+ */
+function createMockHeaders(headers: Record<string, string>) {
+  return {
+    get: (name: string) => headers[name.toLowerCase()] ?? null,
+  };
+}
+
 describe("CoolifyClient", () => {
   const mockLogger = {
     debug: vi.fn(),
@@ -29,7 +38,7 @@ describe("CoolifyClient", () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        headers: new Map([["content-type", "application/json"]]),
+        headers: createMockHeaders({ "content-type": "application/json" }),
         json: () => Promise.resolve(mockApps),
       });
 
@@ -53,7 +62,7 @@ describe("CoolifyClient", () => {
         ok: false,
         status: 401,
         statusText: "Unauthorized",
-        headers: new Map([["content-type", "application/json"]]),
+        headers: createMockHeaders({ "content-type": "application/json" }),
         json: () => Promise.resolve({ message: "Invalid token" }),
       });
 
@@ -72,7 +81,7 @@ describe("CoolifyClient", () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        headers: new Map([["content-type", "application/json"]]),
+        headers: createMockHeaders({ "content-type": "application/json" }),
         json: () => Promise.resolve(mockApps),
       });
 
@@ -85,7 +94,7 @@ describe("CoolifyClient", () => {
     it("should return null if app not found", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        headers: new Map([["content-type", "application/json"]]),
+        headers: createMockHeaders({ "content-type": "application/json" }),
         json: () => Promise.resolve([]),
       });
 
