@@ -132,7 +132,7 @@ async function createResourceForWorkspace(
   return {
     name: `${repoInfo.name}-${resourceNameSuffix}`,
     description: pkg.description || `The ${resourceNameSuffix} service.`,
-    dockerImageName: `ghcr.io/${repoInfo.owner}/${repoInfo.name}/${resourceNameSuffix}`,
+    dockerImageName: `ghcr.io/${repoInfo.owner}/${repoInfo.name}-${resourceNameSuffix}`,
     domains: "app.example.com", // <-- USER MUST REPLACE
     portsExposes: exposedPort || "8080",
     healthCheck: {
