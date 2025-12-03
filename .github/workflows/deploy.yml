@@ -25,10 +25,6 @@ jobs:
         uses: dorny/paths-filter@v3
         id: filter
         with:
-          list-files: "none"
-          # Required for has-changes output
-          outputs:
-            changes: true
           filters: |
             server: &server-paths
               - 'apps/server/**'
@@ -58,25 +54,22 @@ jobs:
       - name: Create build matrix
         id: create-matrix
         run: |
-          services_map='{
-            "server": "{\"name\":\"server\",\"dockerfile\":\"apps/server/Dockerfile\"}",
-            "client": "{\"name\":\"client\",\"dockerfile\":\"apps/client/Dockerfile\"}",
-            "gradient-worker": "{\"name\":\"gradient-worker\",\"dockerfile\":\"packages/worker-gradient/Dockerfile\"}",
-            "notifications-worker": "{\"name\":\"notifications-worker\",\"dockerfile\":\"packages/worker-notifications/Dockerfile\"}"
-          }'
-
-          changed_services='${{ steps.filter.outputs.changes }}'
-
-          matrix_items=()
-          for service in $(echo $changed_services | jq -r '.[]' 2>/dev/null); do
-            matrix_item=$(echo $services_map | jq -r --arg s "$service" '.[$s]')
-            if [ -n "$matrix_item" ]; then
-              matrix_items+=("$matrix_item")
-            fi
-          done
-
-          matrix="[$(IFS=,; echo "${matrix_items[*]}")]"
-          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          MATRIX='['
+          if ${{ steps.filter.outputs.server == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"server\",\"dockerfile\":\"apps/server/Dockerfile\"},"
+          fi
+          if ${{ steps.filter.outputs.client == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"client\",\"dockerfile\":\"apps/client/Dockerfile\"},"
+          fi
+          if ${{ steps.filter.outputs.gradient-worker == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"gradient-worker\",\"dockerfile\":\"packages/worker-gradient/Dockerfile\"},"
+          fi
+          if ${{ steps.filter.outputs.notifications-worker == 'true' }}; then
+            MATRIX="$MATRIX{\"name\":\"notifications-worker\",\"dockerfile\":\"packages/worker-notifications/Dockerfile\"},"
+          fi
+          MATRIX=$(echo "$MATRIX" | sed 's/,$//')
+          MATRIX="$MATRIX]"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   build:
     name: Build ${{ matrix.service.name }}
