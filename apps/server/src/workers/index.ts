@@ -139,7 +139,10 @@ export async function getQueueLength(): Promise<number> {
  * Get the current processing count.
  */
 export async function getProcessingCount(): Promise<number> {
-  return workerInstance?.getProcessingCount() ?? 0;
+  if (workerInstance) {
+    return await workerInstance.getProcessingCount();
+  }
+  return 0;
 }
 
 /**
