@@ -98,7 +98,7 @@ S3_ENDPOINT=http://localhost:9000 \
 S3_ACCESS_KEY=minioadmin \
 S3_SECRET_KEY=minioadmin \
 MASTER_BUCKET_NAME=galleries \
-node dist/index.js
+node dist/run.js
 
 # Run tests
 pnpm test
