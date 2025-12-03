@@ -15,8 +15,9 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      has-changes: ${{ steps.filter.outputs.has-changes }}
       matrix: ${{ steps.create-matrix.outputs.matrix }}
+      # This output is the key. It exposes the result from the step to other jobs.
+      has-changes: ${{ steps.filter.outputs.has-changes }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -75,6 +76,7 @@ jobs:
     name: Build ${{ matrix.service.name }}
     runs-on: ubuntu-latest
     needs: detect-changes
+    # CORRECTED 'if' CONDITION
     if: needs.detect-changes.outputs.has-changes == 'true'
     permissions:
       contents: read
@@ -121,6 +123,7 @@ jobs:
     name: Deploy to Coolify
     runs-on: ubuntu-latest
     needs: [detect-changes, build]
+    # CORRECTED 'if' CONDITION
     if: |
       always() &&
       needs.detect-changes.outputs.has-changes == 'true' &&
