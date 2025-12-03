@@ -21,7 +21,28 @@ export const resourceSchema = z.object({
   /** Domain(s) for the application, comma-separated if multiple */
   domains: z.string().default(""),
   /** Port(s) to expose, comma-separated if multiple */
-  portsExposes: z.string().regex(/^\d+(,\d+)*$/, "Ports must be comma-separated numbers"),
+  portsExposes: z
+    .string()
+    .refine(
+      (val) => {
+        // Allow optional spaces around commas
+        const parts = val.split(",").map((p) => p.trim());
+        if (parts.length === 0) return false;
+        return parts.every((p) => {
+          const n = Number(p);
+          // Must be integer, in range 1-65535
+          return (
+            /^\d+$/.test(p) &&
+            n >= 1 &&
+            n <= 65535
+          );
+        });
+      },
+      {
+        message:
+          "Ports must be comma-separated numbers between 1 and 65535 (e.g. '8080, 443')",
+      }
+    ),
   /** Health check configuration */
   healthCheck: healthCheckSchema.optional(),
 });
