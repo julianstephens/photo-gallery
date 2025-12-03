@@ -177,12 +177,12 @@ describe("responseCache middleware", () => {
         "cache:response:galleries:list:guild:123:user:b",
       ];
       // SCAN returns cursor 0 to indicate completion
-      mockRedisClient.scan.mockResolvedValue({ cursor: 0, keys });
+      mockRedisClient.scan.mockResolvedValue({ cursor: "0", keys });
       mockRedisClient.del.mockResolvedValue(2);
 
       await invalidateGalleriesCache("123", "user-a");
 
-      expect(mockRedisClient.scan).toHaveBeenCalledWith(0, {
+      expect(mockRedisClient.scan).toHaveBeenCalledWith("0", {
         MATCH: "cache:response:galleries:list:guild:123:*",
         COUNT: 100,
       });
@@ -190,7 +190,7 @@ describe("responseCache middleware", () => {
     });
 
     it("should not call del if no matching keys found", async () => {
-      mockRedisClient.scan.mockResolvedValue({ cursor: 0, keys: [] });
+      mockRedisClient.scan.mockResolvedValue({ cursor: "0", keys: [] });
 
       await invalidateGalleriesCache("123");
 

@@ -13,6 +13,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
+    },
+    "./redis": {
+      "types": "./dist/redis/index.d.ts",
+      "import": "./dist/redis/index.js"
     }
   },
   "scripts": {
@@ -33,7 +37,9 @@
     "vitest": "^4.0.7"
   },
   "dependencies": {
+    "pino": "^10.1.0",
     "quantize": "^1.0.2",
+    "redis": "^5.9.0",
     "sharp": "^0.34.5",
     "zod": "^4.1.12"
   }

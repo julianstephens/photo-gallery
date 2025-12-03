@@ -110,10 +110,11 @@ const computeFileChecksums = async (filePath: string): Promise<FileChecksum> => 
 
   await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(filePath);
-    stream.on("data", (chunk: Buffer) => {
-      md5.update(chunk);
-      crc32.update(chunk);
-      byteLength += chunk.length;
+    stream.on("data", (chunk: string | Buffer) => {
+      const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      md5.update(buffer);
+      crc32.update(buffer);
+      byteLength += buffer.length;
     });
     stream.on("end", () => resolve());
     stream.on("error", (err) => reject(err));
