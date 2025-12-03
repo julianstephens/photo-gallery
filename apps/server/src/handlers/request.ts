@@ -1,12 +1,15 @@
 import type { Request, Response } from "express";
-import { addCommentSchema, createRequestSchema } from "utils";
+import { addCommentSchema, createRequestSchema, updateRequestStatusSchema } from "utils";
 import { ZodError } from "zod";
 import { appLogger } from "../middleware/logger.ts";
 import {
   AuthorizationError,
   canCancelRequest,
+  canChangeRequestStatus,
   canCommentOnRequest,
   canCreateRequest,
+  canDeleteRequest,
+  canViewRequest,
   RequestService,
   type RequestAuthContext,
 } from "../services/request.ts";
@@ -219,5 +222,185 @@ export const addComment = async (req: Request, res: Response) => {
     }
     appLogger.error({ err }, "[addComment] error");
     res.status(500).json({ error: "Failed to add comment" });
+  }
+};
+
+/**
+ * GET /api/admin/guilds/:guildId/requests (super admin only, no requestor param)
+ * List all requests in a guild.
+ * Only super admins can access this endpoint.
+ */
+export const listGuildRequests = async (req: Request, res: Response) => {
+  try {
+    const guildId = req.params.guildId;
+    if (!guildId) {
+      return res.status(400).json({ error: "Missing guildId parameter" });
+    }
+
+    const authCtx = buildAuthContext(req);
+
+    // Check if user is a member of the guild
+    if (!authCtx.guildIds.includes(guildId)) {
+      throw new AuthorizationError("You are not a member of this guild", "list", guildId);
+    }
+
+    // Fetch all requests for this guild
+    const requests = await requestService.getRequestsByGuild(guildId);
+
+    appLogger.debug(
+      { guildId, userId: authCtx.userId, count: requests.length },
+      "[listGuildRequests] Listed guild requests",
+    );
+    res.json(requests);
+  } catch (err: unknown) {
+    if (err instanceof AuthorizationError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    appLogger.error({ err }, "[listGuildRequests] error");
+    res.status(500).json({ error: "Failed to list requests" });
+  }
+};
+
+/**
+ * GET /api/admin/requests/:requestId (super admin only)
+ * Get a single request by ID.
+ * Only super admins can access this endpoint.
+ */
+export const getRequestById = async (req: Request, res: Response) => {
+  try {
+    const requestId = req.params.requestId;
+    if (!requestId) {
+      return res.status(400).json({ error: "Missing requestId parameter" });
+    }
+
+    const authCtx = buildAuthContext(req);
+
+    // Fetch the request
+    const request = await requestService.getRequest(requestId);
+    if (!request) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    // Authorization check
+    if (!canViewRequest(authCtx, request)) {
+      throw new AuthorizationError(
+        "You do not have permission to view this request",
+        "view",
+        requestId,
+      );
+    }
+
+    // Fetch comments for the request
+    const comments = await requestService.getComments(requestId);
+
+    appLogger.debug({ requestId, userId: authCtx.userId }, "[getRequestById] Request retrieved");
+    res.json({ ...request, comments });
+  } catch (err: unknown) {
+    if (err instanceof AuthorizationError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    appLogger.error({ err }, "[getRequestById] error");
+    res.status(500).json({ error: "Failed to get request" });
+  }
+};
+
+/**
+ * POST /api/admin/requests/:requestId/status (super admin only)
+ * Change the status of a request.
+ * Valid transitions: open -> approved/denied/cancelled, approved/denied/cancelled -> closed, closed -> open
+ */
+export const changeRequestStatus = async (req: Request, res: Response) => {
+  try {
+    const requestId = req.params.requestId;
+    if (!requestId) {
+      return res.status(400).json({ error: "Missing requestId parameter" });
+    }
+
+    const body = updateRequestStatusSchema.parse({ ...req.body, requestId });
+    const authCtx = buildAuthContext(req);
+
+    // Fetch the request
+    const request = await requestService.getRequest(requestId);
+    if (!request) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    // Authorization check
+    if (!canChangeRequestStatus(authCtx, request, body.status)) {
+      throw new AuthorizationError(
+        "You do not have permission to change the status of this request",
+        "changeStatus",
+        requestId,
+      );
+    }
+
+    // Update the status
+    const closedBy = body.status === "closed" ? authCtx.userId : undefined;
+    const updatedRequest = await requestService.updateRequestStatus(
+      requestId,
+      body.status,
+      closedBy,
+    );
+
+    appLogger.debug(
+      { requestId, userId: authCtx.userId, newStatus: body.status },
+      "[changeRequestStatus] Request status changed",
+    );
+    res.json(updatedRequest);
+  } catch (err: unknown) {
+    if (err instanceof AuthorizationError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    if (err instanceof ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
+    }
+    if (err instanceof Error && err.message.includes("Invalid status transition")) {
+      return res.status(400).json({ error: err.message });
+    }
+    appLogger.error({ err }, "[changeRequestStatus] error");
+    res.status(500).json({ error: "Failed to change request status" });
+  }
+};
+
+/**
+ * DELETE /api/admin/requests/:requestId (super admin only)
+ * Delete a request.
+ * Only super admins can delete requests.
+ */
+export const deleteRequest = async (req: Request, res: Response) => {
+  try {
+    const requestId = req.params.requestId;
+    if (!requestId) {
+      return res.status(400).json({ error: "Missing requestId parameter" });
+    }
+
+    const authCtx = buildAuthContext(req);
+
+    // Fetch the request
+    const request = await requestService.getRequest(requestId);
+    if (!request) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    // Authorization check
+    if (!canDeleteRequest(authCtx, request)) {
+      throw new AuthorizationError(
+        "You do not have permission to delete this request",
+        "delete",
+        requestId,
+      );
+    }
+
+    // Delete the request
+    await requestService.deleteRequest(requestId);
+
+    appLogger.debug({ requestId, userId: authCtx.userId }, "[deleteRequest] Request deleted");
+    res.status(204).send();
+  } catch (err: unknown) {
+    if (err instanceof AuthorizationError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    appLogger.error({ err }, "[deleteRequest] error");
+    res.status(500).json({ error: "Failed to delete request" });
   }
 };

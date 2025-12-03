@@ -133,6 +133,8 @@ export const createApp = () => {
   app.use("/api", apiRateLimiter, routers.guildRouter);
   app.use("/api", routers.uploadsRouter);
   app.use("/api", apiRateLimiter, routers.requestRouter);
+  // Super admin request routes are mounted at /api/admin and do not overlap with regular request routes.
+  app.use("/api/admin", apiRateLimiter, routers.superAdminRequestRouter);
 
   // Media streaming proxy (under /api for consistent routing)
   app.use("/api/media", routers.mediaRouter);

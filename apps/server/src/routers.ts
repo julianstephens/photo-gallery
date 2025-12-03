@@ -1,7 +1,12 @@
 import { Router } from "express";
 import * as handlers from "./handlers/index.ts";
 import { streamMedia } from "./handlers/media.ts";
-import { requiresAdmin, requiresAuth, requiresGuildMembership } from "./middleware/auth.ts";
+import {
+  requiresAdmin,
+  requiresAuth,
+  requiresGuildMembership,
+  requiresSuperAdmin,
+} from "./middleware/auth.ts";
 import { uploadRateLimiter } from "./middleware/rateLimit.ts";
 import { defaultGuildCache, galleriesCache } from "./middleware/responseCache.ts";
 import env from "./schemas/env.ts";
@@ -93,6 +98,26 @@ requestRouter.get("/guilds/:guildId/requests", requiresGuildMembership, handlers
 requestRouter.post("/requests/:requestId/cancel", handlers.cancelRequest);
 requestRouter.post("/requests/:requestId/comments", handlers.addComment);
 
+/**********************
+ * SUPER ADMIN REQUEST ROUTES
+ **********************/
+const superAdminRequestRouter = Router();
+superAdminRequestRouter.use(requiresAuth);
+superAdminRequestRouter.use(requiresSuperAdmin);
+// List all requests in a guild (super admin only)
+superAdminRequestRouter.get(
+  "/guilds/:guildId/requests",
+  requiresGuildMembership,
+  handlers.listGuildRequests,
+);
+// Get, update status, and delete individual requests (super admin only)
+// Note: Guild membership is validated in the handler via authorization layer after fetching
+// the request, since guildId is not in the route params for these request-scoped endpoints.
+superAdminRequestRouter.get("/requests/:requestId", handlers.getRequestById);
+superAdminRequestRouter.post("/requests/:requestId/status", handlers.changeRequestStatus);
+superAdminRequestRouter.post("/requests/:requestId/comments", handlers.addComment);
+superAdminRequestRouter.delete("/requests/:requestId", handlers.deleteRequest);
+
 export default {
   healthRouter,
   authRouter,
@@ -101,4 +126,5 @@ export default {
   uploadsRouter,
   mediaRouter,
   requestRouter,
+  superAdminRequestRouter,
 };
