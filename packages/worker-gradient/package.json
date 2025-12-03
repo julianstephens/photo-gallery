@@ -1,5 +1,5 @@
 {
-  "name": "worker-gradient-generator",
+  "name": "worker-gradient",
   "version": "1.0.0",
   "description": "Gradient generation worker for photo-gallery",
   "type": "module",

@@ -47,7 +47,7 @@ main().catch((error) => {
   console.error(
     JSON.stringify({
       level: "fatal",
-      service: "photo-gallery-gradient-generator",
+      service: "photo-gallery-worker-gradient",
       msg: "Unhandled error in main",
       error: error instanceof Error ? error.message : String(error),
     }),

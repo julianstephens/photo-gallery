@@ -5,7 +5,7 @@
  */
 
 import type { GenerateGradientJobData } from "utils";
-import { GradientWorker, createLogger } from "worker-gradient-generator";
+import { GradientWorker, createLogger } from "worker-gradient";
 import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 import env from "../schemas/env.ts";

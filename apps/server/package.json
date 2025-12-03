@@ -48,7 +48,7 @@
     "redis": "^5.9.0",
     "rotating-file-stream": "^3.2.7",
     "utils": "workspace:*",
-    "worker-gradient-generator": "workspace:*",
+    "worker-gradient": "workspace:*",
     "zod": "^4.1.12"
   },
   "devDependencies": {

@@ -44,7 +44,7 @@ export function parseEnv(): Env {
     console.error(
       JSON.stringify({
         level: "fatal",
-        service: "photo-gallery-gradient-generator",
+        service: "photo-gallery-worker-gradient",
         msg: "Invalid environment variables",
         errors,
       }),

@@ -1,7 +1,7 @@
 import pino from "pino";
 import type { Env } from "./env.js";
 
-const SERVICE_NAME = "photo-gallery-gradient-generator";
+const SERVICE_NAME = "photo-gallery-worker-gradient";
 
 /**
  * Creates a structured pino logger for the gradient generator worker.

@@ -1,4 +1,4 @@
-# Gradient Generator Worker
+# Gradient Worker
 
 A long-running worker that generates color gradients and blur placeholders for gallery images. The worker listens to a Redis queue for jobs and processes them with configurable concurrency.
 
@@ -108,7 +108,7 @@ pnpm test
 
 ```bash
 # Build the image (from repo root)
-docker build -f packages/workers/gradient-generator/Dockerfile -t gradient-generator-worker .
+docker build -f packages/worker-gradient/Dockerfile -t worker-gradient .
 
 # Run the container
 docker run -d \
@@ -120,7 +120,7 @@ docker run -d \
   -e MASTER_BUCKET_NAME=galleries \
   -e LOG_LEVEL=info \
   -e GRADIENT_WORKER_CONCURRENCY=4 \
-  gradient-generator-worker
+  worker-gradient
 ```
 
 ## Architecture
@@ -163,16 +163,16 @@ On SIGINT/SIGTERM:
 
 All logs are output as JSON to stdout with the following base fields:
 
-- `service`: `photo-gallery-gradient-generator`
+- `service`: `photo-gallery-worker-gradient`
 - `level`: Log level string
 - `time`: ISO 8601 timestamp
 
 Example log output:
 
 ```json
-{"level":"info","time":"2024-01-15T10:30:00.000Z","service":"photo-gallery-gradient-generator","msg":"Initializing gradient generator worker"}
-{"level":"info","time":"2024-01-15T10:30:01.000Z","service":"photo-gallery-gradient-generator","concurrency":2,"msg":"Worker started"}
-{"level":"info","time":"2024-01-15T10:30:02.000Z","service":"photo-gallery-gradient-generator","jobId":"gradient-test-image.jpg","storageKey":"test/image.jpg","processingTimeMs":234,"primary":"#AABBCC","secondary":"#DDEEFF","msg":"Job completed successfully"}
+{"level":"info","time":"2024-01-15T10:30:00.000Z","service":"photo-gallery-worker-gradient","msg":"Initializing gradient generator worker"}
+{"level":"info","time":"2024-01-15T10:30:01.000Z","service":"photo-gallery-worker-gradient","concurrency":2,"msg":"Worker started"}
+{"level":"info","time":"2024-01-15T10:30:02.000Z","service":"photo-gallery-worker-gradient","jobId":"gradient-test-image.jpg","storageKey":"test/image.jpg","processingTimeMs":234,"primary":"#AABBCC","secondary":"#DDEEFF","msg":"Job completed successfully"}
 ```
 
 ## Integration with API Server
@@ -180,7 +180,7 @@ Example log output:
 The gradient worker is designed to run as a standalone service, but can also be imported as a library for in-process usage:
 
 ```typescript
-import { GradientWorker, parseEnv, createLogger } from "worker-gradient-generator";
+import { GradientWorker, parseEnv, createLogger } from "worker-gradient";
 import { redisClient } from "utils/redis";
 
 const env = parseEnv();

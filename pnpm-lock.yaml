@@ -250,9 +250,9 @@ importers:
       utils:
         specifier: workspace:*
         version: link:../../packages/utils
-      worker-gradient-generator:
+      worker-gradient:
         specifier: workspace:*
-        version: link:../../packages/workers/gradient-generator
+        version: link:../../packages/worker-gradient
       zod:
         specifier: ^4.1.12
         version: 4.1.12
@@ -355,8 +355,11 @@ importers:
         specifier: ^4.0.7
         version: 4.0.7(@types/node@24.10.0)(@vitest/ui@4.0.7)(jiti@2.6.1)(jsdom@27.2.0)(tsx@4.21.0)(yaml@2.8.1)
 
-  packages/worker-notifications:
+  packages/worker-gradient:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.940.0
+        version: 3.940.0
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -395,11 +398,8 @@ importers:
         specifier: ^4.0.7
         version: 4.0.7(@types/node@24.10.0)(@vitest/ui@4.0.7)(jiti@2.6.1)(jsdom@27.2.0)(tsx@4.21.0)(yaml@2.8.1)
 
-  packages/workers/gradient-generator:
+  packages/worker-notifications:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.940.0
-        version: 3.940.0
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -408,7 +408,7 @@ importers:
         version: 5.9.0
       utils:
         specifier: workspace:*
-        version: link:../../utils
+        version: link:../utils
       zod:
         specifier: ^4.1.12
         version: 4.1.12
