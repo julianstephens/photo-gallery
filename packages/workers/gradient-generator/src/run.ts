@@ -38,7 +38,7 @@ async function main(): Promise<void> {
     logger.info("Gradient generator worker is running. Press Ctrl+C to stop.");
   } catch (error) {
     logger.fatal({ error: error instanceof Error ? error.message : String(error) }, "Fatal error");
-    await redis.quit().catch(() => {});
+    await disconnectRedis();
     process.exit(1);
   }
 }

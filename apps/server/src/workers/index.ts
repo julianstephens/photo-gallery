@@ -13,18 +13,14 @@ import env from "../schemas/env.ts";
 // Singleton worker instance
 let workerInstance: GradientWorker | null = null;
 
-// Metrics for monitoring (fallback values)
-const jobsProcessed = 0;
-const jobsFailed = 0;
-
 /**
  * Get current metrics for monitoring.
  */
 export function getGradientWorkerMetrics() {
   const stats = workerInstance?.getStats();
   return {
-    jobsProcessed: stats?.jobsProcessed ?? jobsProcessed,
-    jobsFailed: stats?.jobsFailed ?? jobsFailed,
+    jobsProcessed: stats?.jobsProcessed ?? 0,
+    jobsFailed: stats?.jobsFailed ?? 0,
     avgProcessingTimeMs: stats?.avgProcessingTimeMs ?? 0,
     isEnabled: env.GRADIENT_WORKER_ENABLED,
     isRunning: workerInstance?.isRunning() ?? false,
