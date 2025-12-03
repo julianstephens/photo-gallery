@@ -1,7 +1,7 @@
 import type { RedisClientType } from "redis";
 import { generateGradientJobSchema, type GenerateGradientJobData, type ImageGradient } from "utils";
 import { generateGradientWithPlaceholder } from "utils/server";
-import { BucketService } from "./bucket.js";
+import { createBucketService, type BucketService } from "./bucket.js";
 import type { Env } from "./env.js";
 import { GradientMetaService } from "./gradientMeta.js";
 import type { Logger } from "./logger.js";
@@ -45,7 +45,7 @@ export class GradientWorker {
     this.#redis = redis;
     this.#logger = logger;
     this.#env = env;
-    this.#bucketService = new BucketService(env, logger);
+    this.#bucketService = createBucketService(env);
     this.#gradientMetaService = new GradientMetaService(redis, logger);
   }
 

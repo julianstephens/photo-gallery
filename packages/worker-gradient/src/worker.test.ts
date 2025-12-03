@@ -4,8 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "./env.js";
 import { GradientWorker } from "./worker.js";
 
-// Mock the bucket service using class-based mock
+// Mock the bucket service - now mocking the createBucketService function
 vi.mock("./bucket.js", () => ({
+  createBucketService: vi.fn(() => ({
+    getObject: vi.fn().mockResolvedValue({
+      data: Buffer.from("fake-image-data"),
+      contentType: "image/jpeg",
+    }),
+    ensureBucket: vi.fn().mockResolvedValue(undefined),
+  })),
   BucketService: class MockBucketService {
     getObject = vi.fn().mockResolvedValue({
       data: Buffer.from("fake-image-data"),

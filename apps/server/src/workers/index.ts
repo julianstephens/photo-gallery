@@ -13,6 +13,63 @@ import env from "../schemas/env.ts";
 // Singleton worker instance
 let workerInstance: GradientWorker | null = null;
 
+// Lock to prevent race conditions during initialization
+let initializingPromise: Promise<GradientWorker> | null = null;
+
+/**
+ * Create worker environment configuration from server env.
+ * This is extracted to avoid duplication between enqueueGradientJob and startGradientWorker.
+ */
+function createWorkerEnv() {
+  return {
+    REDIS_URL: `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`,
+    LOG_LEVEL: env.LOG_LEVEL as "trace" | "debug" | "info" | "warn" | "error" | "fatal",
+    S3_ENDPOINT: env.S3_ENDPOINT,
+    S3_ACCESS_KEY: env.S3_ACCESS_KEY,
+    S3_SECRET_KEY: env.S3_SECRET_KEY,
+    MASTER_BUCKET_NAME: env.MASTER_BUCKET_NAME,
+    GRADIENT_WORKER_CONCURRENCY: env.GRADIENT_WORKER_CONCURRENCY,
+    GRADIENT_JOB_MAX_RETRIES: env.GRADIENT_JOB_MAX_RETRIES,
+    GRADIENT_WORKER_POLL_INTERVAL_MS: env.GRADIENT_WORKER_POLL_INTERVAL_MS,
+  };
+}
+
+/**
+ * Get or create the worker instance with proper synchronization.
+ * Uses a promise-based lock to prevent race conditions during initialization.
+ */
+async function getOrCreateWorkerInstance(): Promise<GradientWorker> {
+  // Fast path: instance already exists
+  if (workerInstance) {
+    return workerInstance;
+  }
+
+  // Check if another call is already initializing
+  if (initializingPromise) {
+    return initializingPromise;
+  }
+
+  // Create initialization promise
+  initializingPromise = (async () => {
+    // Double-check after acquiring "lock"
+    if (workerInstance) {
+      return workerInstance;
+    }
+
+    const workerEnv = createWorkerEnv();
+    const logger = createLogger(workerEnv);
+    workerInstance = new GradientWorker(redis.client, logger, workerEnv);
+    return workerInstance;
+  })();
+
+  try {
+    const instance = await initializingPromise;
+    return instance;
+  } finally {
+    initializingPromise = null;
+  }
+}
+
 /**
  * Get current metrics for monitoring.
  */
@@ -42,27 +99,9 @@ export async function enqueueGradientJob(data: GenerateGradientJobData): Promise
     return null;
   }
 
-  // Create worker instance lazily if not exists
-  if (!workerInstance) {
-    // Create worker environment from server env
-    const workerEnv = {
-      REDIS_URL: `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`,
-      LOG_LEVEL: env.LOG_LEVEL as "trace" | "debug" | "info" | "warn" | "error" | "fatal",
-      S3_ENDPOINT: env.S3_ENDPOINT,
-      S3_ACCESS_KEY: env.S3_ACCESS_KEY,
-      S3_SECRET_KEY: env.S3_SECRET_KEY,
-      MASTER_BUCKET_NAME: env.MASTER_BUCKET_NAME,
-      GRADIENT_WORKER_CONCURRENCY: env.GRADIENT_WORKER_CONCURRENCY,
-      GRADIENT_JOB_MAX_RETRIES: env.GRADIENT_JOB_MAX_RETRIES,
-      GRADIENT_WORKER_POLL_INTERVAL_MS: env.GRADIENT_WORKER_POLL_INTERVAL_MS,
-    };
-
-    const logger = createLogger(workerEnv);
-    workerInstance = new GradientWorker(redis.client, logger, workerEnv);
-    // Note: We don't start the worker here - it's just for enqueueing
-  }
-
-  return workerInstance.enqueueJob(data);
+  // Get or create worker instance with proper synchronization
+  const instance = await getOrCreateWorkerInstance();
+  return instance.enqueueJob(data);
 }
 
 /**
@@ -91,19 +130,7 @@ export function startGradientWorker(): void {
     return;
   }
 
-  // Create worker environment from server env
-  const workerEnv = {
-    REDIS_URL: `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`,
-    LOG_LEVEL: env.LOG_LEVEL as "trace" | "debug" | "info" | "warn" | "error" | "fatal",
-    S3_ENDPOINT: env.S3_ENDPOINT,
-    S3_ACCESS_KEY: env.S3_ACCESS_KEY,
-    S3_SECRET_KEY: env.S3_SECRET_KEY,
-    MASTER_BUCKET_NAME: env.MASTER_BUCKET_NAME,
-    GRADIENT_WORKER_CONCURRENCY: env.GRADIENT_WORKER_CONCURRENCY,
-    GRADIENT_JOB_MAX_RETRIES: env.GRADIENT_JOB_MAX_RETRIES,
-    GRADIENT_WORKER_POLL_INTERVAL_MS: env.GRADIENT_WORKER_POLL_INTERVAL_MS,
-  };
-
+  const workerEnv = createWorkerEnv();
   const logger = createLogger(workerEnv);
   workerInstance = new GradientWorker(redis.client, logger, workerEnv);
   workerInstance.start();
@@ -132,22 +159,28 @@ export async function stopGradientWorker(): Promise<void> {
  * Get the current queue length.
  */
 export async function getQueueLength(): Promise<number> {
-  return workerInstance ? await workerInstance.getQueueLength() : 0;
+  if (!workerInstance) {
+    return 0;
+  }
+  return await workerInstance.getQueueLength();
 }
 
 /**
  * Get the current processing count.
  */
 export async function getProcessingCount(): Promise<number> {
-  if (workerInstance) {
-    return await workerInstance.getProcessingCount();
+  if (!workerInstance) {
+    return 0;
   }
-  return 0;
+  return await workerInstance.getProcessingCount();
 }
 
 /**
  * Get the count of delayed jobs waiting for retry.
  */
 export async function getDelayedCount(): Promise<number> {
-  return (await workerInstance?.getDelayedCount()) ?? 0;
+  if (!workerInstance) {
+    return 0;
+  }
+  return await workerInstance.getDelayedCount();
 }

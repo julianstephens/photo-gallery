@@ -17,6 +17,10 @@
     "./redis": {
       "types": "./dist/redis/index.d.ts",
       "import": "./dist/redis/index.js"
+    },
+    "./bucket": {
+      "types": "./dist/bucket/index.d.ts",
+      "import": "./dist/bucket/index.js"
     }
   },
   "scripts": {
@@ -37,6 +41,7 @@
     "vitest": "^4.0.7"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.940.0",
     "pino": "^10.1.0",
     "quantize": "^1.0.2",
     "redis": "^5.9.0",

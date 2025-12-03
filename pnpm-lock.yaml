@@ -320,6 +320,9 @@ importers:
 
   packages/utils:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.940.0
+        version: 3.940.0
       pino:
         specifier: ^10.1.0
         version: 10.1.0
@@ -357,9 +360,6 @@ importers:
 
   packages/worker-gradient:
     dependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.940.0
-        version: 3.940.0
       pino:
         specifier: ^10.1.0
         version: 10.1.0

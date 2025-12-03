@@ -19,7 +19,6 @@
   "license": "ISC",
   "packageManager": "pnpm@10.18.3",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.940.0",
     "pino": "^10.1.0",
     "redis": "^5.9.0",
     "utils": "workspace:*",
