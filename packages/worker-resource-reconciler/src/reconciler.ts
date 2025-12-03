@@ -63,12 +63,19 @@ export function parseEnvFile(content: string): Record<string, string> {
     const key = match[1];
     let value = match[2];
 
-    // Handle quoted values
+    // Handle quoted values and mismatched quotes
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
     ) {
       value = value.slice(1, -1);
+    } else if (
+      (value.startsWith('"') && !value.endsWith('"')) ||
+      (value.startsWith("'") && !value.endsWith("'"))
+    ) {
+      // Mismatched quotes detected, skip this line or document the behavior
+      // Optionally, log a warning here if a logger is available
+      continue;
     }
 
     result[key] = value;
