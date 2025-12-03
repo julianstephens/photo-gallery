@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { parseEnvFile, envVarsToCoolifyFormat } from "./reconciler.js";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import type pino from "pino";
+import { parseEnvFile, envVarsToCoolifyFormat, Reconciler } from "./reconciler.js";
+import { CoolifyClient } from "./coolify.js";
+import type { Manifest } from "./manifest.js";
 
 describe("parseEnvFile", () => {
   it("should parse simple key=value pairs", () => {
@@ -154,5 +157,285 @@ describe("envVarsToCoolifyFormat", () => {
   it("should handle empty env vars", () => {
     const result = envVarsToCoolifyFormat({});
     expect(result).toEqual([]);
+  });
+});
+
+describe("Reconciler", () => {
+  const mockLogger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+  } as unknown as pino.Logger;
+
+  const createMockClient = () => ({
+    findApplicationByName: vi.fn(),
+    createDockerImageApplication: vi.fn(),
+    updateApplication: vi.fn(),
+    updateEnvironmentVariables: vi.fn(),
+    deployApplication: vi.fn(),
+  });
+
+  const createTestManifest = (): Manifest => ({
+    projectId: "test-project-uuid",
+    destinationId: "test-destination-uuid",
+    serverUuid: "test-server-uuid",
+    environmentName: "production",
+    envFileSecretName: "PRODUCTION_ENV_FILE",
+    resources: [
+      {
+        name: "test-app",
+        description: "Test application",
+        dockerImageName: "ghcr.io/owner/repo-app",
+        domains: "app.example.com",
+        portsExposes: "3000",
+        healthCheck: {
+          path: "/health",
+          port: "3000",
+        },
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe("reconcile()", () => {
+    it("should create a new application when it does not exist", async () => {
+      const mockClient = createMockClient();
+      mockClient.findApplicationByName.mockResolvedValue(null);
+      mockClient.createDockerImageApplication.mockResolvedValue({
+        uuid: "new-app-uuid",
+        name: "test-app",
+      });
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(true);
+      expect(result.totalCreated).toBe(1);
+      expect(result.totalUpdated).toBe(0);
+      expect(result.totalFailed).toBe(0);
+      expect(result.resources).toHaveLength(1);
+      expect(result.resources[0]).toEqual({
+        name: "test-app",
+        action: "created",
+        uuid: "new-app-uuid",
+      });
+      expect(mockClient.createDockerImageApplication).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "test-app",
+          docker_registry_image_tag: "v1.0.0",
+        }),
+      );
+      expect(mockClient.deployApplication).toHaveBeenCalledWith("new-app-uuid");
+    });
+
+    it("should update an existing application", async () => {
+      const mockClient = createMockClient();
+      mockClient.findApplicationByName.mockResolvedValue({
+        uuid: "existing-app-uuid",
+        name: "test-app",
+      });
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v2.0.0",
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(true);
+      expect(result.totalCreated).toBe(0);
+      expect(result.totalUpdated).toBe(1);
+      expect(result.totalFailed).toBe(0);
+      expect(result.resources[0]).toEqual({
+        name: "test-app",
+        action: "updated",
+        uuid: "existing-app-uuid",
+      });
+      expect(mockClient.updateApplication).toHaveBeenCalledWith(
+        "existing-app-uuid",
+        expect.objectContaining({
+          docker_registry_image_tag: "v2.0.0",
+        }),
+      );
+      expect(mockClient.deployApplication).toHaveBeenCalledWith("existing-app-uuid");
+    });
+
+    it("should handle multiple resources", async () => {
+      const mockClient = createMockClient();
+      mockClient.findApplicationByName
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ uuid: "existing-uuid", name: "app-2" });
+      mockClient.createDockerImageApplication.mockResolvedValue({
+        uuid: "new-uuid",
+        name: "app-1",
+      });
+
+      const manifest: Manifest = {
+        ...createTestManifest(),
+        resources: [
+          {
+            name: "app-1",
+            description: "First app",
+            dockerImageName: "ghcr.io/owner/repo-app1",
+            domains: "app1.example.com",
+            portsExposes: "3000",
+          },
+          {
+            name: "app-2",
+            description: "Second app",
+            dockerImageName: "ghcr.io/owner/repo-app2",
+            domains: "app2.example.com",
+            portsExposes: "4000",
+          },
+        ],
+      };
+
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "latest",
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(true);
+      expect(result.totalCreated).toBe(1);
+      expect(result.totalUpdated).toBe(1);
+      expect(result.resources).toHaveLength(2);
+    });
+
+    it("should fail when server UUID is not provided", async () => {
+      const mockClient = createMockClient();
+      const manifest: Manifest = {
+        projectId: "test-project-uuid",
+        destinationId: "test-destination-uuid",
+        environmentName: "production",
+        envFileSecretName: "PRODUCTION_ENV_FILE",
+        resources: [
+          {
+            name: "test-app",
+            description: "",
+            dockerImageName: "ghcr.io/owner/repo-app",
+            domains: "",
+            portsExposes: "3000",
+          },
+        ],
+      };
+
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(false);
+      expect(result.totalFailed).toBe(1);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        {},
+        "Server UUID is required but not provided in manifest or options",
+      );
+    });
+
+    it("should handle resource reconciliation errors gracefully", async () => {
+      const mockClient = createMockClient();
+      mockClient.findApplicationByName.mockRejectedValue(new Error("API Error"));
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(false);
+      expect(result.totalFailed).toBe(1);
+      expect(result.resources[0]).toEqual({
+        name: "test-app",
+        action: "failed",
+        error: "API Error",
+      });
+    });
+
+    it("should parse and apply environment variables", async () => {
+      const mockClient = createMockClient();
+      mockClient.findApplicationByName.mockResolvedValue(null);
+      mockClient.createDockerImageApplication.mockResolvedValue({
+        uuid: "new-app-uuid",
+        name: "test-app",
+      });
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+        envFileContent: "DATABASE_URL=postgres://localhost\nAPI_KEY=secret123",
+      });
+
+      const result = await reconciler.reconcile();
+
+      expect(result.success).toBe(true);
+      expect(mockClient.updateEnvironmentVariables).toHaveBeenCalledWith(
+        "new-app-uuid",
+        expect.arrayContaining([
+          expect.objectContaining({ key: "DATABASE_URL", value: "postgres://localhost" }),
+          expect.objectContaining({ key: "API_KEY", value: "secret123" }),
+        ]),
+      );
+    });
+
+    it("should skip environment variable update when no env content provided", async () => {
+      const mockClient = createMockClient();
+      mockClient.findApplicationByName.mockResolvedValue(null);
+      mockClient.createDockerImageApplication.mockResolvedValue({
+        uuid: "new-app-uuid",
+        name: "test-app",
+      });
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+      });
+
+      await reconciler.reconcile();
+
+      expect(mockClient.updateEnvironmentVariables).not.toHaveBeenCalled();
+    });
+
+    it("should use serverUuid from options over manifest", async () => {
+      const mockClient = createMockClient();
+      mockClient.findApplicationByName.mockResolvedValue(null);
+      mockClient.createDockerImageApplication.mockResolvedValue({
+        uuid: "new-app-uuid",
+        name: "test-app",
+      });
+
+      const manifest = createTestManifest();
+      const reconciler = new Reconciler(mockClient as unknown as CoolifyClient, mockLogger, {
+        manifest,
+        dockerTag: "v1.0.0",
+        serverUuid: "override-server-uuid",
+      });
+
+      await reconciler.reconcile();
+
+      expect(mockClient.createDockerImageApplication).toHaveBeenCalledWith(
+        expect.objectContaining({
+          server_uuid: "override-server-uuid",
+        }),
+      );
+    });
   });
 });

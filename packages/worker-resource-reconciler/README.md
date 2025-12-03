@@ -70,7 +70,7 @@ Create a `coolify.manifest.json` file in your repository root:
     {
       "name": "photo-gallery-server",
       "description": "The server service.",
-      "dockerImageName": "ghcr.io/owner/photo-gallery/server",
+      "dockerImageName": "ghcr.io/owner/photo-gallery-server",
       "domains": "api.example.com",
       "portsExposes": "4000",
       "healthCheck": {
@@ -81,7 +81,7 @@ Create a `coolify.manifest.json` file in your repository root:
     {
       "name": "photo-gallery-client",
       "description": "The client service.",
-      "dockerImageName": "ghcr.io/owner/photo-gallery/client",
+      "dockerImageName": "ghcr.io/owner/photo-gallery-client",
       "domains": "app.example.com",
       "portsExposes": "80",
       "healthCheck": {
