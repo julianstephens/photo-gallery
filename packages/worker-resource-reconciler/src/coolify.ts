@@ -231,8 +231,8 @@ export class CoolifyClient {
     }
 
     this.logger.info({ uuid }, "Triggering deployment");
-    // Coolify uses GET for webhook-based deploys, but POST for API-triggered deploys
-    await this.request<unknown>("GET", `/api/v1/deploy?uuid=${uuid}`);
+    // Coolify uses POST for API-triggered deploys (GET is for webhook-based deploys)
+    await this.request<unknown>("POST", `/api/v1/deploy`, { uuid });
   }
 
   /**
