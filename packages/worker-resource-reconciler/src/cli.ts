@@ -36,14 +36,26 @@ function parseArgs(): {
     switch (arg) {
       case "--manifest":
       case "-m":
+        if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
+          console.error("Error: --manifest requires a path argument.");
+          process.exit(1);
+        }
         result.manifestPath = args[++i];
         break;
       case "--tag":
       case "-t":
+        if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
+          console.error("Error: --tag requires a tag argument.");
+          process.exit(1);
+        }
         result.dockerTag = args[++i];
         break;
       case "--server-uuid":
       case "-s":
+        if (i + 1 >= args.length || args[i + 1].startsWith("-")) {
+          console.error("Error: --server-uuid requires a UUID argument.");
+          process.exit(1);
+        }
         result.serverUuid = args[++i];
         break;
       case "--dry-run":
