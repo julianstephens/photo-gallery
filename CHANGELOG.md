@@ -1,3 +1,32 @@
+## v0.2.0
+
+### Added
+
+- Implemented a new worker to send Discord notifications for expiring galleries, and added UI indicators to warn users of impending expirations.
+- Added multi-select functionality to galleries, allowing users to delete multiple items at once.
+- Introduced a new admin page for managing guild-specific settings, backed by Redis.
+- Added API endpoints to support administrative actions on user requests.
+- Implemented helpers for role-based access control on request-related actions.
+- Introduced additional caching layers to mitigate 429 rate-limiting errors from external services.
+
+### Fixed
+
+- Resolved an issue where stale uploads would remain queued after a page reload, and improved the upload monitor's display and clearing logic.
+- Ensured gallery data is consistently invalidated and refetched after uploads to prevent displaying outdated content.
+- Limited upload concurrency and adjusted rate limits to improve the reliability of large uploads.
+- Added a production-ready Content Security Policy (CSP) and addressed a potential missing CSRF middleware vulnerability.
+
+### Improved
+
+- Implemented silent authentication revalidation when page visibility changes to ensure session consistency.
+- Enhanced CSRF debugging and added more detailed client-side upload logging.
+
+### Technical Improvements
+
+- Restructured the project into an apps and packages monorepo layout using pnpm workspaces for better modularity and dependency management.
+- Optimized the deployment workflow by restructuring jobs and improving orchestration.
+- Moved the gradient generation logic into its own dedicated worker package.
+
 ## v0.1.2
 
 ### Fixed
