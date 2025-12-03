@@ -115,7 +115,7 @@ jobs:
       - build-client
     if: |
       always() &&
-      (needs.build-server.result == 'success' || needs.build-client.result == 'success' || needs.build-server.result == 'skipped' || needs.build-client.result == 'skipped') &&
+      (needs.build-server.result == 'success' || needs.build-client.result == 'success') &&
       (needs.detect-changes.outputs.server == 'true' || needs.detect-changes.outputs.client == 'true')
     permissions:
       contents: read
