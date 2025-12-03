@@ -212,7 +212,7 @@ export class Reconciler {
     this.logger.info({ resource: resource.name, dockerTag }, "Reconciling resource");
 
     // Try to find existing application
-    const existing = await this.client.findApplicationByName(resource.name, manifest.projectId);
+    const existing = await this.client.findApplicationByName(resource.name);
 
     let uuid: string;
     let action: "created" | "updated" | "unchanged";

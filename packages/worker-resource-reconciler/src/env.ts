@@ -17,8 +17,10 @@ export const envSchema = z.object({
   DRY_RUN: z
     .string()
     .optional()
-    .transform((val) => val === "true" || val === "1" ? true : false)
-    .describe("Dry run mode - only log actions without making changes. If not set, defaults to false."),
+    .transform((val) => (val === "true" || val === "1" ? true : false))
+    .describe(
+      "Dry run mode - only log actions without making changes. If not set, defaults to false.",
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;

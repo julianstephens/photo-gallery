@@ -144,22 +144,14 @@ export class CoolifyClient {
   }
 
   /**
-   * Finds an application by name, optionally filtering by project.
+   * Finds an application by name.
+   * Note: Searches across all applications returned by the API.
    */
-  async findApplicationByName(
-    name: string,
-    projectId?: string,
-  ): Promise<CoolifyApplication | null> {
+  async findApplicationByName(name: string): Promise<CoolifyApplication | null> {
     const apps = await this.listApplications();
-    const found = apps.find((app) => {
-      if (app.name !== name) return false;
-      // If projectId is provided, we'd need to filter by it
-      // Note: The API returns repository_project_id but we're using projectId as UUID
-      // For now, we just match by name
-      return true;
-    });
+    const found = apps.find((app) => app.name === name);
     if (found) {
-      this.logger.debug({ name, uuid: found.uuid, projectId }, "Found existing application");
+      this.logger.debug({ name, uuid: found.uuid }, "Found existing application");
     }
     return found ?? null;
   }
