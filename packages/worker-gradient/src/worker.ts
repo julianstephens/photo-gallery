@@ -39,6 +39,7 @@ export class GradientWorker {
   #gradientMetaService: GradientMetaService;
   #running: boolean = false;
   #intervalId: ReturnType<typeof setInterval> | null = null;
+  #listenPromise: Promise<void> | null = null;
   #activeJobCount: number = 0;
   #stats: WorkerStats = {
     jobsProcessed: 0,
@@ -199,7 +200,8 @@ export class GradientWorker {
   }
 
   /**
-   * Start the gradient generation worker.
+   * Starts the worker.
+   * It begins listening for jobs on the queue and processing delayed jobs.
    */
   start(): void {
     if (this.#running) {
@@ -208,32 +210,42 @@ export class GradientWorker {
     }
 
     this.#running = true;
-    this.#activeJobCount = 0;
-
-    // Start the main listening loop
-    this.listenForJobs().catch((err) => {
-      this.#logger.fatal({ err }, "Worker listening loop crashed");
-      this.#running = false;
-    });
-
-    // Periodically process delayed jobs
-    this.#intervalId = setInterval(() => {
-      this.#processDelayedJobs().catch((err) => {
-        this.#logger.error({ err }, "Error processing delayed jobs");
-      });
-    }, this.#env.GRADIENT_WORKER_POLL_INTERVAL_MS);
-
-    this.#logger.info(
-      {
-        concurrency: this.#env.GRADIENT_WORKER_CONCURRENCY,
-        pollIntervalMs: this.#env.GRADIENT_WORKER_POLL_INTERVAL_MS,
-      },
-      "Worker started",
-    );
+    // Start the two main loops, but don't wait for them here.
+    // listenForJobs will only exit when #running is false.
+    this.#listenPromise = this.listenForJobs();
+    this.#intervalId = setInterval(() => this.#processDelayedJobs(), 5000); // Check every 5s
   }
 
   /**
-   * Continuously listen for and process jobs from the queue.
+   * Stops the worker gracefully.
+   * It will finish any in-flight job and wait for the listen loop to exit.
+   */
+  async stop(): Promise<void> {
+    if (!this.#running) {
+      this.#logger.warn("Worker is not running");
+      return;
+    }
+
+    this.#logger.info("Stopping worker...");
+    this.#running = false;
+
+    if (this.#intervalId) {
+      clearInterval(this.#intervalId);
+      this.#intervalId = null;
+    }
+
+    // Wait for the listenForJobs loop to finish. This can take up to the
+    // blMove timeout (5s) plus any final processing.
+    if (this.#listenPromise) {
+      await this.#listenPromise;
+    }
+
+    this.#logger.info("Worker stopped gracefully.");
+  }
+
+  /**
+   * Process jobs from the queue.
+   * This method is called by the listening loop and should not be called directly.
    */
   async listenForJobs(): Promise<void> {
     this.#logger.info("Worker is now listening for jobs on the queue...");
@@ -286,45 +298,6 @@ export class GradientWorker {
       this.#activeJobCount--;
       this.#stats.activeJobs = this.#activeJobCount;
     }
-  }
-
-  /**
-   * Stop the gradient generation worker.
-   */
-  async stop(): Promise<void> {
-    if (!this.#running) {
-      return;
-    }
-
-    this.#logger.info("Stopping worker...");
-    this.#running = false;
-
-    if (this.#intervalId) {
-      clearInterval(this.#intervalId);
-      this.#intervalId = null;
-    }
-
-    // Wait a moment for the listening loop to exit
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Move any jobs in processing back to queue
-    try {
-      let jobPayload: string | null;
-      while (
-        (jobPayload = await this.#redis.lMove(
-          PROCESSING_KEY,
-          GRADIENT_JOB_QUEUE,
-          "LEFT",
-          "RIGHT",
-        )) !== null
-      ) {
-        this.#logger.debug({ jobPayload }, "Moved job from processing back to queue");
-      }
-    } catch (error) {
-      this.#logger.error({ error }, "Error moving jobs back to queue");
-    }
-
-    this.#logger.info("Worker stopped");
   }
 
   /**

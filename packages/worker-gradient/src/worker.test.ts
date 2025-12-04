@@ -185,6 +185,26 @@ describe("GradientWorker", () => {
       expect(worker.isRunning()).toBe(false);
     });
 
+    it("should wait for the listen loop to finish on stop", async () => {
+      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+
+      let listenLoopFinished = false;
+      const _listenSpy = vi.spyOn(worker, "listenForJobs").mockImplementation(async () => {
+        // Simulate a delay, like waiting for blMove
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        listenLoopFinished = true;
+      });
+
+      worker.start();
+      expect(worker.isRunning()).toBe(true);
+
+      await worker.stop();
+
+      expect(listenLoopFinished).toBe(true);
+      expect(worker.isRunning()).toBe(false);
+      expect(mockLogger.info).toHaveBeenCalledWith("Worker stopped gracefully.");
+    });
+
     it("should not start if already running", () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
       // Prevent the actual loop from running in this test
