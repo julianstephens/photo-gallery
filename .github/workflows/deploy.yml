@@ -67,8 +67,8 @@ jobs:
         {
           "server": "apps/server/Dockerfile",
           "client": "apps/client/Dockerfile",
-          "gradient-worker": "packages/worker-gradient/Dockerfile",
-          "notifications-worker": "packages/worker-notifications/Dockerfile"
+          "worker-gradient": "packages/worker-gradient/Dockerfile",
+          "worker-notifications": "packages/worker-notifications/Dockerfile"
         }
 
     steps:
