@@ -1,4 +1,5 @@
 import argparse
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -15,6 +16,34 @@ def get_previous_version(repo):
         if repo.tags is not None and len(repo.tags) > 0
         else None
     )
+
+
+def update_package_version(new_version):
+    """
+    Updates the 'version' key in a package.json file.
+
+    Args:
+        file_path (str): The path to the package.json file.
+        new_version (str): The new version string to set.
+    """
+    file_path = REPO_ROOT / "package.json"
+    try:
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        data["version"] = new_version
+
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=2)
+    except FileNotFoundError:
+        print(f"Error: package.json not found at {file_path}")
+        raise
+    except json.JSONDecodeError:
+        print(f"Error: Invalid JSON in {file_path}")
+        raise
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        raise
 
 
 def insert_at_front_of_file(filename, new_content):
@@ -76,8 +105,14 @@ def main():
     parser = argparse.ArgumentParser("Release script")
     parser.add_argument("--version", type=str, required=True, help="Version to release")
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
-    parser.add_argument("--no-push", action="store_true", help="Do not push tag to remote. Implies --no-release")
-    parser.add_argument("--no-release", action="store_true", help="Do not create a GitHub release")
+    parser.add_argument(
+        "--no-push",
+        action="store_true",
+        help="Do not push tag to remote. Implies --no-release",
+    )
+    parser.add_argument(
+        "--no-release", action="store_true", help="Do not create a GitHub release"
+    )
     args = parser.parse_args()
     version = args.version
     dry_run = args.dry_run
@@ -131,17 +166,25 @@ Your output should be only the markdown, starting with `## {version}`.
 
     changelog_path = REPO_ROOT / "CHANGELOG.md"
     insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
-
     print(f"Changelog updated at {changelog_path}")
 
-    repo.create_tag(path=version, message=changelog_entry)
+    update_package_version(version.lstrip("v"))
+    print(f"Updated package.json to version {version.lstrip('v')}")
 
     if no_push:
-        print("No-push mode - not pushing tag to remote.")
+        print("No-push mode - not pushing to remote.")
         return
-    origin = repo.remote(name="origin")
-    origin.push(version)
 
+    origin = repo.remote(name="origin")
+
+    repo.index.add([changelog_path, REPO_ROOT / "package.json"])
+    repo.index.commit(f"ci: release {version}")
+    origin.push()
+    print("Pushed commit to remote.")
+
+    repo.create_tag(path=version, message=changelog_entry)
+    print(f"Created git tag {version}.")
+    origin.push(version)
     print(f"Pushed new tag {version} to remote.")
 
     if no_release:
