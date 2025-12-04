@@ -101,33 +101,18 @@ def extract_changelog_from_text(output_text: str) -> str:
     return changelog_content.replace("```", "").strip()
 
 
-def main():
-    parser = argparse.ArgumentParser("Release script")
-    parser.add_argument("--version", type=str, required=True, help="Version to release")
-    parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
-    parser.add_argument(
-        "--no-tag",
-        action="store_true",
-        help="Do not create tag. Implies --no-push and --no-release",
-    )
-    parser.add_argument(
-        "--no-push",
-        action="store_true",
-        help="Do not push to remote. Implies --no-release",
-    )
-    parser.add_argument(
-        "--no-release", action="store_true", help="Do not create a GitHub release"
-    )
-    args = parser.parse_args()
-    version = args.version
-    dry_run = args.dry_run
-    no_tag = args.no_tag
-    no_push = args.no_push
-    no_release = args.no_release
-    repo = Repo(REPO_ROOT)
+def get_changelog_entry(version: str, changelog_path: Path) -> str:
+  with changelog_path.open("r") as f:
+      changelog_content = f.read()
+  pattern = rf"##\s*{re.escape(version)}\s*(.*?)\s*(##\s*v\d+\.\d+\.\d+|$)"
+  match = re.search(pattern, changelog_content, re.DOTALL)
+  if match:
+      entry = match.group(0).strip()
+      return entry
+  else:
+      raise ValueError(f"Changelog entry for version {version} not found in {changelog_path}")
 
-    print(f"Releasing version: {version}")
-
+def generate_changelog_entry(version: str, repo: Repo) -> str:
     prompt = f"""
 Examine the git history since the last tag ({get_previous_version(repo)}) and generate a new CHANGELOG entry for {version}.
 The entry format should be consistent with the existing CHANGELOG.md file.
@@ -160,19 +145,57 @@ Your output should be only the markdown, starting with `## {version}`.
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print("Error running copilot:", result.stderr)
-        return
+        raise RuntimeError("Copilot command failed")
 
     response = result.stdout.strip()
-    changelog_entry = extract_changelog_from_text(response)
+    return extract_changelog_from_text(response)
+
+def main():
+    parser = argparse.ArgumentParser("Release script")
+    parser.add_argument("--version", type=str, required=True, help="Version to release")
+    parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
+    parser.add_argument(
+        "--no-tag",
+        action="store_true",
+        help="Do not create tag. Implies --no-push and --no-release",
+    )
+    parser.add_argument(
+        "--no-push",
+        action="store_true",
+        help="Do not push to remote. Implies --no-release",
+    )
+    parser.add_argument(
+        "--no-release", action="store_true", help="Do not create a GitHub release"
+    )
+    parser.add_argument(
+        "--skip-gen", action="store_true", help="Do not generate changelog entry. Assumes the latest entry is correct."
+    )
+    args = parser.parse_args()
+    version = args.version
+    dry_run = args.dry_run
+    no_tag = args.no_tag
+    no_push = args.no_push
+    no_release = args.no_release
+    skip_gen = args.skip_gen
+    repo = Repo(REPO_ROOT)
+    changelog_path = REPO_ROOT / "CHANGELOG.md"
+
+    print(f"Releasing version: {version}")
+
+    if skip_gen:
+      changelog_entry = get_changelog_entry(version, changelog_path)
+    else:
+      changelog_entry = generate_changelog_entry(version, repo)
+
     if dry_run:
         print("Dry run mode - not making any changes.")
         print("Generated changelog entry:")
         print(changelog_entry)
         return
 
-    changelog_path = REPO_ROOT / "CHANGELOG.md"
-    insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
-    print(f"Changelog updated at {changelog_path}")
+    if not skip_gen:
+      insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
+      print(f"Changelog updated at {changelog_path}")
 
     if no_tag:
         print("No-tag mode - not creating tag, pushing, or releasing.")
