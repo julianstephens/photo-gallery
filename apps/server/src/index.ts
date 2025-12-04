@@ -1,3 +1,13 @@
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  const redisUser = process.env.REDIS_USER || "";
+  const redisPassword = process.env.REDIS_PASSWORD || "";
+  const redisHost = process.env.REDIS_HOST || "localhost";
+  const redisPort = process.env.REDIS_PORT || "6379";
+  const redisDb = process.env.REDIS_DB || "1";
+
+  process.env.REDIS_URL = `redis://${redisUser}:${redisPassword}@${redisHost}:${redisPort}/${redisDb}`;
+}
+
 import { disconnectRedis, initializeRedis } from "utils/redis";
 import { appLogger } from "./middleware/logger.ts";
 import env from "./schemas/env.ts";
@@ -5,10 +15,6 @@ import { createApp, printRegisteredRoutes } from "./server.ts";
 
 // Start server if run directly
 if (process.argv[1] === new URL(import.meta.url).pathname) {
-  // Construct REDIS_URL from individual env vars for the shared Redis client
-  // This must be done before createApp() is called since modules load the Redis client at import time
-  process.env.REDIS_URL = `redis://${env.REDIS_USER}:${env.REDIS_PASSWORD}@${env.REDIS_HOST}:${env.REDIS_PORT}/${env.REDIS_DB}`;
-
   (async () => {
     const app = createApp();
 
