@@ -28,6 +28,10 @@ RUN pnpm install --filter server... --frozen-lockfile --offline
 COPY packages/utils packages/utils
 RUN pnpm --filter utils build
 
+# Copy worker-gradient source and build
+COPY packages/worker-gradient packages/worker-gradient
+RUN pnpm --filter worker-gradient build
+
 FROM deps AS build
 COPY apps/server apps/server
 RUN pnpm --filter server build
