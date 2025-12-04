@@ -1,3 +1,22 @@
+## v0.2.2
+
+### Fixed
+
+- Ensured environment variables are initialized before Redis utilities are imported.
+- Fixed Redis URL configuration and connection initialization order.
+- Added gradient worker as a build dependency to ensure proper artifact generation.
+- Fixed release script to properly commit changes.
+
+### Improved
+
+- Refactored notifications container to remain active for Coolify scheduler.
+
+### Technical Improvements
+
+- Decoupled server and gradient worker into separate build artifacts.
+- Updated Coolify manifest and deployment configuration.
+- Enhanced CI/CD pipeline with improved build caching and deployment logic.
+
 ## v0.2.1
 
 ### Added
