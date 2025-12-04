@@ -36,13 +36,13 @@ jobs:
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
-            gradient-worker:
+            worker-gradient:
               - 'packages/worker-gradient/**'
               - 'packages/utils/**'
               - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/deploy.yml'
-            notifications-worker:
+            worker-notifications:
               - 'packages/worker-notifications/**'
               - 'packages/utils/**'
               - 'pnpm-lock.yaml'
