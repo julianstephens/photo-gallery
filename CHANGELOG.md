@@ -1,3 +1,18 @@
+## v0.2.3
+
+### Improved
+
+- Refactored gradient worker to improve efficiency and reliability in job processing and queue
+  management.
+- Simplified worker test suite by removing redundant tests and improving mock setup.
+- Optimized Redis operations and job lifecycle management in the gradient processing pipeline.
+
+### Technical Improvements
+
+- Added `validate` npm script for streamlined code formatting, linting, and testing workflow.
+- Enhanced Redis transaction handling with multi-command support in the gradient worker.
+- Improved test coverage and mock implementations for better test maintainability.
+
 ## v0.2.2
 
 ### Fixed
