@@ -1,4 +1,4 @@
-import { disconnectRedis, initializeRedis } from "utils";
+import { disconnectRedis, initializeRedis } from "utils/redis";
 import { appLogger } from "./middleware/logger.ts";
 import env from "./schemas/env.ts";
 import { createApp, printRegisteredRoutes } from "./server.ts";
