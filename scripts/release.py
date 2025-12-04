@@ -106,9 +106,14 @@ def main():
     parser.add_argument("--version", type=str, required=True, help="Version to release")
     parser.add_argument("--dry-run", action="store_true", help="Dry run mode")
     parser.add_argument(
+        "--no-tag",
+        action="store_true",
+        help="Do not create tag. Implies --no-push and --no-release",
+    )
+    parser.add_argument(
         "--no-push",
         action="store_true",
-        help="Do not push tag to remote. Implies --no-release",
+        help="Do not push to remote. Implies --no-release",
     )
     parser.add_argument(
         "--no-release", action="store_true", help="Do not create a GitHub release"
@@ -116,6 +121,7 @@ def main():
     args = parser.parse_args()
     version = args.version
     dry_run = args.dry_run
+    no_tag = args.no_tag
     no_push = args.no_push
     no_release = args.no_release
     repo = Repo(REPO_ROOT)
@@ -167,6 +173,10 @@ Your output should be only the markdown, starting with `## {version}`.
     changelog_path = REPO_ROOT / "CHANGELOG.md"
     insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
     print(f"Changelog updated at {changelog_path}")
+
+    if no_tag:
+        print("No-tag mode - not creating tag, pushing, or releasing.")
+        return
 
     update_package_version(version.lstrip("v"))
     print(f"Updated package.json to version {version.lstrip('v')}")
