@@ -18,7 +18,8 @@
     "test": "pnpm --recursive test",
     "test:integration": "pnpm --recursive test:integration",
     "prepare": "pnpm husky",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "release": "python ./scripts/release.py"
   },
   "keywords": [],
   "author": "",

@@ -1,3 +1,23 @@
+## v0.2.2
+
+### Fixed
+
+- Decoupled server and gradient worker build configurations.
+- Fixed REDIS_URL initialization to run before utils/redis import.
+- Ensured gradient dependency is properly added to server build.
+- Fixed image naming in build process.
+- Fixed import paths for Redis-specific utilities.
+
+### Improved
+
+- Updated Coolify manifest for deployment configuration.
+- Refactored notifications container to remain awake for Coolify scheduler.
+
+### Technical Improvements
+
+- Improved CI workflow with registry caching and matrix reference updates.
+- Added example environment configuration file.
+
 ## v0.2.1
 
 ### Added

@@ -9,3 +9,4 @@ coverage
 .vscode
 logs
 data
+.direnv
