@@ -1,24 +1,20 @@
 {
   "projectId": "lwk8osg84o0okw0844wgkc4o",
   "destinationId": "ugsk8w0w0c0oc08wc4488s4w",
-  "serverUuid": "jk8w8scsg0gkw804ockg8g80",
+  "serverId": "jk8w8scsg0gkw804ockg8g80",
   "environmentName": "production",
   "resources": [
     {
       "name": "photo-gallery-client",
-      "description": "The client service.",
+      "description": "The photo-gallery-client service.",
       "dockerImageName": "ghcr.io/julianstephens/photo-gallery-client",
       "envSecretName": "COOLIFY_ENV_CLIENT",
       "domains": "http://gallery.cyborgdev.cloud",
-      "portsExposes": "80",
-      "healthCheck": {
-        "path": "/",
-        "port": "80"
-      }
+      "portsExposes": "80"
     },
     {
       "name": "photo-gallery-server",
-      "description": "The server service.",
+      "description": "The photo-gallery-server service.",
       "dockerImageName": "ghcr.io/julianstephens/photo-gallery-server",
       "envSecretName": "COOLIFY_ENV_SERVER",
       "domains": "http://gallery-api.cyborgdev.cloud",
@@ -26,25 +22,28 @@
       "healthCheck": {
         "path": "/api/healthz",
         "port": "4000",
-        "protocol": "http"
+        "interval": 10,
+        "timeout": 5,
+        "startPeriod": 20
       }
     },
     {
       "name": "photo-gallery-worker-gradient",
-      "description": "Gradient generation worker for photo-gallery",
+      "description": "The photo-gallery-worker-gradient service.",
       "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-gradient",
       "envSecretName": "COOLIFY_ENV_WORKER_GRADIENT",
-      "domains": "http://gradient-worker.cyborgdev.cloud",
       "portsExposes": "9876",
       "healthCheck": {
-        "path": "/health",
+        "path": "/",
         "port": "9876",
-        "protocol": "http"
+        "timeout": 5,
+        "startPeriod": 20,
+        "interval": 10
       }
     },
     {
       "name": "photo-gallery-worker-notifications",
-      "description": "Gallery expiration notification worker for photo-gallery",
+      "description": "The photo-gallery-worker-notifications service.",
       "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-notifications",
       "envSecretName": "COOLIFY_ENV_WORKER_NOTIFICATIONS"
     }
