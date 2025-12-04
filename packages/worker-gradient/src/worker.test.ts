@@ -94,11 +94,34 @@ function createMockRedisClientInner() {
           .map(([value]) => value),
       ),
     ),
-    multi: vi.fn(() => ({
-      zRem: vi.fn().mockReturnThis(),
-      rPush: vi.fn().mockReturnThis(),
-      exec: vi.fn().mockResolvedValue([]),
-    })),
+    multi: vi.fn(() => {
+      const commands: (() => void)[] = [];
+      const multiChain = {
+        zRem: vi.fn((key: string, values: string | string[]) => {
+          const vals = Array.isArray(values) ? values : [values];
+          commands.push(() => {
+            const set = sortedSets.get(key);
+            if (set) {
+              vals.forEach((v) => set.delete(v));
+            }
+          });
+          return multiChain;
+        }),
+        rPush: vi.fn((key: string, values: string | string[]) => {
+          const vals = Array.isArray(values) ? values : [values];
+          commands.push(() => {
+            if (!lists.has(key)) lists.set(key, []);
+            lists.get(key)!.push(...vals);
+          });
+          return multiChain;
+        }),
+        exec: vi.fn(async () => {
+          commands.forEach((cmd) => cmd());
+          return Promise.resolve([]);
+        }),
+      };
+      return multiChain;
+    }),
     _store: store,
     _lists: lists,
     _sortedSets: sortedSets,
@@ -251,6 +274,62 @@ describe("GradientWorker", () => {
       mockRedis.zCard.mockResolvedValue(3);
       const count = await worker.getDelayedCount();
       expect(count).toBe(3);
+    });
+  });
+
+  describe("delayed jobs", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("should move ready delayed jobs back to the main queue", async () => {
+      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+      // Prevent the listen loop from running and interfering
+      vi.spyOn(worker, "listenForJobs").mockResolvedValue();
+
+      // Add some jobs to the delayed queue
+      const now = Date.now();
+      const job1 = { jobId: "job1", attempts: 1, createdAt: now };
+      const job2 = { jobId: "job2", attempts: 1, createdAt: now };
+      const futureJob = { jobId: "job3", attempts: 1, createdAt: now };
+
+      // Add jobs that are ready now
+      await mockRedis.zAdd("gradient:delayed", { score: now - 1000, value: JSON.stringify(job1) });
+      await mockRedis.zAdd("gradient:delayed", { score: now, value: JSON.stringify(job2) });
+      // Add a job that is not ready yet
+      await mockRedis.zAdd("gradient:delayed", {
+        score: now + 60000,
+        value: JSON.stringify(futureJob),
+      });
+
+      worker.start();
+
+      // Advance timers to trigger the setInterval for processing delayed jobs
+      await vi.advanceTimersByTimeAsync(5000);
+
+      // Verify that zRem and rPush were called inside a multi block
+      expect(mockRedis.multi).toHaveBeenCalled();
+      const multi = mockRedis.multi.mock.results[0].value;
+      expect(multi.zRem).toHaveBeenCalledWith("gradient:delayed", [
+        JSON.stringify(job1),
+        JSON.stringify(job2),
+      ]);
+      expect(multi.rPush).toHaveBeenCalledWith("gradient:queue", [
+        JSON.stringify(job1),
+        JSON.stringify(job2),
+      ]);
+      expect(multi.exec).toHaveBeenCalled();
+
+      // Verify the state of the queues
+      expect(await mockRedis.zCard("gradient:delayed")).toBe(1);
+      expect(await mockRedis.lLen("gradient:queue")).toBe(2);
+      expect(mockLogger.debug).toHaveBeenCalledWith({ count: 2 }, "Moved delayed jobs to queue");
+
+      await worker.stop();
     });
   });
 });
