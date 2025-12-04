@@ -105,8 +105,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:${{ steps.sha.outputs.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}:cache,mode=max
           build-args: |
             ${{ matrix.service == 'client' && format('VITE_API_URL={0}', secrets.VITE_API_URL) || '' }}
             ${{ matrix.service == 'client' && format('VITE_LOG_LEVEL={0}', secrets.VITE_LOG_LEVEL) || '' }}
