@@ -139,7 +139,7 @@ jobs:
           COOLIFY_ENV_WORKER_GRADIENT: ${{ secrets.COOLIFY_ENV_WORKER_GRADIENT }}
           COOLIFY_ENV_WORKER_NOTIFICATIONS: ${{ secrets.COOLIFY_ENV_WORKER_NOTIFICATIONS }}
           MANIFEST_PATH: ./coolify.manifest.json
-          LOG_LEVEL: info
+          LOG_LEVEL: debug
         run: |
           if [ -z "$COOLIFY_ENDPOINT_URL" ] || [ -z "$COOLIFY_TOKEN" ]; then
             echo "Warning: COOLIFY_ENDPOINT_URL or COOLIFY_TOKEN not set, skipping deployment"
