@@ -240,6 +240,33 @@ describe("GradientWorker", () => {
     });
   });
 
+  describe("concurrency counting", () => {
+    it("should increment and decrement active job count correctly", async () => {
+      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+      const jobPayload = JSON.stringify({ jobId: "job1" });
+
+      let releaseJob: () => void;
+      const jobPromise = new Promise<void>((resolve) => {
+        releaseJob = resolve;
+      });
+
+      vi.spyOn(worker, "processJob").mockImplementation(() => jobPromise);
+
+      // Simulate starting a job
+      const processingPromise = worker.processJobWithConcurrency(jobPayload);
+
+      // Active jobs should be 1 immediately after starting
+      expect(worker.getStats().activeJobs).toBe(1);
+
+      // Finish the job
+      releaseJob!();
+      await processingPromise;
+
+      // Active jobs should be 0 after completion
+      expect(worker.getStats().activeJobs).toBe(0);
+    });
+  });
+
   describe("getStats", () => {
     it("should return initial stats", () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
