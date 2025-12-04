@@ -1,25 +1,13 @@
-import type { RedisClientType } from "redis";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Logger } from "pino";
+import type { RedisClientType } from "redis";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createBucketService } from "./bucket.js";
 import type { Env } from "./env.js";
 import { GradientWorker } from "./worker.js";
 
-// Mock the bucket service - now mocking the createBucketService function
-vi.mock("./bucket.js", () => ({
-  createBucketService: vi.fn(() => ({
-    getObject: vi.fn().mockResolvedValue({
-      data: Buffer.from("fake-image-data"),
-      contentType: "image/jpeg",
-    }),
-    ensureBucket: vi.fn().mockResolvedValue(undefined),
-  })),
-  BucketService: class MockBucketService {
-    getObject = vi.fn().mockResolvedValue({
-      data: Buffer.from("fake-image-data"),
-      contentType: "image/jpeg",
-    });
-  },
-}));
+// Mock the bucket service
+vi.mock("./bucket.js");
 
 // Mock utils gradient generation
 vi.mock("utils/server", () => ({
@@ -49,9 +37,18 @@ function createMockRedisClientInner() {
   const lists = new Map<string, string[]>();
   const sortedSets = new Map<string, Map<string, number>>();
 
+  const lMove = vi.fn((src: string, dest: string, srcDir: string, _destDir: string) => {
+    const srcList = lists.get(src) || [];
+    if (srcList.length === 0) return Promise.resolve(null);
+    const item = srcDir === "LEFT" ? srcList.shift()! : srcList.pop()!;
+    if (!lists.has(dest)) lists.set(dest, []);
+    lists.get(dest)!.push(item);
+    return Promise.resolve(item);
+  });
+
   return {
     get: vi.fn((key: string) => Promise.resolve(store.get(key) || null)),
-    set: vi.fn((key: string, value: string) => {
+    set: vi.fn((key: string, value: string, _opts?: any) => {
       store.set(key, value);
       return Promise.resolve("OK");
     }),
@@ -74,14 +71,8 @@ function createMockRedisClientInner() {
       }
       return Promise.resolve(1);
     }),
-    lMove: vi.fn((src: string, dest: string, srcDir: string, _destDir: string) => {
-      const srcList = lists.get(src) || [];
-      if (srcList.length === 0) return Promise.resolve(null);
-      const item = srcDir === "LEFT" ? srcList.shift()! : srcList.pop()!;
-      if (!lists.has(dest)) lists.set(dest, []);
-      lists.get(dest)!.push(item);
-      return Promise.resolve(item);
-    }),
+    lMove,
+    blMove: lMove, // Add blMove as an alias for lMove for the mock
     zAdd: vi.fn((key: string, item: { score: number; value: string }) => {
       if (!sortedSets.has(key)) sortedSets.set(key, new Map());
       sortedSets.get(key)!.set(item.value, item.score);
@@ -103,6 +94,11 @@ function createMockRedisClientInner() {
           .map(([value]) => value),
       ),
     ),
+    multi: vi.fn(() => ({
+      zRem: vi.fn().mockReturnThis(),
+      rPush: vi.fn().mockReturnThis(),
+      exec: vi.fn().mockResolvedValue([]),
+    })),
     _store: store,
     _lists: lists,
     _sortedSets: sortedSets,
@@ -151,6 +147,13 @@ describe("GradientWorker", () => {
     mockRedis = createMockRedisClient();
     mockLogger = createMockLogger();
     mockEnv = createMockEnv();
+    vi.mocked(createBucketService).mockReturnValue({
+      getObject: vi.fn().mockResolvedValue({
+        data: Buffer.from("fake-image-data"),
+        contentType: "image/jpeg",
+      }),
+      ensureBucket: vi.fn().mockResolvedValue(undefined),
+    } as any);
   });
 
   afterEach(() => {
@@ -166,65 +169,17 @@ describe("GradientWorker", () => {
     });
   });
 
-  describe("enqueueJob", () => {
-    it("should enqueue a valid job", async () => {
-      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
-
-      const jobId = await worker.enqueueJob({
-        guildId: "guild123",
-        galleryName: "test-gallery",
-        storageKey: "test/image.jpg",
-        itemId: "test-image-jpg",
-      });
-
-      expect(jobId).toBeTruthy();
-      expect(jobId).toContain("gradient-");
-    });
-
-    it("should return null for invalid job data", async () => {
-      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
-
-      const jobId = await worker.enqueueJob({
-        guildId: "", // Invalid: empty guildId
-        galleryName: "test-gallery",
-        storageKey: "test/image.jpg",
-        itemId: "test-image-jpg",
-      });
-
-      expect(jobId).toBeNull();
-    });
-
-    it("should return existing job ID if job already exists", async () => {
-      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
-
-      // First enqueue
-      const jobId1 = await worker.enqueueJob({
-        guildId: "guild123",
-        galleryName: "test-gallery",
-        storageKey: "test/image.jpg",
-        itemId: "test-image-jpg",
-      });
-
-      // Second enqueue with same data
-      const jobId2 = await worker.enqueueJob({
-        guildId: "guild123",
-        galleryName: "test-gallery",
-        storageKey: "test/image.jpg",
-        itemId: "test-image-jpg",
-      });
-
-      expect(jobId1).toBe(jobId2);
-    });
-  });
-
   describe("start/stop", () => {
     it("should start and stop the worker", async () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+      // Prevent the actual loop from running in this test
+      const listenSpy = vi.spyOn(worker, "listenForJobs").mockResolvedValue();
 
       expect(worker.isRunning()).toBe(false);
 
       worker.start();
       expect(worker.isRunning()).toBe(true);
+      expect(listenSpy).toHaveBeenCalled();
 
       await worker.stop();
       expect(worker.isRunning()).toBe(false);
@@ -232,6 +187,8 @@ describe("GradientWorker", () => {
 
     it("should not start if already running", () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+      // Prevent the actual loop from running in this test
+      vi.spyOn(worker, "listenForJobs").mockResolvedValue();
 
       worker.start();
       worker.start(); // Should warn but not error
@@ -257,23 +214,23 @@ describe("GradientWorker", () => {
   describe("queue operations", () => {
     it("should return queue length", async () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
-
+      mockRedis.lLen.mockResolvedValue(5);
       const length = await worker.getQueueLength();
-      expect(typeof length).toBe("number");
+      expect(length).toBe(5);
     });
 
     it("should return processing count", async () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
-
+      mockRedis.lLen.mockResolvedValue(2);
       const count = await worker.getProcessingCount();
-      expect(typeof count).toBe("number");
+      expect(count).toBe(2);
     });
 
     it("should return delayed count", async () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
-
+      mockRedis.zCard.mockResolvedValue(3);
       const count = await worker.getDelayedCount();
-      expect(typeof count).toBe("number");
+      expect(count).toBe(3);
     });
   });
 });
@@ -287,48 +244,129 @@ describe("processJob", () => {
     mockRedis = createMockRedisClient();
     mockLogger = createMockLogger();
     mockEnv = createMockEnv();
+    vi.mocked(createBucketService).mockReturnValue({
+      getObject: vi.fn().mockResolvedValue({
+        data: Buffer.from("fake-image-data"),
+        contentType: "image/jpeg",
+      }),
+      ensureBucket: vi.fn().mockResolvedValue(undefined),
+    } as any);
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it("should skip processing when job data is not found", async () => {
+  it("should discard a job with invalid JSON payload", async () => {
     const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+    const invalidPayload = "not-a-json";
 
-    await worker.processJob("non-existent-job");
+    await worker.processJob(invalidPayload);
 
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      { jobId: "non-existent-job" },
-      "Job not found, skipping",
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: invalidPayload }),
+      "Failed to parse job data, discarding",
     );
   });
 
   it("should process a valid job successfully", async () => {
     const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
 
-    // Enqueue a job first
-    const jobId = await worker.enqueueJob({
+    const jobPayload = {
       guildId: "guild123",
       galleryName: "test-gallery",
       storageKey: "test/image.jpg",
       itemId: "test-image-jpg",
-    });
+      jobId: "job-123",
+      attempts: 0,
+      createdAt: Date.now(),
+    };
 
-    expect(jobId).toBeTruthy();
-
-    // Process the job
-    await worker.processJob(jobId!);
+    await worker.processJob(JSON.stringify(jobPayload));
 
     // Verify job completed
     expect(mockLogger.info).toHaveBeenCalledWith(
       expect.objectContaining({
-        jobId,
+        jobId: "job-123",
         storageKey: "test/image.jpg",
-        primary: "#FF0000",
-        secondary: "#00FF00",
       }),
       "Job completed successfully",
     );
+    // Verify gradient data is stored in Redis (called via GradientMetaService.markCompleted)
+    expect(mockRedis.set).toHaveBeenCalled();
+  });
+
+  it("should move a failed job to the delayed queue for retry", async () => {
+    // Force getObject to fail for this test
+    vi.mocked(createBucketService).mockReturnValue({
+      getObject: vi.fn().mockRejectedValue(new Error("S3 download failed")),
+      ensureBucket: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+
+    const jobPayload = {
+      guildId: "guild123",
+      galleryName: "test-gallery",
+      storageKey: "test/image.jpg",
+      itemId: "test-image-jpg",
+      jobId: "job-123",
+      attempts: 0,
+      createdAt: Date.now(),
+    };
+
+    await worker.processJob(JSON.stringify(jobPayload));
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-123",
+        storageKey: "test/image.jpg",
+        attempt: 1,
+      }),
+      "Job failed",
+    );
+
+    // Verify it was added to the delayed queue
+    expect(mockRedis.zAdd).toHaveBeenCalledWith(
+      "gradient:delayed",
+      expect.objectContaining({
+        value: expect.any(String),
+        score: expect.any(Number),
+      }),
+    );
+    const delayedJobPayload = JSON.parse(mockRedis.zAdd.mock.calls[0][1].value);
+    expect(delayedJobPayload.attempts).toBe(1); // Attempt count should be incremented
+  });
+
+  it("should discard a job that has exceeded max retries", async () => {
+    // Force getObject to fail for this test
+    vi.mocked(createBucketService).mockReturnValue({
+      getObject: vi.fn().mockRejectedValue(new Error("S3 download failed")),
+      ensureBucket: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+
+    const jobPayload = {
+      guildId: "guild123",
+      galleryName: "test-gallery",
+      storageKey: "test/image.jpg",
+      itemId: "test-image-jpg",
+      jobId: "job-123",
+      attempts: mockEnv.GRADIENT_JOB_MAX_RETRIES, // Job is already at max retries
+      createdAt: Date.now(),
+    };
+
+    await worker.processJob(JSON.stringify(jobPayload));
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: "job-123",
+        attempt: mockEnv.GRADIENT_JOB_MAX_RETRIES + 1,
+      }),
+      "Job failed",
+    );
+
+    // Verify it was NOT added to the delayed queue again
+    expect(mockRedis.zAdd).not.toHaveBeenCalled();
   });
 });
