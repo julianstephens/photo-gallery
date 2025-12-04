@@ -30,7 +30,7 @@
     {
       "name": "photo-gallery-worker-gradient",
       "description": "The photo-gallery-worker-gradient service.",
-      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-gradient",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-gradient-worker",
       "envSecretName": "COOLIFY_ENV_WORKER_GRADIENT",
       "portsExposes": "9876",
       "healthCheck": {
@@ -44,7 +44,7 @@
     {
       "name": "photo-gallery-worker-notifications",
       "description": "The photo-gallery-worker-notifications service.",
-      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-worker-notifications",
+      "dockerImageName": "ghcr.io/julianstephens/photo-gallery-notifications-worker",
       "envSecretName": "COOLIFY_ENV_WORKER_NOTIFICATIONS"
     }
   ]
