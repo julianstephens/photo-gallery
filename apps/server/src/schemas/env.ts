@@ -2,6 +2,16 @@ import dotenv from "dotenv";
 import { z } from "zod";
 dotenv.config();
 
+if (!process.env.REDIS_URL) {
+  const redisUser = process.env.REDIS_USER || "";
+  const redisPassword = process.env.REDIS_PASSWORD || "";
+  const redisHost = process.env.REDIS_HOST || "localhost";
+  const redisPort = process.env.REDIS_PORT || "6379";
+  const redisDb = process.env.REDIS_DB || "1";
+
+  process.env.REDIS_URL = `redis://${redisUser}:${redisPassword}@${redisHost}:${redisPort}/${redisDb}`;
+}
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
