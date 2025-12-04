@@ -41,4 +41,4 @@ COPY --from=build /prod/worker-notifications ./
 RUN adduser -D app && chown -R app /app
 USER app
 
-CMD ["node", "dist/index.js"]
+CMD ["sleep", "infinity"]
