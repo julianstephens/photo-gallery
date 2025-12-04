@@ -2,7 +2,7 @@ node_modules
 dist
 build
 *.env*
-!!.env.example
+!.env.example
 tmp
 coverage
 .DS_Store
