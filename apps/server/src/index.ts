@@ -1,31 +1,17 @@
-// CRITICAL: Set REDIS_URL from individual env vars BEFORE any imports.
-// This must happen before utils/redis is imported because that module
-// creates the Redis client at import time using process.env.REDIS_URL.
-
 // Check if this is the main entry point
 const isMainModule = process.argv[1] === new URL(import.meta.url).pathname;
 
-if (isMainModule) {
-  // Read from environment (set by Docker/runtime)
-  const redisUser = process.env.REDIS_USER || "";
-  const redisPassword = process.env.REDIS_PASSWORD || "";
-  const redisHost = process.env.REDIS_HOST || "localhost";
-  const redisPort = process.env.REDIS_PORT || "6379";
-  const redisDb = process.env.REDIS_DB || "1";
-
-  // Construct REDIS_URL from individual env variables
-  // This overrides any default value and is used when utils/redis is imported below
-  process.env.REDIS_URL = `redis://${redisUser}:${redisPassword}@${redisHost}:${redisPort}/${redisDb}`;
-}
-
-import { disconnectRedis, initializeRedis } from "utils/redis";
-import { appLogger } from "./middleware/logger.ts";
-import env from "./schemas/env.ts";
-import { createApp, printRegisteredRoutes } from "./server.ts";
-
-// Start server if run directly
+// Dynamic import to ensure all env setup happens before Redis client is created
 if (isMainModule) {
   (async () => {
+    // First: Import env.ts to run dotenv.config() and set REDIS_URL
+    const env = await import("./schemas/env.ts").then((m) => m.default);
+
+    // Then: Dynamically import modules that depend on REDIS_URL
+    const { disconnectRedis, initializeRedis } = await import("utils/redis");
+    const { appLogger } = await import("./middleware/logger.ts");
+    const { createApp, printRegisteredRoutes } = await import("./server.ts");
+
     const app = createApp();
 
     // Log startup configuration

@@ -3,13 +3,28 @@ import { z } from "zod";
 dotenv.config();
 
 if (!process.env.REDIS_URL) {
-  const redisUser = process.env.REDIS_USER || "";
-  const redisPassword = process.env.REDIS_PASSWORD || "";
-  const redisHost = process.env.REDIS_HOST || "localhost";
+  const redisUser = process.env.REDIS_USER;
+  const redisPassword = process.env.REDIS_PASSWORD;
+  const redisHost = process.env.REDIS_HOST;
   const redisPort = process.env.REDIS_PORT || "6379";
   const redisDb = process.env.REDIS_DB || "1";
 
-  process.env.REDIS_URL = `redis://${redisUser}:${redisPassword}@${redisHost}:${redisPort}/${redisDb}`;
+  console.log("[env.ts] REDIS_URL not set, attempting to construct from env vars:", {
+    host: redisHost || "NOT SET",
+    port: redisPort,
+    user: redisUser || "NOT SET",
+    db: redisDb,
+  });
+
+  // Only construct REDIS_URL if we have at least the host and credentials
+  if (redisHost && redisUser && redisPassword) {
+    process.env.REDIS_URL = `redis://${redisUser}:${redisPassword}@${redisHost}:${redisPort}/${redisDb}`;
+    console.log("[env.ts] REDIS_URL constructed successfully");
+  } else {
+    console.warn("[env.ts] Cannot construct REDIS_URL: missing required variables");
+  }
+} else {
+  console.log("[env.ts] REDIS_URL already set");
 }
 
 export const envSchema = z.object({
