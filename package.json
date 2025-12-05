@@ -19,7 +19,7 @@
     "test:integration": "pnpm --recursive test:integration",
     "prepare": "pnpm husky",
     "lint:fix": "eslint . --fix",
-    "validate": "pnpm format && pnpm lint:fix && pnpm test",
+    "validate": "pnpm format && pnpm lint:fix && pnpm build && pnpm test",
     "release": "python ./scripts/release.py"
   },
   "keywords": [],
