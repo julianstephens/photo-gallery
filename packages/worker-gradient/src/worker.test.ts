@@ -321,7 +321,7 @@ describe("GradientWorker", () => {
   });
 
   describe("concurrency counting", () => {
-    it("should decrement active job count on completion even when called directly", async () => {
+    it("should not go negative when processJobWithConcurrency is called directly", async () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
       const jobPayload = JSON.stringify({ jobId: "job1" });
 
@@ -334,9 +334,7 @@ describe("GradientWorker", () => {
 
       // Note: In real usage, activeJobCount is incremented by listenForJobs
       // before calling processJobWithConcurrency to prevent race conditions.
-      // processJobWithConcurrency is responsible only for decrementing.
-      // When called directly (without prior increment), the count goes negative,
-      // but this is acceptable since direct calls bypass the normal flow.
+      // processJobWithConcurrency guards against going negative when called directly.
 
       // Active jobs starts at 0
       expect(worker.getStats().activeJobs).toBe(0);
@@ -348,9 +346,8 @@ describe("GradientWorker", () => {
       releaseJob!();
       await processingPromise;
 
-      // Active jobs should be decremented (will be -1 when called directly)
-      // This is fine because processJobWithConcurrency assumes caller incremented first
-      expect(worker.getStats().activeJobs).toBe(-1);
+      // Active jobs should stay at 0 (guard prevents going negative)
+      expect(worker.getStats().activeJobs).toBe(0);
     });
 
     it("should track active jobs correctly through listenForJobs flow", async () => {

@@ -314,7 +314,10 @@ export class GradientWorker {
     } finally {
       // We move the job out of the processing list here, after it's done.
       await this.#redis.lRem(PROCESSING_KEY, 1, jobPayload);
-      this.#activeJobCount--;
+      // Guard against going negative if called directly without prior increment
+      if (this.#activeJobCount > 0) {
+        this.#activeJobCount--;
+      }
       this.#stats.activeJobs = this.#activeJobCount;
     }
   }
