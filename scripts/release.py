@@ -174,7 +174,7 @@ def main():
     parser.add_argument(
         "--skip-gen",
         action="store_true",
-        help="Do not generate changelog entry. Assumes the latest entry is correct.",
+        help="Do not generate changelog entry. Uses the existing entry for the specified version from CHANGELOG.md.",
     )
     args = parser.parse_args()
     version = args.version
