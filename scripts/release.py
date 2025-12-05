@@ -180,8 +180,8 @@ def main():
     version = args.version
     dry_run = args.dry_run
     no_tag = args.no_tag
-    no_push = args.no_push
-    no_release = args.no_release
+    no_push = args.no_push or no_tag  # --no-tag implies --no-push
+    no_release = args.no_release or no_push  # --no-push implies --no-release
     skip_gen = args.skip_gen
     repo = Repo(REPO_ROOT)
     changelog_path = REPO_ROOT / "CHANGELOG.md"
@@ -203,12 +203,12 @@ def main():
         insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
         print(f"Changelog updated at {changelog_path}")
 
+    update_package_version(version.lstrip("v"))
+    print(f"Updated package.json to version {version.lstrip('v')}")
+
     if no_tag:
         print("No-tag mode - not creating tag, pushing, or releasing.")
         return
-
-    update_package_version(version.lstrip("v"))
-    print(f"Updated package.json to version {version.lstrip('v')}")
 
     if no_push:
         print("No-push mode - not pushing to remote.")

@@ -211,6 +211,7 @@ export class GradientWorker {
     }
 
     this.#running = true;
+    this.#logger.info({ concurrency: this.#env.GRADIENT_WORKER_CONCURRENCY }, "Worker started");
     // Start the two main loops, but don't wait for them here.
     // listenForJobs will only exit when #running is false.
     this.#listenPromise = this.listenForJobs();
