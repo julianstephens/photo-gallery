@@ -288,12 +288,11 @@ export class GradientWorker {
     this.#activeJobCount++;
     this.#stats.activeJobs = this.#activeJobCount;
     try {
-      // We move the job out of the processing list here, after it's done.
       await this.processJob(jobPayload);
     } catch (error) {
       this.#logger.error({ error, jobPayload }, "Unhandled error in processJobWithConcurrency");
     } finally {
-      // Remove from processing list once done
+      // We move the job out of the processing list here, after it's done.
       await this.#redis.lRem(PROCESSING_KEY, 1, jobPayload);
       this.#activeJobCount--;
       this.#stats.activeJobs = this.#activeJobCount;
