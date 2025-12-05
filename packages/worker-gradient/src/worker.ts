@@ -72,9 +72,12 @@ export class GradientWorker {
       if (!validated.success) {
         throw new Error(`Invalid job payload: ${validated.error.message}`);
       }
+      if (!parsedPayload.jobId) {
+        throw new Error("Job payload missing jobId");
+      }
       jobData = {
         ...validated.data,
-        jobId: parsedPayload.jobId || "unknown-job-id",
+        jobId: parsedPayload.jobId,
         attempts: parsedPayload.attempts || 0,
         createdAt: parsedPayload.createdAt || Date.now(),
       };
