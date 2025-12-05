@@ -321,7 +321,7 @@ describe("GradientWorker", () => {
   });
 
   describe("concurrency counting", () => {
-    it("should increment and decrement active job count correctly", async () => {
+    it("should decrement active job count on completion even when called directly", async () => {
       const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
       const jobPayload = JSON.stringify({ jobId: "job1" });
 
@@ -332,18 +332,86 @@ describe("GradientWorker", () => {
 
       vi.spyOn(worker, "processJob").mockImplementation(() => jobPromise);
 
-      // Simulate starting a job
-      const processingPromise = worker.processJobWithConcurrency(jobPayload);
+      // Note: In real usage, activeJobCount is incremented by listenForJobs
+      // before calling processJobWithConcurrency to prevent race conditions.
+      // processJobWithConcurrency is responsible only for decrementing.
+      // When called directly (without prior increment), the count goes negative,
+      // but this is acceptable since direct calls bypass the normal flow.
 
-      // Active jobs should be 1 immediately after starting
-      expect(worker.getStats().activeJobs).toBe(1);
+      // Active jobs starts at 0
+      expect(worker.getStats().activeJobs).toBe(0);
+
+      // Start processing
+      const processingPromise = worker.processJobWithConcurrency(jobPayload);
 
       // Finish the job
       releaseJob!();
       await processingPromise;
 
-      // Active jobs should be 0 after completion
+      // Active jobs should be decremented (will be -1 when called directly)
+      // This is fine because processJobWithConcurrency assumes caller incremented first
+      expect(worker.getStats().activeJobs).toBe(-1);
+    });
+
+    it("should track active jobs correctly through listenForJobs flow", async () => {
+      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+      let jobCompleted = false;
+
+      // Create a job payload
+      const jobPayload = JSON.stringify({
+        guildId: "guild123",
+        galleryName: "test-gallery",
+        storageKey: "test/image.jpg",
+        itemId: "test-image-jpg",
+        jobId: "job-123",
+        attempts: 0,
+        createdAt: Date.now(),
+      });
+
+      // Enqueue the job in the mock queue
+      mockRedis._lists.set("gradient:queue", [jobPayload]);
+
+      // Mock blMove to return the job once, then return null
+      let jobReturned = false;
+      mockRedis.blMove.mockImplementation(
+        async (src: string, _dest: string, _srcDir: string, _destDir: string) => {
+          if (!jobReturned && src === "gradient:queue") {
+            jobReturned = true;
+            // Move to processing list
+            mockRedis._lists.set("gradient:processing", [jobPayload]);
+            mockRedis._lists.set("gradient:queue", []);
+            return jobPayload;
+          }
+          // Simulate timeout - return null after a delay
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return null;
+        },
+      );
+
+      // Mock processJob to take some time
+      vi.spyOn(worker, "processJob").mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        jobCompleted = true;
+      });
+
+      // Start the worker
+      worker.start();
+
+      // Wait briefly for the job to be picked up and start processing
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Verify job is being processed (activeJobs should be 1)
+      // This verifies that listenForJobs increments the counter before async processing
+      expect(worker.getStats().activeJobs).toBe(1);
+
+      // Wait for job to complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // After job completes, activeJobs should be back to 0
+      expect(jobCompleted).toBe(true);
       expect(worker.getStats().activeJobs).toBe(0);
+
+      await worker.stop();
     });
   });
 
