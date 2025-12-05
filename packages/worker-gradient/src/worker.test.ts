@@ -238,6 +238,85 @@ describe("GradientWorker", () => {
 
       expect(mockLogger.warn).toHaveBeenCalledWith("Worker already running");
     });
+
+    it("should wait for in-flight jobs to complete before stop returns", async () => {
+      const worker = new GradientWorker(mockRedis.asRedis(), mockLogger, mockEnv);
+      let jobCompleted = false;
+      let stopReturned = false;
+
+      // Create a job payload
+      const jobPayload = JSON.stringify({
+        guildId: "guild123",
+        galleryName: "test-gallery",
+        storageKey: "test/image.jpg",
+        itemId: "test-image-jpg",
+        jobId: "job-123",
+        attempts: 0,
+        createdAt: Date.now(),
+      });
+
+      // Enqueue the job in the mock queue
+      mockRedis._lists.set("gradient:queue", [jobPayload]);
+
+      // Mock blMove to return the job once, then return null
+      let jobReturned = false;
+      mockRedis.blMove.mockImplementation(
+        async (src: string, _dest: string, _srcDir: string, _destDir: string) => {
+          if (!jobReturned && src === "gradient:queue") {
+            jobReturned = true;
+            // Move to processing list
+            mockRedis._lists.set("gradient:processing", [jobPayload]);
+            mockRedis._lists.set("gradient:queue", []);
+            return jobPayload;
+          }
+          // Simulate timeout - return null after a delay
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return null;
+        },
+      );
+
+      // Mock processJob to take some time
+      vi.spyOn(worker, "processJob").mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        jobCompleted = true;
+      });
+
+      // Start the worker
+      worker.start();
+
+      // Wait briefly for the job to be picked up and start processing
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      // Verify job is being processed (activeJobs should be 1)
+      expect(worker.getStats().activeJobs).toBe(1);
+
+      // Verify the job is in the processing list
+      expect(mockRedis._lists.get("gradient:processing")).toContain(jobPayload);
+
+      // Call stop while job is still processing
+      const stopPromise = worker.stop().then(() => {
+        stopReturned = true;
+      });
+
+      // Verify stop hasn't returned yet while job is processing
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(jobCompleted).toBe(false);
+      expect(stopReturned).toBe(false);
+
+      // Wait for stop to complete
+      await stopPromise;
+
+      // Verify job completed before stop returned
+      expect(jobCompleted).toBe(true);
+      expect(stopReturned).toBe(true);
+
+      // Verify lRem was called to remove job from processing list
+      expect(mockRedis.lRem).toHaveBeenCalledWith("gradient:processing", 1, jobPayload);
+
+      // Verify worker is stopped
+      expect(worker.isRunning()).toBe(false);
+      expect(mockLogger.info).toHaveBeenCalledWith("Worker stopped gracefully.");
+    });
   });
 
   describe("concurrency counting", () => {
