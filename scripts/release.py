@@ -102,15 +102,18 @@ def extract_changelog_from_text(output_text: str) -> str:
 
 
 def get_changelog_entry(version: str, changelog_path: Path) -> str:
-  with changelog_path.open("r") as f:
-      changelog_content = f.read()
-  pattern = rf"##\s*{re.escape(version)}\s*(.*?)\s*(##\s*v\d+\.\d+\.\d+|$)"
-  match = re.search(pattern, changelog_content, re.DOTALL)
-  if match:
-      entry = match.group(0).strip()
-      return entry
-  else:
-      raise ValueError(f"Changelog entry for version {version} not found in {changelog_path}")
+    with changelog_path.open("r") as f:
+        changelog_content = f.read()
+    pattern = rf"##\s*{re.escape(version)}\s*(.*?)\s*(##\s*v\d+\.\d+\.\d+|$)"
+    match = re.search(pattern, changelog_content, re.DOTALL)
+    if match:
+        entry = match.group(0).strip()
+        return entry
+    else:
+        raise ValueError(
+            f"Changelog entry for version {version} not found in {changelog_path}"
+        )
+
 
 def generate_changelog_entry(version: str, repo: Repo) -> str:
     prompt = f"""
@@ -150,6 +153,7 @@ Your output should be only the markdown, starting with `## {version}`.
     response = result.stdout.strip()
     return extract_changelog_from_text(response)
 
+
 def main():
     parser = argparse.ArgumentParser("Release script")
     parser.add_argument("--version", type=str, required=True, help="Version to release")
@@ -168,7 +172,9 @@ def main():
         "--no-release", action="store_true", help="Do not create a GitHub release"
     )
     parser.add_argument(
-        "--skip-gen", action="store_true", help="Do not generate changelog entry. Assumes the latest entry is correct."
+        "--skip-gen",
+        action="store_true",
+        help="Do not generate changelog entry. Assumes the latest entry is correct.",
     )
     args = parser.parse_args()
     version = args.version
@@ -183,9 +189,9 @@ def main():
     print(f"Releasing version: {version}")
 
     if skip_gen:
-      changelog_entry = get_changelog_entry(version, changelog_path)
+        changelog_entry = get_changelog_entry(version, changelog_path)
     else:
-      changelog_entry = generate_changelog_entry(version, repo)
+        changelog_entry = generate_changelog_entry(version, repo)
 
     if dry_run:
         print("Dry run mode - not making any changes.")
@@ -194,8 +200,8 @@ def main():
         return
 
     if not skip_gen:
-      insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
-      print(f"Changelog updated at {changelog_path}")
+        insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
+        print(f"Changelog updated at {changelog_path}")
 
     if no_tag:
         print("No-tag mode - not creating tag, pushing, or releasing.")
