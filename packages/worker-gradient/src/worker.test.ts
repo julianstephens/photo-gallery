@@ -299,7 +299,8 @@ describe("GradientWorker", () => {
       });
 
       // Verify stop hasn't returned yet while job is processing
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Use a longer delay to ensure reliability across test environments
+      await new Promise((resolve) => setTimeout(resolve, 40));
       expect(jobCompleted).toBe(false);
       expect(stopReturned).toBe(false);
 

@@ -280,11 +280,11 @@ export class GradientWorker {
         if (jobPayload) {
           // Process the job without awaiting it to allow for concurrency
           // Track the promise so we can wait for it during shutdown
-          const jobPromise = this.processJobWithConcurrency(jobPayload);
-          this.#inFlightJobs.add(jobPromise);
-          jobPromise.finally(() => {
+          // Create wrapped promise with cleanup to avoid race conditions
+          const jobPromise = this.processJobWithConcurrency(jobPayload).finally(() => {
             this.#inFlightJobs.delete(jobPromise);
           });
+          this.#inFlightJobs.add(jobPromise);
         }
         // If jobPayload is null, the timeout was reached, and the loop will continue
       } catch (error) {
