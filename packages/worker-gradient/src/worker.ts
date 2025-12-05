@@ -40,6 +40,7 @@ export class GradientWorker {
   #running: boolean = false;
   #intervalId: ReturnType<typeof setInterval> | null = null;
   #listenPromise: Promise<void> | null = null;
+  #inFlightJobs: Set<Promise<void>> = new Set();
   #activeJobCount: number = 0;
   #stats: WorkerStats = {
     jobsProcessed: 0,
@@ -240,6 +241,15 @@ export class GradientWorker {
       await this.#listenPromise;
     }
 
+    // Wait for all in-flight jobs to complete
+    if (this.#inFlightJobs.size > 0) {
+      this.#logger.info(
+        { count: this.#inFlightJobs.size },
+        "Waiting for in-flight jobs to complete...",
+      );
+      await Promise.all(this.#inFlightJobs);
+    }
+
     this.#logger.info("Worker stopped gracefully.");
   }
 
@@ -269,7 +279,12 @@ export class GradientWorker {
 
         if (jobPayload) {
           // Process the job without awaiting it to allow for concurrency
-          this.processJobWithConcurrency(jobPayload);
+          // Track the promise so we can wait for it during shutdown
+          // Create wrapped promise with cleanup to avoid race conditions
+          const jobPromise = this.processJobWithConcurrency(jobPayload).finally(() => {
+            this.#inFlightJobs.delete(jobPromise);
+          });
+          this.#inFlightJobs.add(jobPromise);
         }
         // If jobPayload is null, the timeout was reached, and the loop will continue
       } catch (error) {
