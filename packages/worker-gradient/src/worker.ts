@@ -184,10 +184,11 @@ export class GradientWorker {
    * Move delayed jobs that are ready back to the main queue.
    */
   async #processDelayedJobs(): Promise<void> {
+    let readyJobs: string[] | undefined;
     try {
       const now = Date.now();
       // Get all jobs that are ready (score <= now)
-      const readyJobs = await this.#redis.zRangeByScore(DELAYED_KEY, 0, now);
+      readyJobs = await this.#redis.zRangeByScore(DELAYED_KEY, 0, now);
 
       if (readyJobs.length > 0) {
         // Atomically remove from sorted set and push to queue
@@ -199,7 +200,11 @@ export class GradientWorker {
         this.#logger.debug({ count: readyJobs.length }, "Moved delayed jobs to queue");
       }
     } catch (error) {
-      this.#logger.error({ error }, "Error processing delayed jobs");
+      this.#logger.error(
+        { error, readyJobsCount: readyJobs?.length },
+        "Error processing delayed jobs",
+      );
+      // Don't rethrow - this is called from setInterval and should not break the loop
     }
   }
 
