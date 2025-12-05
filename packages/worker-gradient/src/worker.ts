@@ -278,6 +278,11 @@ export class GradientWorker {
         );
 
         if (jobPayload) {
+          // Increment the active job count immediately to prevent race conditions
+          // where the loop checks the limit before the async job increments the counter
+          this.#activeJobCount++;
+          this.#stats.activeJobs = this.#activeJobCount;
+
           // Process the job without awaiting it to allow for concurrency
           // Track the promise so we can wait for it during shutdown
           // Create wrapped promise with cleanup to avoid race conditions
@@ -298,10 +303,10 @@ export class GradientWorker {
 
   /**
    * Wrapper to process a job and handle concurrency counting.
+   * Note: #activeJobCount is incremented by the caller before this method is called
+   * to prevent race conditions in the concurrency check.
    */
   async processJobWithConcurrency(jobPayload: string): Promise<void> {
-    this.#activeJobCount++;
-    this.#stats.activeJobs = this.#activeJobCount;
     try {
       await this.processJob(jobPayload);
     } catch (error) {
@@ -309,7 +314,10 @@ export class GradientWorker {
     } finally {
       // We move the job out of the processing list here, after it's done.
       await this.#redis.lRem(PROCESSING_KEY, 1, jobPayload);
-      this.#activeJobCount--;
+      // Guard against going negative if called directly without prior increment
+      if (this.#activeJobCount > 0) {
+        this.#activeJobCount--;
+      }
       this.#stats.activeJobs = this.#activeJobCount;
     }
   }
