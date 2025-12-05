@@ -311,7 +311,13 @@ export class GradientWorker {
     try {
       await this.processJob(jobPayload);
     } catch (error) {
-      this.#logger.error({ error, jobPayload }, "Unhandled error in processJobWithConcurrency");
+      let jobId = "unknown";
+      try {
+        jobId = JSON.parse(jobPayload)?.jobId || "unknown";
+      } catch {
+        // ignore parse errors, jobId stays "unknown"
+      }
+      this.#logger.error({ error, jobId }, "Unhandled error in processJobWithConcurrency");
     } finally {
       // We move the job out of the processing list here, after it's done.
       await this.#redis.lRem(PROCESSING_KEY, 1, jobPayload);
