@@ -263,8 +263,8 @@ export class GradientWorker {
   }
 
   /**
-   * Process jobs from the queue.
-   * This method is called by the listening loop and should not be called directly.
+   * Main listening loop that processes jobs from the queue.
+   * Started by the start() method and runs until the worker is stopped.
    */
   async listenForJobs(): Promise<void> {
     this.#logger.info("Worker is now listening for jobs on the queue...");
