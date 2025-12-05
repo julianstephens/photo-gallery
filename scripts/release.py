@@ -168,7 +168,7 @@ def main():
         "--no-release", action="store_true", help="Do not create a GitHub release"
     )
     parser.add_argument(
-        "--skip-gen", action="store_true", help="Do not generate changelog entry. Assumes the latest entry is correct."
+        "--skip-gen", action="store_true", help="Do not generate changelog entry. Uses the existing entry for the specified version from CHANGELOG.md."
     )
     args = parser.parse_args()
     version = args.version
