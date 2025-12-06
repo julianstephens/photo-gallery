@@ -96,6 +96,7 @@ requestRouter.get("/guilds/:guildId/requests", requiresGuildMembership, handlers
 // Note: Guild membership is validated in the handler via authorization layer after fetching
 // the request, since guildId is not in the route params for these request-scoped endpoints.
 requestRouter.post("/requests/:requestId/cancel", handlers.cancelRequest);
+requestRouter.get("/requests/:requestId/comments", handlers.getComments);
 requestRouter.post("/requests/:requestId/comments", handlers.addComment);
 
 /**********************
@@ -115,6 +116,7 @@ superAdminRequestRouter.get(
 // the request, since guildId is not in the route params for these request-scoped endpoints.
 superAdminRequestRouter.get("/requests/:requestId", handlers.getRequestById);
 superAdminRequestRouter.post("/requests/:requestId/status", handlers.changeRequestStatus);
+superAdminRequestRouter.get("/requests/:requestId/comments", handlers.getComments);
 superAdminRequestRouter.post("/requests/:requestId/comments", handlers.addComment);
 superAdminRequestRouter.delete("/requests/:requestId", handlers.deleteRequest);
 

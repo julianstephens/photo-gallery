@@ -75,6 +75,7 @@ const {
   listMyRequests,
   cancelRequest,
   addComment,
+  getComments,
   listGuildRequests,
   getRequestById,
   changeRequestStatus,
@@ -759,6 +760,172 @@ describe("request handlers", () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: "Request req123 does not exist" });
+    });
+  });
+
+  describe("getComments", () => {
+    const baseRequest = {
+      id: "req123",
+      guildId: "guild123",
+      userId: "user123",
+      title: "Test",
+      description: "Desc",
+      status: "open" as const,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    const mockComments = [
+      {
+        id: "comment1",
+        requestId: "req123",
+        userId: "user123",
+        content: "First comment",
+        createdAt: Date.now() - 1000,
+      },
+      {
+        id: "comment2",
+        requestId: "req123",
+        userId: "superadmin1",
+        content: "Second comment",
+        createdAt: Date.now(),
+      },
+    ];
+
+    it("returns 400 when requestId is missing", async () => {
+      const req = createReq({ params: {} });
+      const res = createRes();
+
+      await getComments(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing requestId parameter" });
+    });
+
+    it("returns 404 when request does not exist", async () => {
+      const req = createReq({
+        params: { requestId: "non-existent" },
+      });
+      const res = createRes();
+
+      requestServiceMocks.getRequest.mockResolvedValue(null);
+
+      await getComments(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: "Request not found" });
+    });
+
+    it("returns 403 when user cannot view the request", async () => {
+      const req = createReq({
+        params: { requestId: "req123" },
+        session: {
+          userId: "other-user",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      requestServiceMocks.getRequest.mockResolvedValue(baseRequest);
+      authorizationMocks.canViewRequest.mockReturnValue(false);
+
+      await getComments(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "You do not have permission to view comments on this request",
+        code: "AUTHORIZATION_ERROR",
+      });
+    });
+
+    it("returns comments for owner admin", async () => {
+      const req = createReq({
+        params: { requestId: "req123" },
+        session: {
+          userId: "user123",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      requestServiceMocks.getRequest.mockResolvedValue(baseRequest);
+      authorizationMocks.canViewRequest.mockReturnValue(true);
+      requestServiceMocks.getComments.mockResolvedValue(mockComments);
+
+      await getComments(req, res);
+
+      expect(requestServiceMocks.getRequest).toHaveBeenCalledWith("req123");
+      expect(requestServiceMocks.getComments).toHaveBeenCalledWith("req123");
+      expect(res.json).toHaveBeenCalledWith(mockComments);
+    });
+
+    it("returns comments for super admin", async () => {
+      const req = createReq({
+        params: { requestId: "req123" },
+        session: {
+          userId: "superadmin1",
+          isAdmin: true,
+          isSuperAdmin: true,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      requestServiceMocks.getRequest.mockResolvedValue(baseRequest);
+      authorizationMocks.canViewRequest.mockReturnValue(true);
+      requestServiceMocks.getComments.mockResolvedValue(mockComments);
+
+      await getComments(req, res);
+
+      expect(requestServiceMocks.getComments).toHaveBeenCalledWith("req123");
+      expect(res.json).toHaveBeenCalledWith(mockComments);
+    });
+
+    it("returns empty array when no comments exist", async () => {
+      const req = createReq({
+        params: { requestId: "req123" },
+        session: {
+          userId: "user123",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      requestServiceMocks.getRequest.mockResolvedValue(baseRequest);
+      authorizationMocks.canViewRequest.mockReturnValue(true);
+      requestServiceMocks.getComments.mockResolvedValue([]);
+
+      await getComments(req, res);
+
+      expect(res.json).toHaveBeenCalledWith([]);
+    });
+
+    it("returns 500 for service errors", async () => {
+      const req = createReq({
+        params: { requestId: "req123" },
+        session: {
+          userId: "user123",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      requestServiceMocks.getRequest.mockResolvedValue(baseRequest);
+      authorizationMocks.canViewRequest.mockReturnValue(true);
+      requestServiceMocks.getComments.mockRejectedValue(new Error("Redis connection failed"));
+
+      await getComments(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to get comments" });
     });
   });
 

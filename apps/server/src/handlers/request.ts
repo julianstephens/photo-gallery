@@ -226,6 +226,53 @@ export const addComment = async (req: Request, res: Response) => {
 };
 
 /**
+ * GET /api/requests/:requestId/comments
+ * Get all comments for a request, sorted chronologically.
+ * Admins can view comments on their own requests.
+ * Super admins can view comments on any request in their guilds.
+ */
+export const getComments = async (req: Request, res: Response) => {
+  try {
+    const requestId = req.params.requestId;
+    if (!requestId) {
+      return res.status(400).json({ error: "Missing requestId parameter" });
+    }
+
+    const authCtx = buildAuthContext(req);
+
+    // Fetch the request
+    const request = await requestService.getRequest(requestId);
+    if (!request) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    // Authorization check - reuse canViewRequest which checks guild membership and ownership
+    if (!canViewRequest(authCtx, request)) {
+      throw new AuthorizationError(
+        "You do not have permission to view comments on this request",
+        "viewComments",
+        requestId,
+      );
+    }
+
+    // Fetch comments
+    const comments = await requestService.getComments(requestId);
+
+    appLogger.debug(
+      { requestId, userId: authCtx.userId, commentCount: comments.length },
+      "[getComments] Comments retrieved",
+    );
+    res.json(comments);
+  } catch (err: unknown) {
+    if (err instanceof AuthorizationError) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    appLogger.error({ err }, "[getComments] error");
+    res.status(500).json({ error: "Failed to get comments" });
+  }
+};
+
+/**
  * GET /api/admin/guilds/:guildId/requests (super admin only, no requestor param)
  * List all requests in a guild.
  * Only super admins can access this endpoint.
