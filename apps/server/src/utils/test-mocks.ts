@@ -134,6 +134,7 @@ export const mockRedisClient = {
   zRange: vi.fn(),
   zRangeByScore: vi.fn(),
   zScore: vi.fn(),
+  zMScore: vi.fn(),
   watch: vi.fn(),
   unwatch: vi.fn(),
   multi: vi.fn(),

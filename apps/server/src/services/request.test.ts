@@ -630,10 +630,7 @@ describe("RequestService", () => {
 
     it("should return paginated results for single guild", async () => {
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000) // req1
-        .mockResolvedValueOnce(2000) // req2
-        .mockResolvedValueOnce(3000); // req3
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000, 3000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([
         JSON.stringify(mockRequest3),
         JSON.stringify(mockRequest2),
@@ -654,9 +651,7 @@ describe("RequestService", () => {
 
     it("should filter by user using SINTER", async () => {
       vi.mocked(redis.client.sInter).mockResolvedValue(["req1", "req2"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000) // req1
-        .mockResolvedValueOnce(2000); // req2
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([
         JSON.stringify(mockRequest2),
         JSON.stringify(mockRequest1),
@@ -676,9 +671,7 @@ describe("RequestService", () => {
 
     it("should filter by status using SINTER", async () => {
       vi.mocked(redis.client.sInter).mockResolvedValue(["req1", "req3"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000) // req1
-        .mockResolvedValueOnce(3000); // req3
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 3000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([
         JSON.stringify(mockRequest3),
         JSON.stringify(mockRequest1),
@@ -699,7 +692,7 @@ describe("RequestService", () => {
 
     it("should filter by user and status combined", async () => {
       vi.mocked(redis.client.sInter).mockResolvedValue(["req1"]);
-      vi.mocked(redis.client.zScore).mockResolvedValueOnce(1000);
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest1)]);
 
       const result = await service.listRequestsFiltered(["guild123"], "user456", {
@@ -718,10 +711,7 @@ describe("RequestService", () => {
 
     it("should handle cursor-based pagination", async () => {
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000)
-        .mockResolvedValueOnce(2000)
-        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000, 3000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest1)]);
 
       // Cursor is req2 (createdAt=2000), so we start after it
@@ -739,10 +729,7 @@ describe("RequestService", () => {
 
     it("should return hasMore=true when more results exist", async () => {
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000)
-        .mockResolvedValueOnce(2000)
-        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000, 3000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([
         JSON.stringify(mockRequest3),
         JSON.stringify(mockRequest2),
@@ -761,10 +748,7 @@ describe("RequestService", () => {
 
     it("should sort ascending when sortDirection is asc", async () => {
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000)
-        .mockResolvedValueOnce(2000)
-        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000, 3000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([
         JSON.stringify(mockRequest1),
         JSON.stringify(mockRequest2),
@@ -787,10 +771,7 @@ describe("RequestService", () => {
 
     it("should handle multiple guilds using SUNION", async () => {
       vi.mocked(redis.client.sUnion).mockResolvedValue(["req1", "req2", "req3"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000)
-        .mockResolvedValueOnce(2000)
-        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000, 3000]);
       vi.mocked(redis.client.mGet).mockResolvedValue([
         JSON.stringify(mockRequest3),
         JSON.stringify(mockRequest2),
@@ -811,9 +792,8 @@ describe("RequestService", () => {
 
     it("should filter out expired/orphaned entries gracefully", async () => {
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2-expired"]);
-      vi.mocked(redis.client.zScore)
-        .mockResolvedValueOnce(1000) // req1 exists in sorted set
-        .mockResolvedValueOnce(null); // req2-expired not in sorted set
+      // zMScore returns null for members not in the sorted set
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, null]);
       vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest1)]);
 
       const result = await service.listRequestsFiltered(["guild123"], undefined, {
@@ -840,7 +820,7 @@ describe("RequestService", () => {
 
     it("should preserve order of fetched requests matching pageIds", async () => {
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2"]);
-      vi.mocked(redis.client.zScore).mockResolvedValueOnce(1000).mockResolvedValueOnce(2000);
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000]);
       // mGet returns in order of keys, but requests should be sorted by pageIds order
       vi.mocked(redis.client.mGet).mockResolvedValue([
         JSON.stringify(mockRequest1), // First key

@@ -723,9 +723,8 @@ export class RequestService {
     }
 
     // Get scores (createdAt timestamps) for all candidates from the sorted set
-    // We'll use ZSCORE in a pipeline for efficiency
-    const scoresPromises = candidateIds.map((id) => redis.client.zScore(REQUEST_CREATED_ZSET, id));
-    const scores = await Promise.all(scoresPromises);
+    // Using ZMSCORE for efficient batch retrieval (single Redis round trip)
+    const scores = await redis.client.zMScore(REQUEST_CREATED_ZSET, candidateIds);
 
     // Build array of {id, score} and filter out null scores (orphaned entries)
     const candidatesWithScores: Array<{ id: string; score: number }> = [];
