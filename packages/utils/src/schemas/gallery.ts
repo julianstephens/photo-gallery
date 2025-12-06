@@ -11,6 +11,7 @@ export const galleryMetaSchema = z.object({
   expiresAt: z.number(),
   ttlWeeks: z.number().min(1).max(6),
   createdBy: z.string().min(1).max(100),
+  createdByName: z.string().min(1).max(100).optional(),
   folderName: z.string().min(1).max(150).optional(),
   totalItems: z.number().min(0).default(0),
 });

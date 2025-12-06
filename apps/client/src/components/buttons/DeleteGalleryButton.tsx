@@ -1,6 +1,7 @@
 import { queryClient } from "@/clients";
 import { ConfirmDeleteModal } from "@/components/modals";
 import { toaster } from "@/components/ui/toaster";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useGalleryContext } from "@/hooks";
 import { logger } from "@/lib/logger";
 import type { ButtonProps } from "@/lib/types";
@@ -82,9 +83,17 @@ export const DeleteGalleryButton = ({
           Delete Gallery
         </Button>
       ) : (
-        <IconButton variant="subtle" colorPalette="red" loading={loading} onClick={openModal}>
-          <HiTrash />
-        </IconButton>
+        <Tooltip content="Delete Gallery">
+          <IconButton
+            variant="subtle"
+            colorPalette="red"
+            loading={loading}
+            onClick={openModal}
+            aria-label="Delete Gallery"
+          >
+            <HiTrash />
+          </IconButton>
+        </Tooltip>
       )}
       <ConfirmDeleteModal
         open={isModalOpen}

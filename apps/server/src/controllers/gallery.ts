@@ -192,7 +192,7 @@ export class GalleryController {
     }
   };
 
-  createGallery = async (req: CreateGalleryRequest, userId: string) => {
+  createGallery = async (req: CreateGalleryRequest, userId: string, username?: string) => {
     const validUserId = validateString(userId, "User ID is required");
     const validatedGalleryName = validateString(req.galleryName, GalleryNameError);
 
@@ -225,6 +225,7 @@ export class GalleryController {
       expiresAt,
       ttlWeeks: req.ttlWeeks,
       createdBy: validUserId,
+      createdByName: username,
       folderName,
       totalItems: 0,
     });
