@@ -1,3 +1,27 @@
+## v0.2.3
+
+### Fixed
+
+- Improved error handling in processDelayedJobs with readyJobsCount logging.
+- Fixed race condition in gradient worker concurrency limit.
+- Fixed graceful shutdown to wait for in-flight jobs.
+- Fixed release.py --no-tag flag behavior and added worker start logging.
+
+### Improved
+
+- Overhauled worker logic for efficiency and reliability.
+
+### Added
+
+- Added --skip-gen flag to release script.
+- Added --no-tag flag to release script.
+
+### Technical Improvements
+
+- Improved concurrency test pattern.
+- Improved Redis mock for true coverage.
+- Added build to validate script.
+
 ## v0.2.2
 
 ### Fixed

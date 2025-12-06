@@ -9,7 +9,13 @@ import type { Logger } from "./logger.js";
 export const GRADIENT_JOB_QUEUE = "gradient:queue";
 const PROCESSING_KEY = "gradient:processing";
 const DELAYED_KEY = "gradient:delayed"; // Sorted set for delayed retry jobs
-const JOB_PREFIX = "gradient:job:";
+
+// The payload that will be stored in the Redis queue
+type JobPayload = GenerateGradientJobData & {
+  jobId: string;
+  attempts: number;
+  createdAt: number;
+};
 
 interface WorkerStats {
   jobsProcessed: number;
@@ -33,6 +39,8 @@ export class GradientWorker {
   #gradientMetaService: GradientMetaService;
   #running: boolean = false;
   #intervalId: ReturnType<typeof setInterval> | null = null;
+  #listenPromise: Promise<void> | null = null;
+  #inFlightJobs: Set<Promise<void>> = new Set();
   #activeJobCount: number = 0;
   #stats: WorkerStats = {
     jobsProcessed: 0,
@@ -50,81 +58,39 @@ export class GradientWorker {
   }
 
   /**
-   * Generate a unique job ID from the storage key.
-   */
-  #generateJobId(storageKey: string): string {
-    return `gradient-${storageKey.replace(/\//g, "-")}`;
-  }
-
-  /**
-   * Enqueue a gradient generation job.
-   */
-  async enqueueJob(data: GenerateGradientJobData): Promise<string | null> {
-    // Validate job data
-    const parsed = generateGradientJobSchema.safeParse(data);
-    if (!parsed.success) {
-      this.#logger.error({ data, error: parsed.error }, "Invalid job data");
-      return null;
-    }
-
-    const jobId = this.#generateJobId(data.storageKey);
-    const jobKey = `${JOB_PREFIX}${jobId}`;
-
-    // Check if job already exists
-    const existingJob = await this.#redis.get(jobKey);
-    if (existingJob) {
-      this.#logger.debug({ jobId, storageKey: data.storageKey }, "Job already exists");
-      return jobId;
-    }
-
-    // Mark as pending in metadata
-    await this.#gradientMetaService.markPending(data.storageKey);
-
-    // Store job data
-    const jobData = {
-      ...data,
-      jobId,
-      attempts: 0,
-      createdAt: Date.now(),
-    };
-
-    await this.#redis.set(jobKey, JSON.stringify(jobData));
-    await this.#redis.expire(jobKey, 86400); // 24 hour TTL
-
-    // Add to queue
-    await this.#redis.rPush(GRADIENT_JOB_QUEUE, jobId);
-
-    this.#logger.info({ jobId, storageKey: data.storageKey }, "Job enqueued");
-
-    return jobId;
-  }
-
-  /**
    * Process a single gradient generation job.
+   * The payload is the full job data, received directly from the queue.
    */
-  async processJob(jobId: string): Promise<void> {
-    const jobKey = `${JOB_PREFIX}${jobId}`;
+  async processJob(jobPayloadStr: string): Promise<void> {
     const startTime = Date.now();
 
-    // Get job data
-    const jobDataStr = await this.#redis.get(jobKey);
-    if (!jobDataStr) {
-      this.#logger.warn({ jobId }, "Job not found, skipping");
-      await this.#redis.lRem(PROCESSING_KEY, 0, jobId);
-      return;
-    }
-
-    let jobData: GenerateGradientJobData & { jobId: string; attempts: number; createdAt: number };
+    let jobData: JobPayload;
     try {
-      jobData = JSON.parse(jobDataStr);
-    } catch {
-      this.#logger.error({ jobId }, "Failed to parse job data");
-      await this.#redis.del(jobKey);
-      await this.#redis.lRem(PROCESSING_KEY, 0, jobId);
+      const parsedPayload = JSON.parse(jobPayloadStr);
+      // We still validate here to ensure the payload from the queue is correct
+      const validated = generateGradientJobSchema.safeParse(parsedPayload);
+      if (!validated.success) {
+        throw new Error(`Invalid job payload: ${validated.error.message}`);
+      }
+      if (!parsedPayload.jobId) {
+        throw new Error("Job payload missing jobId");
+      }
+      jobData = {
+        ...validated.data,
+        jobId: parsedPayload.jobId,
+        attempts: parsedPayload.attempts || 0,
+        createdAt: parsedPayload.createdAt || Date.now(),
+      };
+    } catch (e) {
+      this.#logger.error(
+        { error: e, payload: jobPayloadStr },
+        "Failed to parse job data, discarding",
+      );
+      // Cannot process or retry, so we just drop it
       return;
     }
 
-    const { storageKey, guildId, galleryName } = jobData;
+    const { jobId, storageKey, guildId, galleryName } = jobData;
     const currentAttempt = jobData.attempts + 1;
 
     this.#logger.info(
@@ -132,12 +98,8 @@ export class GradientWorker {
       "Processing job",
     );
 
-    // Mark as processing
+    // Mark as processing in metadata
     await this.#gradientMetaService.markProcessing(storageKey);
-
-    // Update attempt count
-    jobData.attempts = currentAttempt;
-    await this.#redis.set(jobKey, JSON.stringify(jobData));
 
     try {
       // Download the image buffer from S3
@@ -162,10 +124,6 @@ export class GradientWorker {
 
       // Save to metadata
       await this.#gradientMetaService.markCompleted(storageKey, gradient);
-
-      // Clean up job
-      await this.#redis.del(jobKey);
-      await this.#redis.lRem(PROCESSING_KEY, 0, jobId);
 
       const processingTime = Date.now() - startTime;
       this.#stats.jobsProcessed++;
@@ -197,22 +155,23 @@ export class GradientWorker {
         "Job failed",
       );
 
-      // Remove from processing list
-      await this.#redis.lRem(PROCESSING_KEY, 0, jobId);
-
       // Check if max retries reached
       if (currentAttempt >= this.#env.GRADIENT_JOB_MAX_RETRIES) {
         this.#stats.jobsFailed++;
         // Mark as permanently failed (no-gradient)
         await this.#gradientMetaService.markFailed(storageKey, errorMessage);
-        // Clean up job
-        await this.#redis.del(jobKey);
         this.#logger.warn({ jobId, storageKey }, "Max retries reached, marking as no-gradient");
       } else {
-        // Schedule for delayed retry using Redis sorted set with timestamp as score
+        // Schedule for delayed retry with updated attempt count
         const backoffMs = Math.pow(2, currentAttempt) * 1000; // 2^attempt seconds
         const retryAt = Date.now() + backoffMs;
-        await this.#redis.zAdd(DELAYED_KEY, { score: retryAt, value: jobId });
+        const nextPayload: JobPayload = { ...jobData, attempts: currentAttempt };
+
+        await this.#redis.zAdd(DELAYED_KEY, {
+          score: retryAt,
+          value: JSON.stringify(nextPayload),
+        });
+
         this.#logger.debug(
           { jobId, storageKey, backoffMs, retryAt },
           "Job scheduled for delayed retry",
@@ -225,56 +184,33 @@ export class GradientWorker {
    * Move delayed jobs that are ready back to the main queue.
    */
   async #processDelayedJobs(): Promise<void> {
+    let readyJobs: string[] | undefined;
     try {
       const now = Date.now();
       // Get all jobs that are ready (score <= now)
-      const readyJobs = await this.#redis.zRangeByScore(DELAYED_KEY, 0, now);
+      readyJobs = await this.#redis.zRangeByScore(DELAYED_KEY, 0, now);
 
-      for (const jobId of readyJobs) {
-        // Remove from delayed set and add to main queue
-        const removed = await this.#redis.zRem(DELAYED_KEY, jobId);
-        if (removed > 0) {
-          await this.#redis.rPush(GRADIENT_JOB_QUEUE, jobId);
-          this.#logger.debug({ jobId }, "Moved delayed job to queue");
-        }
+      if (readyJobs.length > 0) {
+        // Atomically remove from sorted set and push to queue
+        const multi = this.#redis.multi();
+        multi.zRem(DELAYED_KEY, readyJobs);
+        multi.rPush(GRADIENT_JOB_QUEUE, readyJobs);
+        await multi.exec();
+
+        this.#logger.debug({ count: readyJobs.length }, "Moved delayed jobs to queue");
       }
     } catch (error) {
-      this.#logger.error({ error }, "Error processing delayed jobs");
+      this.#logger.error(
+        { error, readyJobsCount: readyJobs?.length },
+        "Error processing delayed jobs",
+      );
+      // Don't rethrow - this is called from setInterval and should not break the loop
     }
   }
 
   /**
-   * Process jobs from the queue with concurrency control.
-   */
-  async #processQueue(): Promise<void> {
-    if (!this.#running) return;
-
-    // Check concurrency limit before acquiring a job
-    if (this.#activeJobCount >= this.#env.GRADIENT_WORKER_CONCURRENCY) {
-      return;
-    }
-
-    try {
-      // Move job from queue to processing list atomically
-      const jobId = await this.#redis.lMove(GRADIENT_JOB_QUEUE, PROCESSING_KEY, "LEFT", "RIGHT");
-
-      if (jobId) {
-        this.#activeJobCount++;
-        this.#stats.activeJobs = this.#activeJobCount;
-        try {
-          await this.processJob(jobId);
-        } finally {
-          this.#activeJobCount--;
-          this.#stats.activeJobs = this.#activeJobCount;
-        }
-      }
-    } catch (error) {
-      this.#logger.error({ error }, "Error processing queue");
-    }
-  }
-
-  /**
-   * Start the gradient generation worker.
+   * Starts the worker.
+   * It begins listening for jobs on the queue and processing delayed jobs.
    */
   start(): void {
     if (this.#running) {
@@ -283,37 +219,24 @@ export class GradientWorker {
     }
 
     this.#running = true;
-    this.#activeJobCount = 0;
-
-    // Process queue at regular intervals
-    const pollIntervalMs = this.#env.GRADIENT_WORKER_POLL_INTERVAL_MS;
-    this.#intervalId = setInterval(() => {
-      // Process delayed jobs first (move ready jobs to main queue)
-      this.#processDelayedJobs().catch((err) => {
-        this.#logger.error({ err }, "Error processing delayed jobs");
-      });
-
-      // Try to process jobs up to concurrency limit
-      const promises: Promise<void>[] = [];
-      for (let i = 0; i < this.#env.GRADIENT_WORKER_CONCURRENCY; i++) {
-        promises.push(this.#processQueue());
-      }
-      Promise.all(promises).catch((err) => {
-        this.#logger.error({ err }, "Error in worker loop");
-      });
-    }, pollIntervalMs);
-
     this.#logger.info({ concurrency: this.#env.GRADIENT_WORKER_CONCURRENCY }, "Worker started");
+    // Start the two main loops, but don't wait for them here.
+    // listenForJobs will only exit when #running is false.
+    this.#listenPromise = this.listenForJobs();
+    this.#intervalId = setInterval(() => this.#processDelayedJobs(), 5000); // Check every 5s
   }
 
   /**
-   * Stop the gradient generation worker.
+   * Stops the worker gracefully.
+   * It will finish any in-flight job and wait for the listen loop to exit.
    */
   async stop(): Promise<void> {
     if (!this.#running) {
+      this.#logger.warn("Worker is not running");
       return;
     }
 
+    this.#logger.info("Stopping worker...");
     this.#running = false;
 
     if (this.#intervalId) {
@@ -321,20 +244,97 @@ export class GradientWorker {
       this.#intervalId = null;
     }
 
-    // Move any jobs in processing back to queue
-    try {
-      let jobId: string | null;
-      while (
-        (jobId = await this.#redis.lMove(PROCESSING_KEY, GRADIENT_JOB_QUEUE, "LEFT", "RIGHT")) !==
-        null
-      ) {
-        this.#logger.debug({ jobId }, "Moved job from processing back to queue");
-      }
-    } catch (error) {
-      this.#logger.error({ error }, "Error moving jobs back to queue");
+    // Wait for the listenForJobs loop to finish. This can take up to the
+    // blMove timeout (5s) plus any final processing.
+    if (this.#listenPromise) {
+      await this.#listenPromise;
     }
 
-    this.#logger.info("Worker stopped");
+    // Wait for all in-flight jobs to complete
+    if (this.#inFlightJobs.size > 0) {
+      this.#logger.info(
+        { count: this.#inFlightJobs.size },
+        "Waiting for in-flight jobs to complete...",
+      );
+      await Promise.all(this.#inFlightJobs);
+    }
+
+    this.#logger.info("Worker stopped gracefully.");
+  }
+
+  /**
+   * Main listening loop that processes jobs from the queue.
+   * Started by the start() method and runs until the worker is stopped.
+   */
+  async listenForJobs(): Promise<void> {
+    this.#logger.info("Worker is now listening for jobs on the queue...");
+    while (this.#running) {
+      // Check concurrency limit before acquiring a new job
+      if (this.#activeJobCount >= this.#env.GRADIENT_WORKER_CONCURRENCY) {
+        // If at capacity, wait a bit before checking again
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      try {
+        // Use a blocking pop to wait for a job for up to 5 seconds
+        const jobPayload = await this.#redis.blMove(
+          GRADIENT_JOB_QUEUE,
+          PROCESSING_KEY,
+          "LEFT",
+          "RIGHT",
+          5, // 5-second timeout
+        );
+
+        if (jobPayload) {
+          // Increment the active job count immediately to prevent race conditions
+          // where the loop checks the limit before the async job increments the counter
+          this.#activeJobCount++;
+          this.#stats.activeJobs = this.#activeJobCount;
+
+          // Process the job without awaiting it to allow for concurrency
+          // Track the promise so we can wait for it during shutdown
+          // Create wrapped promise with cleanup to avoid race conditions
+          const jobPromise = this.processJobWithConcurrency(jobPayload).finally(() => {
+            this.#inFlightJobs.delete(jobPromise);
+          });
+          this.#inFlightJobs.add(jobPromise);
+        }
+        // If jobPayload is null, the timeout was reached, and the loop will continue
+      } catch (error) {
+        this.#logger.error({ error }, "Error listening for jobs, retrying in 5s...");
+        // Avoid a tight loop on persistent Redis errors
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+    }
+    this.#logger.info("Worker has stopped listening for jobs.");
+  }
+
+  /**
+   * Wrapper to process a job and handle concurrency counting.
+   * Note: #activeJobCount is incremented by the caller before this method is called
+   * to prevent race conditions in the concurrency check.
+   */
+  async processJobWithConcurrency(jobPayload: string): Promise<void> {
+    try {
+      await this.processJob(jobPayload);
+    } catch (error) {
+      let jobId = "unknown";
+      try {
+        jobId = JSON.parse(jobPayload)?.jobId || "unknown";
+      } catch {
+        // ignore parse errors, jobId stays "unknown"
+      }
+      this.#logger.error({ error, jobId }, "Unhandled error in processJobWithConcurrency");
+    } finally {
+      // We move the job out of the processing list here, after it's done.
+      await this.#redis.lRem(PROCESSING_KEY, 1, jobPayload);
+      // Guard against going negative if called directly without prior increment
+      if (this.#activeJobCount > 0) {
+        this.#activeJobCount--;
+      }
+      this.#stats.activeJobs = this.#activeJobCount;
+    }
   }
 
   /**
