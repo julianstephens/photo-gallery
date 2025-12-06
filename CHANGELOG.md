@@ -1,17 +1,26 @@
 ## v0.2.3
 
+### Fixed
+
+- Improved error handling in processDelayedJobs with readyJobsCount logging.
+- Fixed race condition in gradient worker concurrency limit.
+- Fixed graceful shutdown to wait for in-flight jobs.
+- Fixed release.py --no-tag flag behavior and added worker start logging.
+
 ### Improved
 
-- Refactored gradient worker to improve efficiency and reliability in job processing and queue
-  management.
-- Simplified worker test suite by removing redundant tests and improving mock setup.
-- Optimized Redis operations and job lifecycle management in the gradient processing pipeline.
+- Overhauled worker logic for efficiency and reliability.
+
+### Added
+
+- Added --skip-gen flag to release script.
+- Added --no-tag flag to release script.
 
 ### Technical Improvements
 
-- Added `validate` npm script for streamlined code formatting, linting, and testing workflow.
-- Enhanced Redis transaction handling with multi-command support in the gradient worker.
-- Improved test coverage and mock implementations for better test maintainability.
+- Improved concurrency test pattern.
+- Improved Redis mock for true coverage.
+- Added build to validate script.
 
 ## v0.2.2
 

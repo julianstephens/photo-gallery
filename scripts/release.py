@@ -203,8 +203,8 @@ def main():
         insert_at_front_of_file(changelog_path, changelog_entry + "\n\n")
         print(f"Changelog updated at {changelog_path}")
 
-    update_package_version(version.lstrip("v"))
-    print(f"Updated package.json to version {version.lstrip('v')}")
+        update_package_version(version.lstrip("v"))
+        print(f"Updated package.json to version {version.lstrip('v')}")
 
     if no_tag:
         print("No-tag mode - not creating tag, pushing, or releasing.")
