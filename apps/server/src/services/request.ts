@@ -15,7 +15,15 @@ const REQUEST_COMMENT_PREFIX = "request:comment:";
 const REQUEST_GUILD_PREFIX = "request:guild:";
 const REQUEST_USER_PREFIX = "request:user:";
 const REQUEST_STATUS_PREFIX = "request:status:";
+/**
+ * Global sorted set for all requests ordered by creation timestamp (score = createdAt).
+ * No TTL - orphaned entries are filtered at read time.
+ */
 const REQUEST_CREATED_ZSET = "request:created";
+/**
+ * Global sorted set for all requests ordered by update timestamp (score = updatedAt).
+ * No TTL - orphaned entries are filtered at read time.
+ */
 const REQUEST_UPDATED_ZSET = "request:updated";
 const REQUEST_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
@@ -702,13 +710,16 @@ export class RequestService {
         candidateIds = guildUnion;
       } else {
         // Store temporary union result, then intersect
-        // Use a temporary key for the union
+        // Use a temporary key for the union with TTL as safety net
         const tempUnionKey = `request:temp:union:${randomUUID()}`;
         if (guildUnion.length > 0) {
           await redis.client.sAdd(tempUnionKey, guildUnion);
-          await redis.client.expire(tempUnionKey, 60); // Short TTL
-          candidateIds = await redis.client.sInter([tempUnionKey, ...setKeys]);
-          await redis.client.del(tempUnionKey);
+          await redis.client.expire(tempUnionKey, 60); // Short TTL as safety net
+          try {
+            candidateIds = await redis.client.sInter([tempUnionKey, ...setKeys]);
+          } finally {
+            await redis.client.del(tempUnionKey);
+          }
         } else {
           candidateIds = [];
         }

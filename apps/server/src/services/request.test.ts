@@ -727,6 +727,28 @@ describe("RequestService", () => {
       expect(result.pagination.hasMore).toBe(false);
     });
 
+    it("should fall back to first page when cursor is invalid or not found", async () => {
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
+      vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000, 3000]);
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest3),
+        JSON.stringify(mockRequest2),
+        JSON.stringify(mockRequest1),
+      ]);
+
+      // Invalid cursor that doesn't exist in the result set
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        cursor: "non-existent-id",
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      // Falls back to startIndex=0, returns all results from the beginning
+      expect(result.data).toHaveLength(3);
+      expect(result.pagination.total).toBe(3);
+      expect(result.pagination.hasMore).toBe(false);
+    });
+
     it("should return hasMore=true when more results exist", async () => {
       vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
       vi.mocked(redis.client.zMScore).mockResolvedValue([1000, 2000, 3000]);
