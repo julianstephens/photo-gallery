@@ -138,7 +138,7 @@ jobs:
         run: |
           echo "$BORDER0_TOKEN" > /tmp/border0.token
           sudo border0 node install --start-vpn --token from:file:/tmp/border0.token
-          sleep 5  # Give it a few seconds to initialize and connect to Exit Node
+          sleep 20  # Give it a few seconds to initialize and connect to Exit Node
           border0 node exitnode set "$BORDER0_EXIT_NODE"
 
       - name: Get short SHA
