@@ -154,14 +154,17 @@ describe("gallery handlers", () => {
     const body = { guildId: "1", galleryName: "main", ttlWeeks: 1 };
 
     it("parses the body and creates a gallery", async () => {
-      const req = createReq({ body, session: { userId: "u1" } as Request["session"] });
+      const req = createReq({
+        body,
+        session: { userId: "u1", username: "testuser" } as Request["session"],
+      });
       const res = createRes();
       controllerMocks.createGallery.mockResolvedValue({ meta: true });
 
       await createGallery(req, res);
 
       expect(schemaMocks.createGallerySchema.parse).toHaveBeenCalledWith(body);
-      expect(controllerMocks.createGallery).toHaveBeenCalledWith(body, "u1");
+      expect(controllerMocks.createGallery).toHaveBeenCalledWith(body, "u1", "testuser");
       expect(res.status).toHaveBeenCalledWith(201);
       expect(res.json).toHaveBeenCalledWith({ meta: true });
     });

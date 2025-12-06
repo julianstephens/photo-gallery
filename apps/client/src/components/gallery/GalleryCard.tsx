@@ -41,12 +41,16 @@ export const GalleryCard = ({ info, guildId, openDetailedGalleryView }: GalleryC
                 </DataList.ItemValue>
               </DataList.Item>
               <DataList.Item>
-                <DataList.ItemLabel>Expires In</DataList.ItemLabel>
-                <DataList.ItemValue>{info.meta.ttlWeeks} week(s)</DataList.ItemValue>
+                <DataList.ItemLabel>Expires</DataList.ItemLabel>
+                <DataList.ItemValue>
+                  {new Date(info.meta.expiresAt).toLocaleDateString()}
+                </DataList.ItemValue>
               </DataList.Item>
               <DataList.Item>
                 <DataList.ItemLabel>Created By</DataList.ItemLabel>
-                <DataList.ItemValue>{info.meta.createdBy}</DataList.ItemValue>
+                <DataList.ItemValue>
+                  {info.meta.createdByName || info.meta.createdBy}
+                </DataList.ItemValue>
               </DataList.Item>
             </DataList.Root>
             <Text color="blue.400">{info.meta.totalItems} photos</Text>
