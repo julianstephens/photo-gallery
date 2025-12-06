@@ -122,6 +122,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Show public IP
+        run: |
+          curl -s https://ipinfo.io | jq '{ip, city, region,country, org}'
+
+      - name: Install Border0 CLI
+        run: |
+          sudo curl -L https://download.border0.com/linux_amd64/border0 -o /usr/local/bin/border0
+          sudo chmod +x /usr/local/bin/border0
+
+      - name: Start Border0 VPN w/ exit node
+        env:
+          BORDER0_TOKEN: ${{ secrets.BORDER0_TOKEN }}
+          BORDER0_EXIT_NODE: ${{ secrets.BORDER0_EXIT_NODE }}
+        run: |
+          echo "$BORDER0_TOKEN" > /tmp/border0.token
+          sudo border0 node install --start-vpn --token from:file:/tmp/border0.token
+          sleep 5  # Give it a few seconds to initialize and connect to Exit Node
+          border0 node exitnode set "$BORDER0_EXIT_NODE"
+
       - name: Get short SHA
         id: sha
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
