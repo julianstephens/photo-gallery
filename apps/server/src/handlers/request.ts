@@ -1,5 +1,10 @@
 import type { Request, Response } from "express";
-import { addCommentSchema, createRequestSchema, updateRequestStatusSchema } from "utils";
+import {
+  addCommentSchema,
+  createRequestSchema,
+  listRequestsFilterSchema,
+  updateRequestStatusSchema,
+} from "utils";
 import { ZodError } from "zod";
 import { appLogger } from "../middleware/logger.ts";
 import {
@@ -9,6 +14,7 @@ import {
   canCommentOnRequest,
   canCreateRequest,
   canDeleteRequest,
+  canListRequests,
   canViewRequest,
   RequestService,
   type RequestAuthContext,
@@ -80,9 +86,16 @@ export const createRequest = async (req: Request, res: Response) => {
 };
 
 /**
- * GET /api/guilds/:guildId/requests?requestor=me
- * List requests for the authenticated user in the specified guild.
- * Admins can only see their own requests.
+ * GET /api/guilds/:guildId/requests
+ * List requests with filtering and cursor-based pagination.
+ * - Admins see only their own requests (requestor=me enforced)
+ * - Super admins can see all requests in the guild
+ *
+ * Query params:
+ * - status: Filter by status (open, approved, denied, cancelled, closed)
+ * - cursor: Cursor for pagination (request ID from previous page)
+ * - limit: Number of results per page (default 20, max 100)
+ * - sortDirection: Sort direction (asc or desc, default desc)
  */
 export const listMyRequests = async (req: Request, res: Response) => {
   try {
@@ -93,10 +106,9 @@ export const listMyRequests = async (req: Request, res: Response) => {
 
     const authCtx = buildAuthContext(req);
 
-    // Check if requestor=me query param is present
-    const requestor = req.query.requestor;
-    if (typeof requestor !== "string" || requestor !== "me") {
-      return res.status(400).json({ error: "Only requestor=me is supported for admin users" });
+    // Authorization check
+    if (!canListRequests(authCtx)) {
+      throw new AuthorizationError("You do not have permission to list requests", "list", guildId);
     }
 
     // Check if user is a member of the guild
@@ -104,22 +116,39 @@ export const listMyRequests = async (req: Request, res: Response) => {
       throw new AuthorizationError("You are not a member of this guild", "list", guildId);
     }
 
-    // Fetch requests for the user in this guild using optimized SINTER query
-    const userGuildRequests = await requestService.getRequestsByUserAndGuild(
-      authCtx.userId,
-      guildId,
-    );
+    // Parse and validate filter/pagination params
+    const filterInput = {
+      status: req.query.status,
+      cursor: req.query.cursor,
+      limit: req.query.limit ?? 20,
+      sortDirection: req.query.sortDirection ?? "desc",
+    };
+    const filter = listRequestsFilterSchema.parse(filterInput);
 
-    // Requests are already filtered by user and guild; no further filtering needed.
+    // Admins (non-super-admins) can only see their own requests
+    const userId = authCtx.isSuperAdmin ? undefined : authCtx.userId;
+
+    // Fetch paginated and filtered requests
+    const result = await requestService.listRequestsFiltered([guildId], userId, filter);
 
     appLogger.debug(
-      { guildId, userId: authCtx.userId, count: userGuildRequests.length },
-      "[listMyRequests] Listed user requests",
+      {
+        guildId,
+        userId: authCtx.userId,
+        isSuperAdmin: authCtx.isSuperAdmin,
+        filter,
+        count: result.data.length,
+        total: result.pagination.total,
+      },
+      "[listMyRequests] Listed requests with pagination",
     );
-    res.json(userGuildRequests);
+    res.json(result);
   } catch (err: unknown) {
     if (err instanceof AuthorizationError) {
       return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    if (err instanceof ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
     }
     appLogger.error({ err }, "[listMyRequests] error");
     res.status(500).json({ error: "Failed to list requests" });
@@ -273,9 +302,15 @@ export const getComments = async (req: Request, res: Response) => {
 };
 
 /**
- * GET /api/admin/guilds/:guildId/requests (super admin only, no requestor param)
- * List all requests in a guild.
+ * GET /api/admin/guilds/:guildId/requests (super admin only)
+ * List all requests in a guild with filtering and cursor-based pagination.
  * Only super admins can access this endpoint.
+ *
+ * Query params:
+ * - status: Filter by status (open, approved, denied, cancelled, closed)
+ * - cursor: Cursor for pagination (request ID from previous page)
+ * - limit: Number of results per page (default 20, max 100)
+ * - sortDirection: Sort direction (asc or desc, default desc)
  */
 export const listGuildRequests = async (req: Request, res: Response) => {
   try {
@@ -291,17 +326,35 @@ export const listGuildRequests = async (req: Request, res: Response) => {
       throw new AuthorizationError("You are not a member of this guild", "list", guildId);
     }
 
-    // Fetch all requests for this guild
-    const requests = await requestService.getRequestsByGuild(guildId);
+    // Parse and validate filter/pagination params
+    const filterInput = {
+      status: req.query.status,
+      cursor: req.query.cursor,
+      limit: req.query.limit ?? 20,
+      sortDirection: req.query.sortDirection ?? "desc",
+    };
+    const filter = listRequestsFilterSchema.parse(filterInput);
+
+    // Super admins see all requests in the guild (no user filter)
+    const result = await requestService.listRequestsFiltered([guildId], undefined, filter);
 
     appLogger.debug(
-      { guildId, userId: authCtx.userId, count: requests.length },
-      "[listGuildRequests] Listed guild requests",
+      {
+        guildId,
+        userId: authCtx.userId,
+        filter,
+        count: result.data.length,
+        total: result.pagination.total,
+      },
+      "[listGuildRequests] Listed guild requests with pagination",
     );
-    res.json(requests);
+    res.json(result);
   } catch (err: unknown) {
     if (err instanceof AuthorizationError) {
       return res.status(err.status).json({ error: err.message, code: err.code });
+    }
+    if (err instanceof ZodError) {
+      return res.status(400).json({ error: err.issues.map((e) => e.message).join(", ") });
     }
     appLogger.error({ err }, "[listGuildRequests] error");
     res.status(500).json({ error: "Failed to list requests" });

@@ -36,6 +36,7 @@ describe("RequestService", () => {
       sAdd: vi.fn().mockReturnThis(),
       sRem: vi.fn().mockReturnThis(),
       zAdd: vi.fn().mockReturnThis(),
+      zRem: vi.fn().mockReturnThis(),
       del: vi.fn().mockReturnThis(),
       exec: vi.fn().mockResolvedValue([]),
     };
@@ -417,6 +418,7 @@ describe("RequestService", () => {
         expire: vi.fn().mockReturnThis(),
         sAdd: vi.fn().mockReturnThis(),
         sRem: vi.fn().mockReturnThis(),
+        zAdd: vi.fn().mockReturnThis(),
         exec: vi
           .fn()
           .mockResolvedValueOnce(null) // First attempt fails
@@ -450,6 +452,7 @@ describe("RequestService", () => {
         expire: vi.fn().mockReturnThis(),
         sAdd: vi.fn().mockReturnThis(),
         sRem: vi.fn().mockReturnThis(),
+        zAdd: vi.fn().mockReturnThis(),
         exec: vi.fn().mockResolvedValue(null),
       };
       vi.mocked(redis.client.multi).mockReturnValue(mockMulti as never);
@@ -579,6 +582,280 @@ describe("RequestService", () => {
 
       // multi should not be called since request doesn't exist
       expect(redis.client.multi).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("listRequestsFiltered", () => {
+    const mockRequest1 = {
+      id: "req1",
+      guildId: "guild123",
+      userId: "user456",
+      title: "Request 1",
+      description: "Desc 1",
+      status: "open" as const,
+      createdAt: 1000,
+      updatedAt: 1000,
+    };
+    const mockRequest2 = {
+      id: "req2",
+      guildId: "guild123",
+      userId: "user456",
+      title: "Request 2",
+      description: "Desc 2",
+      status: "approved" as const,
+      createdAt: 2000,
+      updatedAt: 2500,
+    };
+    const mockRequest3 = {
+      id: "req3",
+      guildId: "guild123",
+      userId: "user789",
+      title: "Request 3",
+      description: "Desc 3",
+      status: "open" as const,
+      createdAt: 3000,
+      updatedAt: 3000,
+    };
+
+    it("should return empty result for empty guildIds", async () => {
+      const result = await service.listRequestsFiltered([], undefined, {
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.pagination.total).toBe(0);
+      expect(result.pagination.hasMore).toBe(false);
+    });
+
+    it("should return paginated results for single guild", async () => {
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000) // req1
+        .mockResolvedValueOnce(2000) // req2
+        .mockResolvedValueOnce(3000); // req3
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest3),
+        JSON.stringify(mockRequest2),
+        JSON.stringify(mockRequest1),
+      ]);
+
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(3);
+      expect(result.pagination.total).toBe(3);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.pagination.nextCursor).toBeNull();
+      expect(redis.client.sMembers).toHaveBeenCalledWith("request:guild:guild123");
+    });
+
+    it("should filter by user using SINTER", async () => {
+      vi.mocked(redis.client.sInter).mockResolvedValue(["req1", "req2"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000) // req1
+        .mockResolvedValueOnce(2000); // req2
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest2),
+        JSON.stringify(mockRequest1),
+      ]);
+
+      const result = await service.listRequestsFiltered(["guild123"], "user456", {
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(redis.client.sInter).toHaveBeenCalledWith([
+        "request:guild:guild123",
+        "request:user:user456",
+      ]);
+    });
+
+    it("should filter by status using SINTER", async () => {
+      vi.mocked(redis.client.sInter).mockResolvedValue(["req1", "req3"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000) // req1
+        .mockResolvedValueOnce(3000); // req3
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest3),
+        JSON.stringify(mockRequest1),
+      ]);
+
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        status: "open",
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(redis.client.sInter).toHaveBeenCalledWith([
+        "request:guild:guild123",
+        "request:status:open",
+      ]);
+    });
+
+    it("should filter by user and status combined", async () => {
+      vi.mocked(redis.client.sInter).mockResolvedValue(["req1"]);
+      vi.mocked(redis.client.zScore).mockResolvedValueOnce(1000);
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest1)]);
+
+      const result = await service.listRequestsFiltered(["guild123"], "user456", {
+        status: "open",
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(redis.client.sInter).toHaveBeenCalledWith([
+        "request:guild:guild123",
+        "request:user:user456",
+        "request:status:open",
+      ]);
+    });
+
+    it("should handle cursor-based pagination", async () => {
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000)
+        .mockResolvedValueOnce(2000)
+        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest1)]);
+
+      // Cursor is req2 (createdAt=2000), so we start after it
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        cursor: "req2",
+        limit: 10,
+        sortDirection: "desc",
+      });
+
+      // In desc order: req3 (3000), req2 (2000), req1 (1000)
+      // After req2, we should get req1
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination.hasMore).toBe(false);
+    });
+
+    it("should return hasMore=true when more results exist", async () => {
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000)
+        .mockResolvedValueOnce(2000)
+        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest3),
+        JSON.stringify(mockRequest2),
+      ]);
+
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        limit: 2,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(2);
+      expect(result.pagination.total).toBe(3);
+      expect(result.pagination.hasMore).toBe(true);
+      expect(result.pagination.nextCursor).toBe("req2");
+    });
+
+    it("should sort ascending when sortDirection is asc", async () => {
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2", "req3"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000)
+        .mockResolvedValueOnce(2000)
+        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest1),
+        JSON.stringify(mockRequest2),
+        JSON.stringify(mockRequest3),
+      ]);
+
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        limit: 20,
+        sortDirection: "asc",
+      });
+
+      expect(result.data).toHaveLength(3);
+      // The mGet is called with IDs in sorted order (asc: req1, req2, req3)
+      expect(redis.client.mGet).toHaveBeenCalledWith([
+        "request:req1",
+        "request:req2",
+        "request:req3",
+      ]);
+    });
+
+    it("should handle multiple guilds using SUNION", async () => {
+      vi.mocked(redis.client.sUnion).mockResolvedValue(["req1", "req2", "req3"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000)
+        .mockResolvedValueOnce(2000)
+        .mockResolvedValueOnce(3000);
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest3),
+        JSON.stringify(mockRequest2),
+        JSON.stringify(mockRequest1),
+      ]);
+
+      const result = await service.listRequestsFiltered(["guild123", "guild456"], undefined, {
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(3);
+      expect(redis.client.sUnion).toHaveBeenCalledWith([
+        "request:guild:guild123",
+        "request:guild:guild456",
+      ]);
+    });
+
+    it("should filter out expired/orphaned entries gracefully", async () => {
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2-expired"]);
+      vi.mocked(redis.client.zScore)
+        .mockResolvedValueOnce(1000) // req1 exists in sorted set
+        .mockResolvedValueOnce(null); // req2-expired not in sorted set
+      vi.mocked(redis.client.mGet).mockResolvedValue([JSON.stringify(mockRequest1)]);
+
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination.total).toBe(1);
+    });
+
+    it("should return empty result when no candidates match filters", async () => {
+      vi.mocked(redis.client.sInter).mockResolvedValue([]);
+
+      const result = await service.listRequestsFiltered(["guild123"], "user999", {
+        status: "open",
+        limit: 20,
+        sortDirection: "desc",
+      });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.pagination.total).toBe(0);
+    });
+
+    it("should preserve order of fetched requests matching pageIds", async () => {
+      vi.mocked(redis.client.sMembers).mockResolvedValue(["req1", "req2"]);
+      vi.mocked(redis.client.zScore).mockResolvedValueOnce(1000).mockResolvedValueOnce(2000);
+      // mGet returns in order of keys, but requests should be sorted by pageIds order
+      vi.mocked(redis.client.mGet).mockResolvedValue([
+        JSON.stringify(mockRequest1), // First key
+        JSON.stringify(mockRequest2), // Second key
+      ]);
+
+      const result = await service.listRequestsFiltered(["guild123"], undefined, {
+        limit: 20,
+        sortDirection: "desc", // Should be req2 (2000) then req1 (1000)
+      });
+
+      expect(result.data).toHaveLength(2);
+      // In desc order, req2 should come first (higher timestamp)
+      expect(result.data[0].id).toBe("req2");
+      expect(result.data[1].id).toBe("req1");
     });
   });
 });

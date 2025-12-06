@@ -58,3 +58,45 @@ export const updateRequestStatusSchema = z.object({
   requestId: z.string().uuid(),
   status: requestStatusSchema,
 });
+
+/**
+ * Sort direction (ascending or descending).
+ */
+export const sortDirectionSchema = z.enum(["asc", "desc"]);
+
+/**
+ * Schema for filtering and paginating requests (cursor-based pagination).
+ * Cursor is the ID of the last request from the previous page.
+ */
+export const listRequestsFilterSchema = z.object({
+  /** Filter by status (optional) */
+  status: requestStatusSchema.optional(),
+  /** Cursor for pagination - ID of the last request from the previous page */
+  cursor: z.string().uuid().optional(),
+  /** Number of results per page (default 20, max 100) */
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  /** Sort direction (default: desc - newest first, based on createdAt) */
+  sortDirection: sortDirectionSchema.default("desc"),
+});
+
+/**
+ * Schema for paginated response metadata.
+ */
+export const paginationMetaSchema = z.object({
+  /** Total count of items matching the filter */
+  total: z.number().int().min(0),
+  /** Number of items in the current page */
+  count: z.number().int().min(0),
+  /** Cursor for fetching the next page (null if no more pages) */
+  nextCursor: z.string().uuid().nullable(),
+  /** Whether there are more results after this page */
+  hasMore: z.boolean(),
+});
+
+/**
+ * Schema for paginated request list response.
+ */
+export const paginatedRequestsResponseSchema = z.object({
+  data: z.array(requestSchema),
+  pagination: paginationMetaSchema,
+});

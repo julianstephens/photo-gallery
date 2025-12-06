@@ -1,5 +1,11 @@
 import { randomUUID } from "crypto";
-import type { Request, RequestComment, RequestStatus } from "utils";
+import type {
+  ListRequestsFilter,
+  PaginatedRequestsResponse,
+  Request,
+  RequestComment,
+  RequestStatus,
+} from "utils";
 import { appLogger } from "../middleware/logger.ts";
 import redis from "../redis.ts";
 
@@ -9,6 +15,8 @@ const REQUEST_COMMENT_PREFIX = "request:comment:";
 const REQUEST_GUILD_PREFIX = "request:guild:";
 const REQUEST_USER_PREFIX = "request:user:";
 const REQUEST_STATUS_PREFIX = "request:status:";
+const REQUEST_CREATED_ZSET = "request:created";
+const REQUEST_UPDATED_ZSET = "request:updated";
 const REQUEST_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 /**
@@ -291,6 +299,9 @@ export class RequestService {
     multi.sAdd(guildKey, id);
     multi.sAdd(userKey, id);
     multi.sAdd(statusKey, id);
+    // Add to sorted sets for pagination (score = timestamp)
+    multi.zAdd(REQUEST_CREATED_ZSET, { score: now, value: id });
+    multi.zAdd(REQUEST_UPDATED_ZSET, { score: now, value: id });
     // No TTL on index keys; orphaned references are filtered during reads in #getRequestsBatch
     await multi.exec();
 
@@ -480,6 +491,8 @@ export class RequestService {
       multi.expire(requestKey, REQUEST_TTL_SECONDS);
       multi.sRem(previousStatusKey, requestId);
       multi.sAdd(newStatusKey, requestId);
+      // Update the updatedAt sorted set for pagination
+      multi.zAdd(REQUEST_UPDATED_ZSET, { score: now, value: requestId });
       // No TTL on index keys; orphaned references are filtered during reads
 
       const results = await multi.exec();
@@ -607,6 +620,9 @@ export class RequestService {
     multi.sRem(guildKey, requestId);
     multi.sRem(userKey, requestId);
     multi.sRem(statusKey, requestId);
+    // Remove from pagination sorted sets
+    multi.zRem(REQUEST_CREATED_ZSET, requestId);
+    multi.zRem(REQUEST_UPDATED_ZSET, requestId);
 
     // Delete all comment entries
     for (const commentId of commentIds) {
@@ -624,5 +640,162 @@ export class RequestService {
       },
       "[request] deleted request and associated data",
     );
+  };
+
+  /**
+   * List requests with filtering and cursor-based pagination.
+   * Uses set intersection for efficient filtering and sorted sets for ordering.
+   *
+   * @param guildIds - Guild IDs to filter by (user must be a member)
+   * @param userId - Optional user ID to filter by (for "my requests")
+   * @param filter - Pagination and filtering options
+   * @returns Paginated response with requests and pagination metadata
+   */
+  listRequestsFiltered = async (
+    guildIds: string[],
+    userId: string | undefined,
+    filter: ListRequestsFilter,
+  ): Promise<PaginatedRequestsResponse> => {
+    const { status, cursor, limit, sortDirection } = filter;
+
+    // Build the set keys for intersection
+    const setKeys: string[] = [];
+
+    // Always filter by guild membership - union of all guild sets
+    // For multiple guilds, we need to get union first, then intersect with other filters
+    if (guildIds.length === 0) {
+      return {
+        data: [],
+        pagination: { total: 0, count: 0, nextCursor: null, hasMore: false },
+      };
+    }
+
+    // If filtering by user, add user set
+    if (userId) {
+      setKeys.push(this.#buildUserKey(userId));
+    }
+
+    // If filtering by status, add status set
+    if (status) {
+      setKeys.push(this.#buildStatusKey(status));
+    }
+
+    // Get candidate request IDs
+    let candidateIds: string[];
+
+    if (guildIds.length === 1) {
+      // Single guild - simple case
+      const guildKey = this.#buildGuildKey(guildIds[0]);
+      if (setKeys.length === 0) {
+        // No additional filters, just get guild requests
+        candidateIds = await redis.client.sMembers(guildKey);
+      } else {
+        // Intersect guild with other filters
+        candidateIds = await redis.client.sInter([guildKey, ...setKeys]);
+      }
+    } else {
+      // Multiple guilds - need to union guild sets first
+      const guildKeys = guildIds.map((guildId) => this.#buildGuildKey(guildId));
+      const guildUnion = await redis.client.sUnion(guildKeys);
+
+      if (setKeys.length === 0) {
+        candidateIds = guildUnion;
+      } else {
+        // Store temporary union result, then intersect
+        // Use a temporary key for the union
+        const tempUnionKey = `request:temp:union:${randomUUID()}`;
+        if (guildUnion.length > 0) {
+          await redis.client.sAdd(tempUnionKey, guildUnion);
+          await redis.client.expire(tempUnionKey, 60); // Short TTL
+          candidateIds = await redis.client.sInter([tempUnionKey, ...setKeys]);
+          await redis.client.del(tempUnionKey);
+        } else {
+          candidateIds = [];
+        }
+      }
+    }
+
+    if (candidateIds.length === 0) {
+      return {
+        data: [],
+        pagination: { total: 0, count: 0, nextCursor: null, hasMore: false },
+      };
+    }
+
+    // Get scores (createdAt timestamps) for all candidates from the sorted set
+    // We'll use ZSCORE in a pipeline for efficiency
+    const scoresPromises = candidateIds.map((id) => redis.client.zScore(REQUEST_CREATED_ZSET, id));
+    const scores = await Promise.all(scoresPromises);
+
+    // Build array of {id, score} and filter out null scores (orphaned entries)
+    const candidatesWithScores: Array<{ id: string; score: number }> = [];
+    for (let i = 0; i < candidateIds.length; i++) {
+      const score = scores[i];
+      if (score !== null) {
+        candidatesWithScores.push({ id: candidateIds[i], score });
+      }
+    }
+
+    const total = candidatesWithScores.length;
+
+    if (total === 0) {
+      return {
+        data: [],
+        pagination: { total: 0, count: 0, nextCursor: null, hasMore: false },
+      };
+    }
+
+    // Sort by createdAt (score)
+    candidatesWithScores.sort((a, b) =>
+      sortDirection === "desc" ? b.score - a.score : a.score - b.score,
+    );
+
+    // Apply cursor-based pagination
+    let startIndex = 0;
+    if (cursor) {
+      const cursorIndex = candidatesWithScores.findIndex((c) => c.id === cursor);
+      if (cursorIndex !== -1) {
+        startIndex = cursorIndex + 1; // Start after the cursor
+      }
+    }
+
+    // Get the page of IDs
+    const pageIds = candidatesWithScores.slice(startIndex, startIndex + limit).map((c) => c.id);
+    const hasMore = startIndex + limit < total;
+    const nextCursor = hasMore ? pageIds[pageIds.length - 1] : null;
+
+    // Batch fetch the actual request objects
+    const requests = await this.#getRequestsBatch(pageIds);
+
+    // Sort the fetched requests to maintain the same order as pageIds
+    const requestMap = new Map(requests.map((r) => [r.id, r]));
+    const sortedRequests = pageIds
+      .map((id) => requestMap.get(id))
+      .filter((r): r is Request => r !== undefined);
+
+    appLogger.debug(
+      {
+        guildIds,
+        userId,
+        status,
+        cursor,
+        limit,
+        sortDirection,
+        total,
+        count: sortedRequests.length,
+        hasMore,
+      },
+      "[request] listRequestsFiltered completed",
+    );
+
+    return {
+      data: sortedRequests,
+      pagination: {
+        total,
+        count: sortedRequests.length,
+        nextCursor,
+        hasMore,
+      },
+    };
   };
 }
