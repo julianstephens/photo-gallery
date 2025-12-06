@@ -13,6 +13,7 @@ const requestServiceMocks = vi.hoisted(() => ({
   updateRequestStatus: vi.fn(),
   addComment: vi.fn(),
   deleteRequest: vi.fn(),
+  listRequestsFiltered: vi.fn(),
 }));
 
 const authorizationMocks = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const authorizationMocks = vi.hoisted(() => ({
   canViewRequest: vi.fn(),
   canChangeRequestStatus: vi.fn(),
   canDeleteRequest: vi.fn(),
+  canListRequests: vi.fn(),
   AuthorizationError: class AuthorizationError extends Error {
     public readonly code = "AUTHORIZATION_ERROR";
     public readonly status = 403;
@@ -40,6 +42,14 @@ const schemaMocks = vi.hoisted(() => ({
   createRequestSchema: { parse: vi.fn((body) => body) },
   addCommentSchema: { parse: vi.fn((body) => body) },
   updateRequestStatusSchema: { parse: vi.fn((body) => body) },
+  listRequestsFilterSchema: {
+    parse: vi.fn((input) => ({
+      status: input.status,
+      cursor: input.cursor,
+      limit: input.limit ?? 20,
+      sortDirection: input.sortDirection ?? "desc",
+    })),
+  },
 }));
 
 vi.mock("../schemas/env.ts", () => mockEnvModule());
@@ -55,6 +65,7 @@ vi.mock("../services/request.ts", () => ({
   canViewRequest: authorizationMocks.canViewRequest,
   canChangeRequestStatus: authorizationMocks.canChangeRequestStatus,
   canDeleteRequest: authorizationMocks.canDeleteRequest,
+  canListRequests: authorizationMocks.canListRequests,
   AuthorizationError: authorizationMocks.AuthorizationError,
 }));
 
@@ -122,9 +133,16 @@ const resetMocks = () => {
   authorizationMocks.canViewRequest.mockReset();
   authorizationMocks.canChangeRequestStatus.mockReset();
   authorizationMocks.canDeleteRequest.mockReset();
+  authorizationMocks.canListRequests.mockReset();
   schemaMocks.createRequestSchema.parse.mockReset().mockImplementation((body) => body);
   schemaMocks.addCommentSchema.parse.mockReset().mockImplementation((body) => body);
   schemaMocks.updateRequestStatusSchema.parse.mockReset().mockImplementation((body) => body);
+  schemaMocks.listRequestsFilterSchema.parse.mockReset().mockImplementation((input) => ({
+    status: input.status,
+    cursor: input.cursor,
+    limit: input.limit ?? 20,
+    sortDirection: input.sortDirection ?? "desc",
+  }));
 };
 
 describe("request handlers", () => {
@@ -289,55 +307,8 @@ describe("request handlers", () => {
   });
 
   describe("listMyRequests", () => {
-    it("returns 400 when guildId is missing", async () => {
-      const req = createReq({ params: {} });
-      const res = createRes();
-
-      await listMyRequests(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
-    });
-
-    it("returns 400 when requestor is not me", async () => {
-      const req = createReq({
-        params: { guildId: "guild123" },
-        query: { requestor: "other" },
-      });
-      const res = createRes();
-
-      await listMyRequests(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        error: "Only requestor=me is supported for admin users",
-      });
-    });
-
-    it("returns 403 when user is not a member of the guild", async () => {
-      const req = createReq({
-        params: { guildId: "other-guild" },
-        query: { requestor: "me" },
-        session: {
-          userId: "user123",
-          isAdmin: true,
-          isSuperAdmin: false,
-          guildIds: ["guild123"],
-        } as Request["session"],
-      });
-      const res = createRes();
-
-      await listMyRequests(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith({
-        error: "You are not a member of this guild",
-        code: "AUTHORIZATION_ERROR",
-      });
-    });
-
-    it("returns requests for the user in the guild", async () => {
-      const mockRequests = [
+    const mockPaginatedResponse = {
+      data: [
         {
           id: "req1",
           guildId: "guild123",
@@ -358,35 +329,73 @@ describe("request handlers", () => {
           createdAt: Date.now(),
           updatedAt: Date.now(),
         },
-      ];
+      ],
+      pagination: {
+        total: 2,
+        count: 2,
+        nextCursor: null,
+        hasMore: false,
+      },
+    };
 
-      const req = createReq({
-        params: { guildId: "guild123" },
-        query: { requestor: "me" },
-        session: {
-          userId: "user123",
-          isAdmin: true,
-          isSuperAdmin: false,
-          guildIds: ["guild123"],
-        } as Request["session"],
-      });
+    it("returns 400 when guildId is missing", async () => {
+      const req = createReq({ params: {} });
       const res = createRes();
-
-      requestServiceMocks.getRequestsByUserAndGuild.mockResolvedValue(mockRequests);
 
       await listMyRequests(req, res);
 
-      expect(requestServiceMocks.getRequestsByUserAndGuild).toHaveBeenCalledWith(
-        "user123",
-        "guild123",
-      );
-      expect(res.json).toHaveBeenCalledWith(mockRequests);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Missing guildId parameter" });
     });
 
-    it("returns empty array when no requests exist", async () => {
+    it("returns 403 when user cannot list requests", async () => {
       const req = createReq({
         params: { guildId: "guild123" },
-        query: { requestor: "me" },
+        session: {
+          userId: "user123",
+          isAdmin: false,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+      authorizationMocks.canListRequests.mockReturnValue(false);
+
+      await listMyRequests(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "You do not have permission to list requests",
+        code: "AUTHORIZATION_ERROR",
+      });
+    });
+
+    it("returns 403 when user is not a member of the guild", async () => {
+      const req = createReq({
+        params: { guildId: "other-guild" },
+        session: {
+          userId: "user123",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+      authorizationMocks.canListRequests.mockReturnValue(true);
+
+      await listMyRequests(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "You are not a member of this guild",
+        code: "AUTHORIZATION_ERROR",
+      });
+    });
+
+    it("returns paginated requests for admin user (own requests only)", async () => {
+      const req = createReq({
+        params: { guildId: "guild123" },
+        query: {},
         session: {
           userId: "user123",
           isAdmin: true,
@@ -396,17 +405,136 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByUserAndGuild.mockResolvedValue([]);
+      authorizationMocks.canListRequests.mockReturnValue(true);
+      requestServiceMocks.listRequestsFiltered.mockResolvedValue(mockPaginatedResponse);
 
       await listMyRequests(req, res);
 
-      expect(res.json).toHaveBeenCalledWith([]);
+      expect(requestServiceMocks.listRequestsFiltered).toHaveBeenCalledWith(
+        ["guild123"],
+        "user123", // Admin sees own requests only
+        expect.objectContaining({ limit: 20, sortDirection: "desc" }),
+      );
+      expect(res.json).toHaveBeenCalledWith(mockPaginatedResponse);
+    });
+
+    it("returns all requests for super admin user", async () => {
+      const req = createReq({
+        params: { guildId: "guild123" },
+        query: {},
+        session: {
+          userId: "superadmin",
+          isAdmin: true,
+          isSuperAdmin: true,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      authorizationMocks.canListRequests.mockReturnValue(true);
+      requestServiceMocks.listRequestsFiltered.mockResolvedValue(mockPaginatedResponse);
+
+      await listMyRequests(req, res);
+
+      expect(requestServiceMocks.listRequestsFiltered).toHaveBeenCalledWith(
+        ["guild123"],
+        undefined, // Super admin sees all requests
+        expect.objectContaining({ limit: 20, sortDirection: "desc" }),
+      );
+      expect(res.json).toHaveBeenCalledWith(mockPaginatedResponse);
+    });
+
+    it("passes filter parameters correctly", async () => {
+      const req = createReq({
+        params: { guildId: "guild123" },
+        query: { status: "open", cursor: "abc-123", limit: "50", sortDirection: "asc" },
+        session: {
+          userId: "user123",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      authorizationMocks.canListRequests.mockReturnValue(true);
+      requestServiceMocks.listRequestsFiltered.mockResolvedValue({
+        data: [],
+        pagination: { total: 0, count: 0, nextCursor: null, hasMore: false },
+      });
+
+      await listMyRequests(req, res);
+
+      expect(schemaMocks.listRequestsFilterSchema.parse).toHaveBeenCalledWith({
+        status: "open",
+        cursor: "abc-123",
+        limit: "50",
+        sortDirection: "asc",
+      });
+    });
+
+    it("returns empty paginated result when no requests exist", async () => {
+      const emptyResponse = {
+        data: [],
+        pagination: { total: 0, count: 0, nextCursor: null, hasMore: false },
+      };
+
+      const req = createReq({
+        params: { guildId: "guild123" },
+        query: {},
+        session: {
+          userId: "user123",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      authorizationMocks.canListRequests.mockReturnValue(true);
+      requestServiceMocks.listRequestsFiltered.mockResolvedValue(emptyResponse);
+
+      await listMyRequests(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(emptyResponse);
+    });
+
+    it("returns 400 for invalid filter parameters", async () => {
+      const req = createReq({
+        params: { guildId: "guild123" },
+        query: { status: "invalid" },
+        session: {
+          userId: "user123",
+          isAdmin: true,
+          isSuperAdmin: false,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      authorizationMocks.canListRequests.mockReturnValue(true);
+      schemaMocks.listRequestsFilterSchema.parse.mockImplementation(() => {
+        throw new ZodError([
+          {
+            code: "invalid_enum_value",
+            received: "invalid",
+            path: ["status"],
+            message: "Invalid enum value",
+            options: ["open", "approved", "denied", "cancelled", "closed"],
+          },
+        ]);
+      });
+
+      await listMyRequests(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Invalid enum value" });
     });
 
     it("returns 500 for service errors", async () => {
       const req = createReq({
         params: { guildId: "guild123" },
-        query: { requestor: "me" },
+        query: {},
         session: {
           userId: "user123",
           isAdmin: true,
@@ -416,7 +544,8 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByUserAndGuild.mockRejectedValue(
+      authorizationMocks.canListRequests.mockReturnValue(true);
+      requestServiceMocks.listRequestsFiltered.mockRejectedValue(
         new Error("Redis connection failed"),
       );
 
@@ -930,28 +1059,36 @@ describe("request handlers", () => {
   });
 
   describe("listGuildRequests (super admin)", () => {
-    const mockRequests = [
-      {
-        id: "req1",
-        guildId: "guild123",
-        userId: "user1",
-        title: "Request 1",
-        description: "Desc 1",
-        status: "open" as const,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+    const mockPaginatedResponse = {
+      data: [
+        {
+          id: "req1",
+          guildId: "guild123",
+          userId: "user1",
+          title: "Request 1",
+          description: "Desc 1",
+          status: "open" as const,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+        {
+          id: "req2",
+          guildId: "guild123",
+          userId: "user2",
+          title: "Request 2",
+          description: "Desc 2",
+          status: "approved" as const,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ],
+      pagination: {
+        total: 2,
+        count: 2,
+        nextCursor: null,
+        hasMore: false,
       },
-      {
-        id: "req2",
-        guildId: "guild123",
-        userId: "user2",
-        title: "Request 2",
-        description: "Desc 2",
-        status: "approved" as const,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-    ];
+    };
 
     it("returns 400 when guildId is missing", async () => {
       const req = createReq({
@@ -992,9 +1129,10 @@ describe("request handlers", () => {
       });
     });
 
-    it("returns all requests for a guild", async () => {
+    it("returns paginated requests for a guild", async () => {
       const req = createReq({
         params: { guildId: "guild123" },
+        query: {},
         session: {
           userId: "superadmin",
           isAdmin: true,
@@ -1004,17 +1142,22 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByGuild.mockResolvedValue(mockRequests);
+      requestServiceMocks.listRequestsFiltered.mockResolvedValue(mockPaginatedResponse);
 
       await listGuildRequests(req, res);
 
-      expect(requestServiceMocks.getRequestsByGuild).toHaveBeenCalledWith("guild123");
-      expect(res.json).toHaveBeenCalledWith(mockRequests);
+      expect(requestServiceMocks.listRequestsFiltered).toHaveBeenCalledWith(
+        ["guild123"],
+        undefined, // Super admin sees all requests
+        expect.objectContaining({ limit: 20, sortDirection: "desc" }),
+      );
+      expect(res.json).toHaveBeenCalledWith(mockPaginatedResponse);
     });
 
-    it("returns empty array when no requests exist", async () => {
+    it("passes filter parameters correctly", async () => {
       const req = createReq({
         params: { guildId: "guild123" },
+        query: { status: "open", cursor: "abc-123", limit: "50", sortDirection: "asc" },
         session: {
           userId: "superadmin",
           isAdmin: true,
@@ -1024,16 +1167,81 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByGuild.mockResolvedValue([]);
+      requestServiceMocks.listRequestsFiltered.mockResolvedValue({
+        data: [],
+        pagination: { total: 0, count: 0, nextCursor: null, hasMore: false },
+      });
 
       await listGuildRequests(req, res);
 
-      expect(res.json).toHaveBeenCalledWith([]);
+      expect(schemaMocks.listRequestsFilterSchema.parse).toHaveBeenCalledWith({
+        status: "open",
+        cursor: "abc-123",
+        limit: "50",
+        sortDirection: "asc",
+      });
+    });
+
+    it("returns empty paginated result when no requests exist", async () => {
+      const emptyResponse = {
+        data: [],
+        pagination: { total: 0, count: 0, nextCursor: null, hasMore: false },
+      };
+
+      const req = createReq({
+        params: { guildId: "guild123" },
+        query: {},
+        session: {
+          userId: "superadmin",
+          isAdmin: true,
+          isSuperAdmin: true,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      requestServiceMocks.listRequestsFiltered.mockResolvedValue(emptyResponse);
+
+      await listGuildRequests(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(emptyResponse);
+    });
+
+    it("returns 400 for invalid filter parameters", async () => {
+      const req = createReq({
+        params: { guildId: "guild123" },
+        query: { status: "invalid" },
+        session: {
+          userId: "superadmin",
+          isAdmin: true,
+          isSuperAdmin: true,
+          guildIds: ["guild123"],
+        } as Request["session"],
+      });
+      const res = createRes();
+
+      schemaMocks.listRequestsFilterSchema.parse.mockImplementation(() => {
+        throw new ZodError([
+          {
+            code: "invalid_enum_value",
+            received: "invalid",
+            path: ["status"],
+            message: "Invalid enum value",
+            options: ["open", "approved", "denied", "cancelled", "closed"],
+          },
+        ]);
+      });
+
+      await listGuildRequests(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Invalid enum value" });
     });
 
     it("returns 500 for service errors", async () => {
       const req = createReq({
         params: { guildId: "guild123" },
+        query: {},
         session: {
           userId: "superadmin",
           isAdmin: true,
@@ -1043,7 +1251,7 @@ describe("request handlers", () => {
       });
       const res = createRes();
 
-      requestServiceMocks.getRequestsByGuild.mockRejectedValue(
+      requestServiceMocks.listRequestsFiltered.mockRejectedValue(
         new Error("Redis connection failed"),
       );
 
