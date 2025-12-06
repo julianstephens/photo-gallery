@@ -80,7 +80,11 @@ export const getSingleGallery = async (req: Request, res: Response) => {
 export const createGallery = async (req: Request, res: Response) => {
   try {
     const body = createGallerySchema.parse(req.body);
-    const meta = await galleryController.createGallery(body, req.session.userId || "");
+    const meta = await galleryController.createGallery(
+      body,
+      req.session.userId || "",
+      req.session.username,
+    );
     // Invalidate galleries cache after successful creation
     await invalidateGalleriesCache(body.guildId, req.session.userId);
     res.status(201).json(meta);
